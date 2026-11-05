@@ -168,7 +168,7 @@ Run the real PostgreSQL acceptance check against an existing API container:
 bash tools/check-allowance-postgres.sh unslopy-api-1
 ```
 
-The check copies source into a temporary directory in that container, creates a random test database, applies migrations there, and uses fake DeepSeek responses. It proves the last-slot race with two blocked PostgreSQL connections in each of ten rounds, then checks month boundaries, publication, deletion, status changes, and reservation uniqueness. It removes the test database and copied files on exit. The database role must have permission to create a database. No application services start or restart. See the [issue #9 verification record](docs/evidence/issue-9/verification.md) for results and remaining UI evidence.
+The check copies source into a temporary directory in that container, creates a random test database, applies migrations there, and uses fake DeepSeek responses. It proves the last-slot race with two blocked PostgreSQL connections in each of ten rounds, then checks month boundaries, publication, deletion, status changes, and reservation uniqueness. It removes the test database and copied files on exit. The database role must have permission to create a database. No application services start or restart. See the [issue #9 verification record](docs/evidence/issue-9/verification.md) for results and workspace screenshots.
 
 ### Run background writing assessments
 
