@@ -1,3 +1,4 @@
+import { FindDocumentHandler } from './queries/find-document.handler';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DocumentsController } from './documents.controller';
@@ -14,6 +15,7 @@ import { DownloadOriginalHandler } from './queries/download-original.handler';
     { provide: DocumentStorage, useFactory: () => new DocumentStorage() },
     UploadDocumentHandler,
     FindDocumentsHandler,
+    FindDocumentHandler,
     DownloadOriginalHandler
   ]
 })

@@ -25,7 +25,7 @@ export class Workspace {
   private readonly destroyRef = inject(DestroyRef);
 
   constructor() {
-    afterNextRender(() => this.store.load());
+    afterNextRender(() => this.store.start());
   }
 
   protected select(document: IDocumentResponse | null): void {

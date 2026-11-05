@@ -1,3 +1,4 @@
+import { FindDocumentHandler } from './queries/find-document.handler';
 import { DataSource } from 'typeorm';
 import { UsersController } from '../users/controllers';
 import { User } from '../users/entities';
@@ -42,6 +43,7 @@ describe('Private documents HTTP', () => {
   let settleCommit: (() => void) | undefined;
   const repository = {
     create: (data) => Object.assign(new Document(), { id: randomUUID(), createdAt: new Date() }, data),
+    findOne: async ({ where }) => repository.findOneBy(where),
     findOneBy: async (where) => {
       if (databaseFailure === 'unavailable') throw new Error('Database unavailable');
       return records.find((record) => Object.entries(where).every(([key, value]) => record[key] === value)) ?? null;
@@ -114,6 +116,7 @@ describe('Private documents HTTP', () => {
         RolesGuard,
         UploadDocumentHandler,
         FindDocumentsHandler,
+        FindDocumentHandler,
         DownloadOriginalHandler,
         {
           provide: DocumentStorage,
@@ -181,7 +184,9 @@ describe('Private documents HTTP', () => {
       id: expect.any(String),
       filename: 'essay.docx',
       size: bytes.length,
-      createdAt: expect.any(String)
+      createdAt: expect.any(String),
+      status: 'queued',
+      failure: null
     });
     expect(await (await list()).json()).toMatchObject({ data: { items: [document], total: 1, page: 1, pageSize: 20 } });
     const original = await download(document.id);
@@ -194,6 +199,36 @@ describe('Private documents HTTP', () => {
     );
     expect(await readdir(join(root, 'public'))).toEqual([]);
   });
+  it('shows assessment and status only to the owner, including after failure', async () => {
+    const { data: document } = await (await upload(await docxFixture())).json();
+    const get = (id: string, identity: string) =>
+      fetch(`${base}/documents/${id}`, { headers: { 'test-identity': identity } });
+    expect(await (await get(document.id, 'owner')).json()).toMatchObject({
+      data: { status: 'queued', assessment: null, failure: null }
+    });
+    records[0].status = 'assessed';
+    records[0].assessment = { patterns: [{ rule: 23, name: 'Filler phrases', examples: ['In order to'] }] };
+    const response = await get(document.id, 'owner');
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(await response.json()).toMatchObject({ data: { status: 'assessed', assessment: records[0].assessment } });
+    const missing = await (await get(randomUUID(), 'owner')).json();
+    for (const identity of ['other', 'admin']) {
+      const denied = await get(document.id, identity);
+      expect(denied.status).toBe(404);
+      expect(await denied.json()).toEqual(missing);
+    }
+    records[0].status = 'failed';
+    records[0].failureCode = 'deadline';
+    expect(await (await get(document.id, 'owner')).json()).toMatchObject({
+      data: {
+        status: 'failed',
+        assessment: null,
+        failure: 'Processing took too long. Your original is still available.'
+      }
+    });
+    expect(await (await get('not-a-uuid', 'owner')).json()).toEqual(missing);
+  });
+
   it('rejects content that is not a DOCX without storing anything', async () => {
     const before = await readdir(join(root, 'private'));
     for (const bytes of [
@@ -371,11 +406,12 @@ describe('Private documents HTTP', () => {
     const [key] = await readdir(join(root, 'private'));
     await writeFile(join(root, 'public', 'profile.txt'), 'public avatar placeholder');
     expect((await fetch(`${base}/uploads/profile.txt`)).status).toBe(200);
+    expect((await fetch(`${base}/documents/${key}`)).status).toBe(401);
+    expect((await fetch(`${base}/documents/${key}`, { headers: { 'test-identity': 'owner' } })).status).toBe(404);
     for (const path of [
       `/uploads/${key}`,
       `/uploads/${data.id}`,
       `/private-documents/${key}`,
-      `/documents/${key}`,
       `/uploads/%2e%2e%2fprivate%2f${key}`
     ]) {
       expect((await fetch(`${base}${path}`)).status).toBe(404);

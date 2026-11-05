@@ -30,6 +30,9 @@
             [attr.aria-current]="store.selected()?.id === document.id ? 'true' : null"
             (click)="select(document)">
             <span class="filename">{{ document.filename }}</span>
+            <span class="entry-status" [class.error]="document.status === 'failed'">{{
+              store.statusLabels[document.status]
+            }}</span>
             <time [attr.datetime]="document.createdAt">{{ document.createdAt | date: 'MMM d, y' }}</time>
           </button>
         }
@@ -102,6 +105,46 @@
             <mat-icon svgIcon="download" />
             {{ store.downloading() ? 'Downloading…' : 'Download original' }}
           </button>
+          <section class="assessment" aria-labelledby="assessment-heading">
+            <h2 id="assessment-heading">Writing assessment</h2>
+            <p class="processing-status" role="status">
+              @if (document.status === 'queued' || document.status === 'processing') {
+                <span class="progress-dot" aria-hidden="true"></span>
+              }
+              {{ store.statusLabels[document.status] }}
+            </p>
+            @if (document.status === 'queued') {
+              <p class="muted">Your document is waiting for assessment. You can leave this page and return later.</p>
+            } @else if (document.status === 'processing') {
+              <p class="muted">Reading your document for writing patterns.</p>
+            } @else if (document.status === 'failed') {
+              <p class="error" role="alert">{{ document.failure }}</p>
+            } @else if (document.status === 'stored') {
+              <p class="muted">This original was saved before writing assessments were available.</p>
+            }
+            @if (store.detailLoading()) {
+              <p class="muted" role="status">Loading assessment…</p>
+            }
+            @if (store.detail()?.assessment; as assessment) {
+              @for (pattern of assessment.patterns; track pattern.rule) {
+                <div class="writing-pattern">
+                  <h3>{{ pattern.name }}</h3>
+                  @for (example of pattern.examples; track example) {
+                    <blockquote>{{ example }}</blockquote>
+                  }
+                </div>
+              } @empty {
+                <p>No writing patterns found.</p>
+              }
+              <p class="muted assessment-note">
+                This assessment describes writing patterns. It does not establish who wrote the document.
+              </p>
+            }
+            @if (store.detailError()) {
+              <p class="error" role="alert">{{ store.detailError() }}</p>
+              <button class="text-button" type="button" (click)="store.loadSelected()">Try again</button>
+            }
+          </section>
           @if (store.downloadError()) {
             <p class="error" role="alert">{{ store.downloadError() }}</p>
           }
@@ -110,8 +153,8 @@
         }
         <div class="upload-area" [class.with-document]="store.selected()">
           <p id="document-privacy" class="privacy">
-            Assessment and editing are in development and will send text to DeepSeek. For now, uploads save a private
-            original.
+            Uploading sends your document text to DeepSeek for a writing assessment. Your original stays private.
+            Editing is still in development.
           </p>
           <button
             class="upload-button"

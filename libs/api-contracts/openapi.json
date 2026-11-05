@@ -997,6 +997,46 @@
         ]
       }
     },
+    "/documents/{id}": {
+      "get": {
+        "operationId": "DocumentsController_detail",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentAssessmentResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "404": {
+            "description": "Document does not exist or belongs to another user"
+          },
+          "503": {
+            "description": "Document could not be loaded"
+          }
+        },
+        "summary": "Read your document status and writing assessment",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
     "/documents/{id}/original": {
       "get": {
         "operationId": "DocumentsController_original",
@@ -1254,6 +1294,22 @@
             "description": "Original size in bytes",
             "maximum": 10000000
           },
+          "status": {
+            "type": "string",
+            "enum": [
+              "stored",
+              "queued",
+              "processing",
+              "assessed",
+              "failed"
+            ]
+          },
+          "failure": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -1263,6 +1319,8 @@
           "id",
           "filename",
           "size",
+          "status",
+          "failure",
           "createdAt"
         ]
       },
@@ -1294,6 +1352,98 @@
           "total",
           "page",
           "pageSize"
+        ]
+      },
+      "WritingPatternResponse": {
+        "type": "object",
+        "properties": {
+          "rule": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "examples": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "rule",
+          "name",
+          "examples"
+        ]
+      },
+      "WritingAssessmentResponse": {
+        "type": "object",
+        "properties": {
+          "patterns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WritingPatternResponse"
+            }
+          }
+        },
+        "required": [
+          "patterns"
+        ]
+      },
+      "DocumentAssessmentResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "size": {
+            "type": "number",
+            "description": "Original size in bytes",
+            "maximum": 10000000
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "stored",
+              "queued",
+              "processing",
+              "assessed",
+              "failed"
+            ]
+          },
+          "failure": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "assessment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WritingAssessmentResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "filename",
+          "size",
+          "status",
+          "failure",
+          "createdAt",
+          "assessment"
         ]
       }
     }

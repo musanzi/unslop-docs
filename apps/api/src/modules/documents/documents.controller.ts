@@ -1,3 +1,5 @@
+import { FindDocument } from './queries/find-document.handler';
+import { DocumentAssessmentResponse } from './dto/document-assessment-response';
 import {
   Controller,
   Get,
@@ -59,6 +61,16 @@ export class DocumentsController extends AbstractController {
   @ApiBadRequestResponse({ description: 'Invalid pagination' })
   list(@CurrentUser('id') ownerId: string, @Query() pagination: ListDocumentsDto): Promise<DocumentPage> {
     return this.queryHandler.execute(new FindDocuments(ownerId, pagination));
+  }
+
+  @Get(':id')
+  @Header('Cache-Control', 'private, no-store')
+  @ApiOperation({ summary: 'Read your document status and writing assessment' })
+  @ApiOkResponse({ type: DocumentAssessmentResponse })
+  @ApiNotFoundResponse({ description: 'Document does not exist or belongs to another user' })
+  @ApiServiceUnavailableResponse({ description: 'Document could not be loaded' })
+  detail(@CurrentUser('id') ownerId: string, @Param('id') id: string): Promise<DocumentAssessmentResponse> {
+    return this.queryHandler.execute(new FindDocument(ownerId, id));
   }
 
   @Get(':id/original')

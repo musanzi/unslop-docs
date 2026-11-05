@@ -276,6 +276,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/documents/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read your document status and writing assessment */
+        get: operations["DocumentsController_detail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/documents/{id}/original": {
         parameters: {
             query?: never;
@@ -388,6 +405,9 @@ export interface components {
             filename: string;
             /** @description Original size in bytes */
             size: number;
+            /** @enum {string} */
+            status: "stored" | "queued" | "processing" | "assessed" | "failed";
+            failure: string | null;
             /** Format: date-time */
             createdAt: string;
         };
@@ -397,6 +417,27 @@ export interface components {
             total: number;
             page: number;
             pageSize: number;
+        };
+        WritingPatternResponse: {
+            rule: number;
+            name: string;
+            examples: string[];
+        };
+        WritingAssessmentResponse: {
+            patterns: components["schemas"]["WritingPatternResponse"][];
+        };
+        DocumentAssessmentResponse: {
+            /** Format: uuid */
+            id: string;
+            filename: string;
+            /** @description Original size in bytes */
+            size: number;
+            /** @enum {string} */
+            status: "stored" | "queued" | "processing" | "assessed" | "failed";
+            failure: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            assessment: components["schemas"]["WritingAssessmentResponse"] | null;
         };
     };
     responses: never;
@@ -1004,6 +1045,48 @@ export interface operations {
                 content?: never;
             };
             /** @description Upload could not be confirmed; refresh history before retrying */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    DocumentsController_detail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentAssessmentResponse"];
+                };
+            };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Document does not exist or belongs to another user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Document could not be loaded */
             503: {
                 headers: {
                     [name: string]: unknown;

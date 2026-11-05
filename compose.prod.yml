@@ -5,8 +5,26 @@ services:
       context: .
       target: api-production
     restart: unless-stopped
-    env_file: ./.env
     environment:
+      API_PORT: ${API_PORT}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      REDIS_URL: ${REDIS_URL}
+      MAIL_HOST: ${MAIL_HOST}
+      MAIL_PORT: ${MAIL_PORT}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      SESSION_SECRET: ${SESSION_SECRET}
+      SESSION_MAX_AGE: ${SESSION_MAX_AGE:-86400000}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_SECRET: ${GOOGLE_SECRET}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI}
+      FRONTEND_URI: ${FRONTEND_URI}
       UPLOADS_DIR: /app/apps/api/uploads
       DOCUMENTS_DIR: /app/private-documents
     ports:
@@ -19,12 +37,36 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+  worker:
+    build:
+      context: .
+      target: api-production
+    command: ['node', 'dist/apps/api/src/worker.js']
+    restart: unless-stopped
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-}
+      PROCESSING_TIMEOUT_MS: ${PROCESSING_TIMEOUT_MS:-900000}
+      DEEPSEEK_TIMEOUT_MS: ${DEEPSEEK_TIMEOUT_MS:-60000}
+      UPLOADS_DIR: /app/apps/api/uploads
+      DOCUMENTS_DIR: /app/private-documents
+    volumes:
+      - documents_data:/app/private-documents:ro
+    depends_on:
+      db:
+        condition: service_healthy
   web:
     build:
       context: .
       target: web-production
     restart: unless-stopped
-    env_file: ./.env
+    environment:
+      WEB_PORT: ${WEB_PORT:-4200}
     ports:
       - ${WEB_PORT:-4200}:${WEB_PORT}
   db:
