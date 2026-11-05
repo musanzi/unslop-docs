@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import { readFile } from 'node:fs/promises';
+import { crc32, inflateSync } from 'node:zlib';
 import { docxFixtureCases } from '@api/shared/testing/docx-fixture-catalog';
 import { describe, expect, it } from 'vitest';
 import { docxFixture } from '@api/shared/testing/docx-fixture';
@@ -12,6 +13,22 @@ const documentXml = (body: string) =>
 const paragraph = (text: string) => `<w:p><w:r><w:t>${text}</w:t></w:r></w:p>`;
 
 describe('DOCX reader', () => {
+  it('includes a decodable PNG with valid chunk checksums in the preservation fixtures', async () => {
+    const document = await readDocx(await readerFixture(paragraph('Image fixture.')));
+    const png = document.readPart('word/media/image.png');
+    if (!png) throw new Error('Fixture image is missing');
+    expect(png.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
+    const data: Buffer[] = [];
+    for (let offset = 8; offset < png.length; ) {
+      const size = png.readUInt32BE(offset);
+      const type = png.subarray(offset + 4, offset + 8);
+      const chunk = png.subarray(offset + 8, offset + 8 + size);
+      expect(crc32(Buffer.concat([type, chunk]))).toBe(png.readUInt32BE(offset + 8 + size));
+      if (type.toString() === 'IDAT') data.push(chunk);
+      offset += size + 12;
+    }
+    expect(inflateSync(Buffer.concat(data))).toHaveLength(3);
+  });
   it('returns headings, paragraphs, list items, table cells and runs in reading order', async () => {
     const bytes = await readerFixture(`
       <w:p><w:pPr><w:pStyle w:val="ResearchTitle"/></w:pPr><w:r><w:t>Research findings</w:t></w:r></w:p>

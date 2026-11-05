@@ -56,7 +56,7 @@ export function readerFixture(body: string, overrides: Record<string, string | B
           ''
         )}<Relationship Id="link" Type="${relationshipNamespace}/hyperlink" Target="https://example.org/research?a=1&amp;b=2" TargetMode="External"/></Relationships>`,
       'word/media/image.png': Buffer.from(
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aE2kAAAAASUVORK5CYII=',
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=',
         'base64'
       ),
       ...overrides

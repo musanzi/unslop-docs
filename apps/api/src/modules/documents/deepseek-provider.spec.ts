@@ -34,6 +34,34 @@ describe('DeepSeek worker boundary', () => {
   it('verifies the pinned skill hash', async () => {
     expect(await loadAssessmentSkill()).toContain('# Unslop');
   });
+  it.each(['assess', 'edit'])('disables reasoning for the bounded %s JSON response', async (operation) => {
+    const bodies: string[] = [];
+    const fetcher = vi.fn(async (_url, init) => {
+      bodies.push(init.body.toString());
+      return new Response(
+        JSON.stringify({
+          id: 'response',
+          object: 'chat.completion',
+          created: 0,
+          model: 'deepseek-flash',
+          choices: [{ index: 0, message: { role: 'assistant', content: '{}' }, finish_reason: 'stop' }]
+        }),
+        { headers: { 'content-type': 'application/json' } }
+      );
+    });
+    const provider = new DeepSeekProvider(
+      workerSettings({ DEEPSEEK_API_KEY: 'fake', DEEPSEEK_MODEL: 'deepseek-flash' }),
+      fetcher
+    );
+    if (operation === 'assess') await provider.assess('Return json.', 'Source text.');
+    else await provider.edit('Return json.', { id: 'chunk', spans: [{ id: 'span', text: 'Source text.' }] });
+    expect(bodies).toHaveLength(1);
+    expect(JSON.parse(bodies[0])).toMatchObject({
+      thinking: { type: 'disabled' },
+      response_format: { type: 'json_object' },
+      max_tokens: 4096
+    });
+  });
   it.each(['stop', 'length'])('accepts only complete LangChain JSON responses: %s', async (finishReason) => {
     const fetcher = vi.fn(
       async () =>

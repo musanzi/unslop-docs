@@ -53,6 +53,7 @@ export class DeepSeekProvider implements DocumentProvider {
       maxRetries: 0,
       timeout: settings.providerTimeoutMs,
       maxTokens: 4096,
+      modelKwargs: { thinking: { type: 'disabled' } },
       streaming: false,
       verbose: false,
       configuration: { maxRetries: 0, logLevel: 'off', ...(fetcher ? { fetch: fetcher } : {}) }

@@ -19,6 +19,8 @@ Choose a model that supports JSON output from [DeepSeek's model documentation](h
 
 The worker disables LangChain verbose output and LangSmith tracing. The SDK logger is off, and provider exceptions become fixed failure messages. Neither provider responses nor document text are logged. Compose passes DeepSeek settings only to the worker. Tests inject fake providers or a fake HTTP transport. There is no runtime fake-provider flag or authentication bypass.
 
+Assessment and editing requests set `thinking: { type: 'disabled' }` so the 4,096-token response budget is available for JSON. DeepSeek enables thinking by default. A live check exhausted the budget on reasoning and returned no content. The [thinking-mode reference](https://api-docs.deepseek.com/guides/thinking_mode/) documents this setting.
+
 ## Lifecycle
 
 `queued` becomes `processing` on an atomic claim. The claim has a 30-second lease renewed every 10 seconds and before the provider call. The processing deadline is persisted once and never extended by a heartbeat. Recovery marks an expired deadline or lease as `failed`. Graceful shutdown aborts the active request and fails the claim. After a hard stop, another worker or the restarted worker recovers it. A live worker is required to perform recovery.
