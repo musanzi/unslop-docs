@@ -7,10 +7,20 @@
       <mat-icon svgIcon="x" />
     </button>
   </header>
-  <p class="min-h-0 overflow-y-auto overscroll-contain p-6 text-[0.9375rem] leading-6 text-muted">
-    This removes the original, its writing assessment and any revised version from Unslopy. Deletion cannot be
-    undone.
-  </p>
+  <div class="min-h-0 space-y-3 overflow-y-auto overscroll-contain p-6 text-[0.9375rem] leading-6 text-muted">
+    @if (active) {
+      <p>
+        This stops the current processing and removes the original, its writing assessment and any revised version from
+        Unslopy. Deletion cannot be undone.
+      </p>
+      <p>Text already sent to DeepSeek may still be processed there; the result will be discarded.</p>
+    } @else {
+      <p>
+        This removes the original, its writing assessment and any revised version from Unslopy. Deletion cannot be
+        undone.
+      </p>
+    }
+  </div>
   <footer class="flex shrink-0 justify-end gap-3 border-t border-divider p-5">
     <button class="ui-button ui-ghost" type="button" (click)="ref.close(false)">Cancel</button>
     <button class="ui-button ui-destructive" type="button" (click)="ref.close(true)">Delete</button>
