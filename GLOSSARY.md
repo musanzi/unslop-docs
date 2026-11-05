@@ -42,6 +42,8 @@ _Avoid_: AI authorship percentage, probability of AI authorship.
 
 **Revised document**: The edited DOCX whose formatting matches the original as closely as practical. Its owner can download it separately from the original and reviews and adjusts it before use.
 
+**Revision notice**: A record stored with a completed revision that names each passage kept unchanged after a failed citation, quotation, number, reference, or language check, and counts the protected elements left unedited. It does not claim that the rest of the document is semantically equivalent.
+
 **Completed document**: A document whose revised DOCX is ready to download, with its initial assessment and either its final assessment or a notice that the final score is unavailable.
 
 **Failed document**: A document whose processing ended without a usable result. Its original remains available.
