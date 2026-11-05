@@ -14,6 +14,8 @@ import { DocumentsStore } from '../../data-access/documents.store';
 import { Workspace } from './workspace';
 import { User } from '@web/shared/ui/user/user';
 import { testUser } from '@web/shared/testing/user-fixture';
+import { MatDialog } from '@angular/material/dialog';
+import DeleteDocument from '../delete-document/delete-document';
 
 // Vitest uses JIT without Angular's signal-input metadata transform.
 const subscriptionInput = { alias: 'subscriptionStatus', isSignal: true };
@@ -198,6 +200,163 @@ describe('Retry from document history', () => {
   });
 });
 
+describe('Delete from document history', () => {
+  function element<T extends Element = Element>(root: ParentNode, selector: string): T {
+    const found = root.querySelector<T>(selector);
+    if (!found) throw new Error(`Missing workspace element: ${selector}`);
+    return found;
+  }
+  const allowance: IAllowanceResponse = {
+    status: 'FREE',
+    limit: 3,
+    used: 1,
+    reserved: 0,
+    remaining: 2,
+    month: '2026-11',
+    resetsAt: '2026-12-01T00:00:00Z'
+  };
+  const other: IDocumentAssessmentResponse = {
+    ...document,
+    id: '00000000-0000-4000-8000-000000000002',
+    filename: 'lake.docx'
+  };
+  async function render(items: IDocumentAssessmentResponse[] = [document, other]) {
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([]),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        {
+          provide: AuthStore,
+          useValue: {
+            user: signal(testUser),
+            isAdmin: () => false,
+            signOut: vi.fn(),
+            isSigningOut: signal(false),
+            signOutError: signal('')
+          }
+        },
+        { provide: Media, useValue: { match: () => signal(false) } }
+      ]
+    });
+    TestBed.overrideComponent(User, {
+      set: {
+        template: readFileSync(`${import.meta.dirname}/../../../../../../shared/ui/user/user.html`, 'utf8'),
+        templateUrl: undefined
+      }
+    });
+    TestBed.overrideComponent(Workspace, {
+      set: {
+        template: readFileSync(`${import.meta.dirname}/workspace.html`, 'utf8'),
+        templateUrl: undefined
+      }
+    });
+    TestBed.overrideComponent(DeleteDocument, {
+      set: {
+        template: readFileSync(`${import.meta.dirname}/../delete-document/delete-document.html`, 'utf8'),
+        templateUrl: undefined
+      }
+    });
+    vi.spyOn(TestBed.inject(MatIconRegistry), 'getNamedSvgIcon').mockImplementation(() =>
+      of(globalThis.document.createElementNS('http://www.w3.org/2000/svg', 'svg'))
+    );
+    const fixture = TestBed.createComponent(Workspace);
+    await fixture.whenStable();
+    const http = TestBed.inject(HttpTestingController);
+    http
+      .expectOne((request) => request.url === '/documents')
+      .flush({ items, page: 1, pageSize: 20, total: items.length });
+    http.expectOne('/documents/allowance').flush(allowance);
+    await fixture.whenStable();
+    const page = fixture.nativeElement as HTMLElement;
+    const trigger = element<HTMLButtonElement>(page, 'button[aria-label="Delete river.docx"]');
+    trigger.focus();
+    trigger.click();
+    await fixture.whenStable();
+    const modal = element(globalThis.document, '[role="dialog"]');
+    const confirm = [...modal.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Delete')!;
+    return { fixture, http, page, trigger, modal, confirm, dialog: TestBed.inject(MatDialog) };
+  }
+  afterEach(() => TestBed.inject(MatDialog).closeAll());
+
+  it('confirms with the document name and warns that deletion cannot be undone before cancelling', async () => {
+    const { http, trigger, modal, dialog } = await render();
+    expect(modal.getAttribute('aria-labelledby')).toBe('delete-document-heading');
+    expect(element(modal, '#delete-document-heading').textContent).toContain('river.docx');
+    expect(modal.textContent).toContain('cannot be undone');
+    [...modal.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Cancel')!.click();
+    await vi.waitFor(() => expect(dialog.openDialogs).toHaveLength(0));
+    expect(globalThis.document.activeElement).toBe(trigger);
+    http.expectNone((request) => request.method === 'DELETE');
+    http.verify();
+  });
+
+  it('sends one delete for a double confirm, removes the entry, clears the selection and moves focus', async () => {
+    const { fixture, http, page, confirm, dialog } = await render();
+    const entry = element<HTMLButtonElement>(page, 'nav[aria-label="Document history"] button');
+    entry.click();
+    http.expectOne(`/documents/${document.id}`).flush(document);
+    await fixture.whenStable();
+    expect(page.querySelector('main h1')?.textContent).toContain('river.docx');
+    confirm.click();
+    confirm.click();
+    await vi.waitFor(() => expect(dialog.openDialogs).toHaveLength(0));
+    await fixture.whenStable();
+    const request = http.expectOne(`/documents/${document.id}`);
+    expect(request.request.method).toBe('DELETE');
+    expect(element<HTMLButtonElement>(page, 'button[aria-label="Delete lake.docx"]').disabled).toBe(true);
+    request.flush(null, { status: 204, statusText: 'No Content' });
+    await fixture.whenStable();
+    http.expectOne('/documents/allowance').flush(allowance);
+    http
+      .expectOne((request) => request.url === '/documents')
+      .flush({ items: [other], page: 1, pageSize: 20, total: 1 });
+    await fixture.whenStable();
+    expect(page.querySelector('button[aria-label="Delete river.docx"]')).toBeNull();
+    expect(element(page, 'nav[aria-label="Document history"]').textContent).not.toContain('river.docx');
+    expect(page.querySelector('main h1')?.textContent).toContain('Welcome');
+    expect(page.querySelector('[role="status"]')?.textContent ?? page.textContent).toContain('river.docx deleted.');
+    expect(globalThis.document.activeElement?.textContent).toContain('New document');
+    expect(element<HTMLButtonElement>(page, 'button[aria-label="Delete lake.docx"]').disabled).toBe(false);
+    http.verify();
+  });
+
+  it('shows the empty state after the last entry is deleted and treats an already deleted document as gone', async () => {
+    const { fixture, http, page, confirm, dialog } = await render([document]);
+    confirm.click();
+    await vi.waitFor(() => expect(dialog.openDialogs).toHaveLength(0));
+    await fixture.whenStable();
+    http
+      .expectOne((request) => request.method === 'DELETE')
+      .flush({ message: 'Document not found.' }, { status: 404, statusText: 'Not Found' });
+    await fixture.whenStable();
+    http.expectOne('/documents/allowance').flush(allowance);
+    http.expectOne((request) => request.url === '/documents').flush({ items: [], page: 1, pageSize: 20, total: 0 });
+    await fixture.whenStable();
+    expect(element(page, 'nav[aria-label="Document history"]').textContent).toContain('Your uploads appear here.');
+    expect(page.querySelector('[role="alert"]')).toBeNull();
+    expect(globalThis.document.activeElement?.textContent).toContain('New document');
+    http.verify();
+  });
+
+  it('keeps a refused entry and shows the server explanation beside it', async () => {
+    const { fixture, http, page, trigger, confirm, dialog } = await render();
+    confirm.click();
+    await vi.waitFor(() => expect(dialog.openDialogs).toHaveLength(0));
+    await fixture.whenStable();
+    const message = 'This document is still being processed. Wait until it finishes or fails before deleting it.';
+    http
+      .expectOne((request) => request.method === 'DELETE')
+      .flush({ message }, { status: 409, statusText: 'Conflict' });
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(page.querySelector('[role="alert"]')?.textContent).toContain(message));
+    expect(element(page, 'nav[aria-label="Document history"]').textContent).toContain('river.docx');
+    expect(trigger.disabled).toBe(false);
+    expect(globalThis.document.activeElement).toBe(trigger);
+    http.verify();
+  });
+});
+
 describe('Document workspace results', () => {
   async function render(
     detail: IDocumentAssessmentResponse | null,
@@ -232,6 +391,8 @@ describe('Document workspace results', () => {
       uploading: signal(false),
       retrying: signal(null),
       retryError: signal(null),
+      deleting: signal(null),
+      deleteError: signal(null),
       downloading: signal(false),
       announcement: signal(''),
       progress: (item: IDocumentAssessmentResponse) => (item.status === 'completed' ? 'Completed' : 'Failed')

@@ -26,6 +26,7 @@
         }
       </div>
       <button
+        #newDocument
         class="ui-sidebar-item w-full text-ink"
         type="button"
         (click)="select(null)"
@@ -37,20 +38,36 @@
         aria-label="Document history"
         [attr.aria-busy]="store.loading()">
         @for (document of store.items(); track document.id) {
-          <button
-            class="ui-sidebar-item mb-1 w-full flex-col items-stretch gap-1 text-left font-normal"
-            type="button"
-            [class.bg-hover]="store.selected()?.id === document.id"
-            [attr.aria-current]="store.selected()?.id === document.id ? 'true' : null"
-            (click)="select(document)">
-            <span class="truncate">{{ document.filename }}</span>
-            <span [class]="document.status === 'failed' ? 'text-xs text-danger' : 'text-xs text-muted'">{{
-              store.progress(document)
-            }}</span>
-            <time class="text-[0.75rem] text-muted" [attr.datetime]="document.createdAt">{{
-              document.createdAt | date: 'MMM d, y'
-            }}</time>
-          </button>
+          <div class="mb-1 flex items-start gap-1">
+            <button
+              class="ui-sidebar-item min-w-0 flex-1 flex-col items-stretch gap-1 text-left font-normal"
+              type="button"
+              [class.bg-hover]="store.selected()?.id === document.id"
+              [attr.aria-current]="store.selected()?.id === document.id ? 'true' : null"
+              (click)="select(document)">
+              <span class="truncate">{{ document.filename }}</span>
+              <span [class]="document.status === 'failed' ? 'text-xs text-danger' : 'text-xs text-muted'">{{
+                store.progress(document)
+              }}</span>
+              <time class="text-[0.75rem] text-muted" [attr.datetime]="document.createdAt">{{
+                document.createdAt | date: 'MMM d, y'
+              }}</time>
+            </button>
+            <button
+              class="ui-sidebar-item ui-icon shrink-0 hover:text-danger"
+              type="button"
+              (click)="remove(document)"
+              [disabled]="store.deleting() !== null"
+              [attr.aria-busy]="store.deleting() === document.id"
+              [attr.aria-label]="'Delete ' + document.filename">
+              <mat-icon [svgIcon]="store.deleting() === document.id ? 'loader-circle' : 'trash-2'" />
+            </button>
+          </div>
+          @if (store.deleteError(); as error) {
+            @if (error.id === document.id) {
+              <p class="mb-3 px-3 text-xs text-danger [overflow-wrap:anywhere]" role="alert">{{ error.message }}</p>
+            }
+          }
           @if (document.status === 'failed') {
             <button
               class="ui-sidebar-item mb-3 ml-3 text-xs"

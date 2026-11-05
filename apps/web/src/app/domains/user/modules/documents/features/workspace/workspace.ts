@@ -5,6 +5,7 @@ import {
   Component,
   computed,
   DestroyRef,
+  ElementRef,
   inject,
   viewChild
 } from '@angular/core';
@@ -16,7 +17,9 @@ import { Media } from '@web/core/media';
 import { AuthStore } from '@web/domains/auth/shared/data-access';
 import { User } from '@web/shared/ui/user/user';
 import { subscriptionContactUrl, subscriptionPlans } from '@web/shared/data/subscription-plans';
+import { firstValueFrom } from 'rxjs';
 import { DocumentsStore } from '../../data-access/documents.store';
+import { DeleteDocumentDialog } from '../../data-access/delete-document-dialog';
 
 @Component({
   selector: 'document-workspace',
@@ -46,6 +49,8 @@ export class Workspace {
   protected readonly contactUrl = subscriptionContactUrl();
   protected readonly isMobile = inject(Media).match('(max-width: 767px)');
   private readonly sidenav = viewChild(MatSidenav);
+  private readonly newDocument = viewChild<ElementRef<HTMLButtonElement>>('newDocument');
+  private readonly deleteDialog = inject(DeleteDocumentDialog);
   private readonly document = inject(DOCUMENT);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -56,6 +61,13 @@ export class Workspace {
   protected select(document: IDocumentResponse | null): void {
     this.store.select(document);
     if (this.isMobile()) void this.sidenav()?.close();
+  }
+
+  protected async remove(document: IDocumentResponse): Promise<void> {
+    const confirmed = await firstValueFrom(this.deleteDialog.open(document).afterClosed());
+    if (!confirmed || this.destroyRef.destroyed) return;
+    const deleted = await this.store.delete(document);
+    if (deleted && !this.destroyRef.destroyed) this.newDocument()?.nativeElement.focus();
   }
 
   protected upload(event: Event): void {

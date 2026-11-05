@@ -1,0 +1,18 @@
+<section class="flex max-h-[calc(100dvh-2rem)] min-h-0 flex-col bg-panel font-sans text-ink">
+  <header class="flex shrink-0 items-center justify-between gap-4 border-b border-divider px-6 py-4">
+    <h2 id="delete-document-heading" tabindex="-1" class="text-[1.125rem] font-medium [overflow-wrap:anywhere]">
+      Delete {{ document.filename }}?
+    </h2>
+    <button class="ui-button ui-ghost ui-icon" type="button" aria-label="Keep document" (click)="ref.close(false)">
+      <mat-icon svgIcon="x" />
+    </button>
+  </header>
+  <p class="min-h-0 overflow-y-auto overscroll-contain p-6 text-[0.9375rem] leading-6 text-muted">
+    This removes the original, its writing assessment and any revised version from Unslopy. Deletion cannot be
+    undone.
+  </p>
+  <footer class="flex shrink-0 justify-end gap-3 border-t border-divider p-5">
+    <button class="ui-button ui-ghost" type="button" (click)="ref.close(false)">Cancel</button>
+    <button class="ui-button ui-destructive" type="button" (click)="ref.close(true)">Delete</button>
+  </footer>
+</section>

@@ -57,6 +57,8 @@ export class DocumentsStore {
   readonly uploading = signal(false);
   readonly retrying = signal<string | null>(null);
   readonly retryError = signal<{ id: string; message: string } | null>(null);
+  readonly deleting = signal<string | null>(null);
+  readonly deleteError = signal<{ id: string; message: string } | null>(null);
   readonly downloading = signal(false);
   readonly listError = signal('');
   readonly uploadError = signal('');
@@ -229,6 +231,38 @@ export class DocumentsStore {
           if (this.selected()?.id === document.id) this.loadSelected();
         }
       });
+  }
+
+  async delete(document: IDocumentResponse): Promise<boolean> {
+    if (this.deleting()) return false;
+    this.deleting.set(document.id);
+    this.deleteError.set(null);
+    this.announcement.set('');
+    try {
+      await firstValueFrom(
+        this.http.delete(`/documents/${document.id}`).pipe(takeUntilDestroyed(this.destroyRef)),
+        { defaultValue: null }
+      );
+    } catch (error) {
+      if (this.destroyRef.destroyed) return false;
+      if (!(error instanceof HttpErrorResponse) || error.status !== 404) {
+        this.deleting.set(null);
+        this.deleteError.set({
+          id: document.id,
+          message: this.errorMessage(error, 'The document could not be deleted. Try again.')
+        });
+        return false;
+      }
+    }
+    if (this.destroyRef.destroyed) return false;
+    this.deleting.set(null);
+    this.items.update((items) => items.filter((item) => item.id !== document.id));
+    this.total.update((total) => Math.max(0, total - 1));
+    if (this.selected()?.id === document.id) this.select(null);
+    this.announcement.set(`${document.filename} deleted.`);
+    this.listPending = false;
+    this.load(this.page(), true);
+    return true;
   }
 
   async download(document: IDocumentResponse, version: 'original' | 'revised'): Promise<Blob | null> {
