@@ -1,13 +1,15 @@
 import { DOCUMENT } from '@angular/common';
-import { HttpClient, HttpErrorResponse } from '@angular/common/http';
-import { computed, DestroyRef, inject, Injectable, signal } from '@angular/core';
+import { HttpClient, HttpErrorResponse, HttpEventType } from '@angular/common/http';
+import { computed, DestroyRef, inject, Injectable, linkedSignal, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router } from '@angular/router';
 import type {
   IAllowanceResponse,
   IDocumentAssessmentResponse,
   IDocumentPage,
-  IDocumentResponse
+  IDocumentPreviewResponse,
+  IDocumentResponse,
+  IPreviewBlockResponse
 } from '@unslop-docs/api-contracts';
 import { AuthStore } from '@web/domains/auth/shared/data-access';
 import { firstValueFrom } from 'rxjs';
@@ -25,6 +27,18 @@ export type DocumentPhaseKey =
 export interface DocumentPhase {
   key: DocumentPhaseKey;
   label: string;
+}
+
+export interface UploadProgress {
+  loaded: number;
+  total: number | null;
+  percent: number | null;
+}
+
+export function strengthLabel(strength: number): 'Light' | 'Balanced' | 'Thorough' {
+  if (strength <= 33) return 'Light';
+  if (strength <= 66) return 'Balanced';
+  return 'Thorough';
 }
 
 @Injectable()
@@ -104,6 +118,7 @@ export class DocumentsStore {
   readonly total = signal(0);
   readonly loading = signal(true);
   readonly uploading = signal(false);
+  readonly uploadProgress = signal<UploadProgress | null>(null);
   readonly retrying = signal<string | null>(null);
   readonly retryError = signal<{ id: string; message: string } | null>(null);
   readonly deleting = signal<string | null>(null);
@@ -114,6 +129,18 @@ export class DocumentsStore {
   readonly downloadError = signal('');
   readonly announcement = signal('');
   readonly phaseAnnouncement = signal('');
+  readonly strength = linkedSignal<string | undefined, number>({
+    source: () => this.selected()?.id,
+    computation: () => this.selected()?.strength ?? 50
+  });
+  readonly strengthLabel = computed(() => strengthLabel(this.strength()));
+  readonly unslopifying = signal<string | null>(null);
+  readonly unslopifyError = signal<{ id: string; message: string } | null>(null);
+  readonly preview = signal<IPreviewBlockResponse[] | null>(null);
+  readonly previewError = signal('');
+  readonly previewLoading = signal(false);
+  private previewRequest = 0;
+  private previewFor: string | null = null;
   readonly celebrating = signal<string | null>(null);
   private readonly observedPhases = new Map<string, DocumentPhaseKey>();
   readonly pageCount = computed(() => Math.max(1, Math.ceil(this.total() / 20)));
@@ -178,6 +205,8 @@ export class DocumentsStore {
 
   select(document: IDocumentResponse | null): void {
     this.selected.set(document);
+    this.unslopifyError.set(null);
+    this.resetPreview();
     this.celebrating.set(null);
     this.phaseAnnouncement.set('');
     if (document) this.observe([document]);
@@ -210,6 +239,7 @@ export class DocumentsStore {
           this.items.update((items) => items.map((item) => (item.id === detail.id ? detail : item)));
           this.detailError.set('');
           this.detailLoading.set(false);
+          if (detail.assessment) this.loadPreview(detail);
         },
         error: (error: unknown) => {
           if (request !== this.detailRequest) return;
@@ -233,16 +263,26 @@ export class DocumentsStore {
       return;
     }
     this.uploading.set(true);
+    this.uploadProgress.set(null);
     const body = new FormData();
     body.append('file', file);
     this.http
-      .post<IDocumentResponse>('/documents', body)
+      .post<IDocumentResponse>('/documents', body, { reportProgress: true, observe: 'events' })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: (document) => {
+        next: (event) => {
+          if (event.type === HttpEventType.UploadProgress) {
+            const total = event.total ?? null;
+            const percent = total ? Math.min(100, Math.round((event.loaded / total) * 100)) : null;
+            this.uploadProgress.set({ loaded: event.loaded, total, percent });
+            return;
+          }
+          if (event.type !== HttpEventType.Response || !event.body) return;
+          const document = event.body;
           this.uploading.set(false);
+          this.uploadProgress.set(null);
           this.select(document);
-          this.announcement.set('Original uploaded. Assessment and editing queued.');
+          this.announcement.set('Original uploaded. Assessment starts automatically.');
           this.items.set([document, ...(this.page() === 1 ? this.items() : [])].slice(0, 20));
           this.page.set(1);
           this.total.update((total) => total + 1);
@@ -250,9 +290,78 @@ export class DocumentsStore {
         },
         error: (error: unknown) => {
           this.uploading.set(false);
+          this.uploadProgress.set(null);
           this.uploadError.set(this.errorMessage(error, 'Upload failed. Check your history before trying again.'));
           if (error instanceof HttpErrorResponse && (error.status === 0 || error.status >= 500)) this.load(1);
           else this.loadAllowance();
+        }
+      });
+  }
+
+  private resetPreview(): void {
+    this.previewRequest++;
+    this.previewFor = null;
+    this.preview.set(null);
+    this.previewError.set('');
+    this.previewLoading.set(false);
+  }
+
+  loadPreview(document: IDocumentResponse): void {
+    if (this.previewFor === document.id) return;
+    this.previewFor = document.id;
+    const request = ++this.previewRequest;
+    this.previewLoading.set(true);
+    this.previewError.set('');
+    this.http
+      .get<IDocumentPreviewResponse>(`/documents/${document.id}/preview`, { transferCache: false })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (result) => {
+          if (request !== this.previewRequest) return;
+          this.preview.set(result.blocks);
+          this.previewLoading.set(false);
+        },
+        error: (error: unknown) => {
+          if (request !== this.previewRequest) return;
+          this.previewLoading.set(false);
+          const missing = error instanceof HttpErrorResponse && error.status === 404;
+          this.previewError.set(
+            missing
+              ? 'No preview is available for this document.'
+              : this.errorMessage(error, 'The preview could not be loaded. Try again.')
+          );
+          if (!missing) this.previewFor = null;
+        }
+      });
+  }
+
+  unslopify(document: IDocumentResponse): void {
+    if (this.unslopifying() || document.status !== 'assessed') return;
+    this.unslopifying.set(document.id);
+    this.unslopifyError.set(null);
+    this.announcement.set('');
+    this.http
+      .post<IDocumentResponse>(`/documents/${document.id}/unslopify`, { strength: this.strength() })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (queued) => {
+          this.unslopifying.set(null);
+          this.observe([queued]);
+          this.items.update((items) => items.map((item) => (item.id === queued.id ? queued : item)));
+          if (this.selected()?.id === queued.id) {
+            this.selected.set(queued);
+            this.detail.update((detail) => (detail ? { ...detail, ...queued } : detail));
+          }
+          this.loadAllowance();
+        },
+        error: (error: unknown) => {
+          this.unslopifying.set(null);
+          this.unslopifyError.set({
+            id: document.id,
+            message: this.errorMessage(error, 'Unslopify could not be started. Refresh and try again.')
+          });
+          this.loadAllowance();
+          if (this.selected()?.id === document.id) this.loadSelected(true);
         }
       });
   }

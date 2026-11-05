@@ -1,13 +1,18 @@
 import { TestBed } from '@angular/core/testing';
 import { Input, signal } from '@angular/core';
 import { provideRouter } from '@angular/router';
-import { provideHttpClient } from '@angular/common/http';
+import { HttpEventType, provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { MatIconRegistry } from '@angular/material/icon';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { of } from 'rxjs';
-import { IAllowanceResponse, IDocumentAssessmentResponse, IUserResponse } from '@unslop-docs/api-contracts';
+import {
+  IAllowanceResponse,
+  IDocumentAssessmentResponse,
+  IPreviewBlockResponse,
+  IUserResponse
+} from '@unslop-docs/api-contracts';
 import { AuthStore } from '@web/domains/auth/shared/data-access';
 import { Media } from '@web/core/media';
 import { DocumentsStore } from '../../data-access/documents.store';
@@ -39,6 +44,10 @@ const document: IDocumentAssessmentResponse = {
 };
 
 afterEach(() => TestBed.resetTestingModule());
+
+function flushPreview(http: HttpTestingController, blocks: IPreviewBlockResponse[] = []) {
+  http.expectOne(`/documents/${document.id}/preview`).flush({ blocks });
+}
 
 describe('Retry from document history', () => {
   function element<T extends Element = Element>(root: ParentNode, selector: string): T {
@@ -296,6 +305,7 @@ describe('Delete from document history', () => {
     const entry = element<HTMLButtonElement>(page, 'nav[aria-label="Document history"] button');
     entry.click();
     http.expectOne(`/documents/${document.id}`).flush(document);
+    flushPreview(http);
     await fixture.whenStable();
     expect(page.querySelector('main h1')?.textContent).toContain('river.docx');
     confirm.click();
@@ -714,11 +724,13 @@ describe('Phase changes while watching', () => {
     expect(store.celebrating()).toBeNull();
     store.loadSelected(true);
     http.expectOne(`/documents/${document.id}`).flush({ ...document, status: 'completed' });
+    flushPreview(http);
     expect(store.phaseAnnouncement()).toBe('river.docx: Download ready.');
     expect(store.celebrating()).toBe(document.id);
     store.select(null);
     store.select(document);
     http.expectOne(`/documents/${document.id}`).flush(document);
+    flushPreview(http);
     expect(store.celebrating()).toBeNull();
     http.verify();
   });
@@ -730,6 +742,7 @@ describe('Phase changes while watching', () => {
     http.expectOne('/documents/allowance').flush({});
     store.select(document);
     http.expectOne(`/documents/${document.id}`).flush(document);
+    flushPreview(http);
     expect(store.celebrating()).toBeNull();
     expect(store.phaseAnnouncement()).toBe('');
     http.verify();
@@ -743,11 +756,185 @@ describe('Phase changes while watching', () => {
     http.expectOne('/documents/allowance').flush({});
     store.select(editing);
     http.expectOne(`/documents/${document.id}`).flush(editing);
+    flushPreview(http);
     store.load(1, true);
     http.expectOne((request) => request.url === '/documents').flush({ items: [document], page: 1, pageSize: 20, total: 1 });
     http.expectOne('/documents/allowance').flush({});
     expect(store.celebrating()).toBe(document.id);
     expect(store.phaseAnnouncement()).toBe('river.docx: Download ready.');
+    http.verify();
+  });
+});
+
+describe('Upload progress', () => {
+  function setup() {
+    TestBed.configureTestingModule({
+      providers: [
+        DocumentsStore,
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: AuthStore, useValue: { setUser: vi.fn() } }
+      ]
+    });
+    return { store: TestBed.inject(DocumentsStore), http: TestBed.inject(HttpTestingController) };
+  }
+
+  it('reports transferred bytes, falls back to indeterminate, and hands over to assessment without claiming completion', () => {
+    const { store, http } = setup();
+    store.upload(new File(['fixture'], 'river.docx'));
+    const request = http.expectOne('/documents');
+    expect(request.request.reportProgress).toBe(true);
+    expect(store.uploadProgress()).toBeNull();
+    request.event({ type: HttpEventType.UploadProgress, loaded: 300, total: 1200 });
+    expect(store.uploadProgress()).toEqual({ loaded: 300, total: 1200, percent: 25 });
+    request.event({ type: HttpEventType.UploadProgress, loaded: 600 });
+    expect(store.uploadProgress()).toEqual({ loaded: 600, total: null, percent: null });
+    const queued = { ...document, status: 'queued', phase: 'assessment', assessment: null };
+    request.flush(queued);
+    expect(store.uploading()).toBe(false);
+    expect(store.uploadProgress()).toBeNull();
+    expect(store.selected()?.id).toBe(document.id);
+    expect(store.announcement()).toBe('Original uploaded. Assessment starts automatically.');
+    expect(store.announcement()).not.toMatch(/complete/i);
+    http.expectOne(`/documents/${document.id}`).flush(queued);
+    http.expectOne((request) => request.url === '/documents').flush({ items: [queued], page: 1, pageSize: 20, total: 1 });
+    http.expectOne('/documents/allowance').flush({});
+    http.verify();
+  });
+});
+
+describe('Rewrite strength and Unslopify', () => {
+  function setup() {
+    TestBed.configureTestingModule({
+      providers: [
+        DocumentsStore,
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: AuthStore, useValue: { setUser: vi.fn() } }
+      ]
+    });
+    return { store: TestBed.inject(DocumentsStore), http: TestBed.inject(HttpTestingController) };
+  }
+  const assessed: IDocumentAssessmentResponse = {
+    ...document,
+    status: 'assessed',
+    phase: 'assessment',
+    strength: null,
+    assessment: { rubric: 'ai-style-v1', score: 62, patterns: [] }
+  };
+
+  it('starts at 50, keeps the chosen strength across polls, and labels Light, Balanced and Thorough', () => {
+    const { store, http } = setup();
+    store.select(assessed);
+    http.expectOne(`/documents/${document.id}`).flush(assessed);
+    flushPreview(http);
+    expect(store.strength()).toBe(50);
+    expect(store.strengthLabel()).toBe('Balanced');
+    store.strength.set(20);
+    expect(store.strengthLabel()).toBe('Light');
+    store.loadSelected(true);
+    http.expectOne(`/documents/${document.id}`).flush(assessed);
+    expect(store.strength()).toBe(20);
+    store.strength.set(80);
+    expect(store.strengthLabel()).toBe('Thorough');
+    const retryable = { ...assessed, id: '00000000-0000-4000-8000-000000000009', strength: 70, status: 'failed' } as const;
+    store.select({ ...retryable, phase: 'rewrite' });
+    http.expectOne(`/documents/${retryable.id}`).flush({ ...retryable, phase: 'rewrite' });
+    http.expectOne(`/documents/${retryable.id}/preview`).flush({ blocks: [] });
+    expect(store.strength()).toBe(70);
+    http.verify();
+  });
+
+  it('sends the strength once for a double start and shows the queued editing phase', () => {
+    const { store, http } = setup();
+    store.select(assessed);
+    http.expectOne(`/documents/${document.id}`).flush(assessed);
+    flushPreview(http);
+    store.strength.set(80);
+    store.unslopify(assessed);
+    store.unslopify(assessed);
+    expect(store.unslopifying()).toBe(document.id);
+    const request = http.expectOne(`/documents/${document.id}/unslopify`);
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({ strength: 80 });
+    const queued = { ...assessed, status: 'queued', phase: 'rewrite', strength: 80 };
+    request.flush(queued);
+    expect(store.unslopifying()).toBeNull();
+    expect(store.selected()?.status).toBe('queued');
+    expect(store.phase(store.selected()!).label).toBe('Queued for editing');
+    expect(store.phaseAnnouncement()).toBe('river.docx: Queued for editing.');
+    http.expectOne('/documents/allowance').flush({});
+    http.verify();
+  });
+
+  it('keeps the assessed document and reports a refusal beside the action', () => {
+    const { store, http } = setup();
+    store.select(assessed);
+    http.expectOne(`/documents/${document.id}`).flush(assessed);
+    flushPreview(http);
+    store.unslopify(assessed);
+    const message = 'Your FREE allowance of 3 documents is fully used or reserved. It resets on 2026-12-01T00:00:00.000Z (UTC).';
+    http.expectOne(`/documents/${document.id}/unslopify`).flush({ message }, { status: 409, statusText: 'Conflict' });
+    expect(store.unslopifying()).toBeNull();
+    expect(store.unslopifyError()).toEqual({ id: document.id, message });
+    expect(store.selected()?.status).toBe('assessed');
+    http.expectOne('/documents/allowance').flush({});
+    http.expectOne(`/documents/${document.id}`).flush(assessed);
+    expect(store.detail()?.assessment?.score).toBe(62);
+    http.verify();
+  });
+});
+
+describe('Document preview', () => {
+  function setup() {
+    TestBed.configureTestingModule({
+      providers: [
+        DocumentsStore,
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: AuthStore, useValue: { setUser: vi.fn() } }
+      ]
+    });
+    return { store: TestBed.inject(DocumentsStore), http: TestBed.inject(HttpTestingController) };
+  }
+  const assessed: IDocumentAssessmentResponse = {
+    ...document,
+    status: 'assessed',
+    phase: 'assessment',
+    assessment: { rubric: 'ai-style-v1', score: 62, patterns: [] }
+  };
+  const blocks = [{ kind: 'paragraph', level: null, text: 'Hello', inlines: null, rows: null, reason: null }];
+
+  it('loads the preview once an assessment exists and keeps it across polls', () => {
+    const { store, http } = setup();
+    const queued = { ...assessed, status: 'queued', assessment: null };
+    store.select(queued);
+    http.expectOne(`/documents/${document.id}`).flush(queued);
+    http.expectNone(`/documents/${document.id}/preview`);
+    store.loadSelected(true);
+    http.expectOne(`/documents/${document.id}`).flush(assessed);
+    http.expectOne(`/documents/${document.id}/preview`).flush({ blocks });
+    expect(store.preview()).toEqual(blocks);
+    store.loadSelected(true);
+    http.expectOne(`/documents/${document.id}`).flush(assessed);
+    http.expectNone(`/documents/${document.id}/preview`);
+    expect(store.preview()).toEqual(blocks);
+    store.select(null);
+    expect(store.preview()).toBeNull();
+    http.verify();
+  });
+
+  it('explains a missing preview instead of failing the document', () => {
+    const { store, http } = setup();
+    store.select(assessed);
+    http.expectOne(`/documents/${document.id}`).flush(assessed);
+    http.expectOne(`/documents/${document.id}/preview`).flush({ message: 'Not found' }, { status: 404, statusText: 'Not Found' });
+    expect(store.preview()).toBeNull();
+    expect(store.previewError()).toBe('No preview is available for this document.');
+    expect(store.detail()?.assessment?.score).toBe(62);
     http.verify();
   });
 });
