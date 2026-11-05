@@ -145,15 +145,39 @@ describe('DOCX reader', () => {
     await expect(readDocx(await readerFixture(`<w:p>${content}</w:p>`))).rejects.toThrow(reason);
   });
 
-  it('also rejects changes and unsupported structures inside preserved parts', async () => {
-    await expect(
-      readDocx(
-        await readerFixture(paragraph('Essay'), {
-          'word/header1.xml':
-            '<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:del w:id="1"/></w:p></w:hdr>'
-        })
+  it('reads the final version of tracked changes without duplicating moved text', async () => {
+    const revision = 'w:id="1" w:author="Tutor" w:date="2026-01-01T00:00:00Z"';
+    const result = await readDocx(
+      await readerFixture(
+        `<w:p><w:pPr><w:rPr><w:ins ${revision}/></w:rPr><w:pPrChange ${revision}><w:pPr/></w:pPrChange></w:pPr>` +
+          `<w:r><w:t xml:space="preserve">Kept </w:t></w:r><w:ins ${revision}><w:r><w:t xml:space="preserve">inserted </w:t></w:r></w:ins>` +
+          `<w:del ${revision}><w:r><w:delText xml:space="preserve">deleted </w:delText></w:r></w:del>` +
+          `<w:r><w:rPr><w:b/><w:rPrChange ${revision}><w:rPr><w:i/></w:rPr></w:rPrChange></w:rPr><w:t>text.</w:t></w:r></w:p>` +
+          `<w:p><w:moveFromRangeStart ${revision} w:name="move"/><w:moveFrom ${revision}><w:r><w:t>Moved sentence.</w:t></w:r></w:moveFrom><w:moveFromRangeEnd w:id="1"/></w:p>` +
+          `<w:p><w:moveToRangeStart ${revision} w:name="move"/><w:moveTo ${revision}><w:r><w:t>Moved sentence.</w:t></w:r></w:moveTo><w:moveToRangeEnd w:id="1"/></w:p>` +
+          `<w:tbl><w:tblPr><w:tblPrChange ${revision}><w:tblPr/></w:tblPrChange></w:tblPr><w:tblGrid><w:gridCol w:w="2400"/><w:tblGridChange w:id="2"><w:tblGrid/></w:tblGridChange></w:tblGrid>` +
+          `<w:tr><w:trPr><w:del ${revision}/></w:trPr><w:tc>${paragraph('Deleted row')}</w:tc></w:tr>` +
+          `<w:tr><w:trPr><w:ins ${revision}/></w:trPr><w:tc><w:tcPr><w:cellIns ${revision}/></w:tcPr>${paragraph('Inserted row')}</w:tc></w:tr></w:tbl>`,
+        {
+          'word/header1.xml': `<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:del ${revision}><w:r><w:delText>Old header</w:delText></w:r></w:del><w:r><w:t>Header</w:t></w:r></w:p></w:hdr>`
+        }
       )
-    ).rejects.toThrow('accept or reject');
+    );
+    expect(result.blocks).toMatchObject([
+      {
+        kind: 'paragraph',
+        text: 'Kept inserted text.',
+        inlines: [{ text: 'Kept ' }, { text: 'inserted ' }, { text: 'text.', bold: true, italic: false }]
+      },
+      { kind: 'paragraph', text: '' },
+      { kind: 'paragraph', text: 'Moved sentence.' },
+      { kind: 'table', rows: [{ cells: [{ blocks: [{ text: 'Inserted row' }] }] }] }
+    ]);
+    expect(result.text).toBe('Kept inserted text.\n\nMoved sentence.\nInserted row');
+    const xml = result.readXmlPart(result.mainPart);
+    expect(xml).not.toMatch(/<w:(ins|del|moveFrom|moveTo|\w+Change|moveFromRange\w+|moveToRange\w+|cellIns)\b/);
+    expect(xml).toContain('<w:p><w:pPr><w:rPr></w:rPr></w:pPr><w:r><w:t xml:space="preserve">Kept </w:t></w:r>');
+    expect(result.readXmlPart('word/header1.xml')).toContain('Old header');
   });
 
   it('explains encrypted Office files and bounds archive expansion', async () => {
@@ -297,11 +321,15 @@ describe('DOCX reader', () => {
   });
 
   it.each([
-    '<w:tblGridChange w:id="1"><w:tblGrid/></w:tblGridChange>',
-    '<w:tblPrExChange w:id="1"><w:tblPrEx/></w:tblPrExChange>',
-    '<w14:conflictIns xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" w:id="1"><w:r><w:t>Conflict</w:t></w:r></w14:conflictIns>'
-  ])('rejects less common tracked revisions: %s', async (revision) => {
-    await expect(readDocx(await readerFixture('<w:p>' + revision + '</w:p>'))).rejects.toThrow('accept or reject');
+    ['<w:tblPrExChange w:id="1"><w:tblPrEx/></w:tblPrExChange><w:r><w:t>Conflict</w:t></w:r>', 'Conflict'],
+    [
+      '<w14:conflictIns xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" w:id="1"><w:r><w:t>Conflict</w:t></w:r></w14:conflictIns><w14:conflictDel xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" w:id="2"><w:r><w:delText>Lost</w:delText></w:r></w14:conflictDel>',
+      'Conflict'
+    ]
+  ])('resolves less common tracked revisions to their final version: %s', async (revision, text) => {
+    const result = await readDocx(await readerFixture('<w:p>' + revision + '</w:p>'));
+    expect(result.text).toBe(text);
+    expect(result.readXmlPart(result.mainPart)).not.toMatch(/conflict|Change/);
   });
 
   it('counts words across runs and accepts exactly 10,000 but rejects 10,001 with the count', async () => {

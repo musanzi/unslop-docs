@@ -27,7 +27,6 @@ export const docxFixtureCases: readonly { name: string; rejection?: string; crea
   { name: 'over-10000-words', rejection: '10,001', create: () => readerFixture(textParagraph('word '.repeat(10001))) },
   {
     name: 'tracked-changes',
-    rejection: 'accept or reject',
     create: () =>
       readerFixture(
         essay('english') +

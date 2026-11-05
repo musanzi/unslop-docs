@@ -41,33 +41,7 @@ function inspectXml(bytes: Buffer, budget: { nodes: number }) {
     throw new Error('Document types are not allowed');
   });
   parser.on('opentag', (tag) => {
-    if (
-      tag.uri === 'http://schemas.microsoft.com/office/word/2010/wordml' &&
-      ['conflictIns', 'conflictDel'].includes(tag.local)
-    )
-      throw new BadRequestException(
-        'This DOCX contains tracked changes. In Word, accept or reject all changes, then upload again.'
-      );
     if (wordNamespaces.has(tag.uri)) {
-      if (
-        [
-          'ins',
-          'del',
-          'moveFrom',
-          'moveTo',
-          'cellIns',
-          'cellDel',
-          'cellMerge',
-          'numberingChange',
-          'conflictIns',
-          'conflictDel'
-        ].includes(tag.local) ||
-        tag.local.endsWith('Change') ||
-        /^(moveFrom|moveTo|customXml.*)(RangeStart|RangeEnd)$/.test(tag.local)
-      )
-        throw new BadRequestException(
-          'This DOCX contains tracked changes. In Word, accept or reject all changes, then upload again.'
-        );
       const unsupported: Record<string, string> = {
         txbxContent: 'text boxes',
         object: 'embedded objects',
