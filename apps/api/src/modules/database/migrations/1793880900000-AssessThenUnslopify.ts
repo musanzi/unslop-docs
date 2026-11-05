@@ -3,8 +3,8 @@ import { MigrationInterface } from 'typeorm';
 const failureCodes = `('provider', 'deadline', 'interrupted', 'response', 'structure', 'formatting', 'protected', 'citation', 'quotation', 'reference', 'fact', 'language')`;
 
 export class AssessThenUnslopify1793880900000 implements MigrationInterface {
-  async up(database: { query(sql: string): Promise<unknown> }): Promise<void> {
-    await database.query(`ALTER TABLE document
+  async up(queryRunner: { query(sql: string): Promise<unknown> }): Promise<void> {
+    await queryRunner.query(`ALTER TABLE document
       DROP CONSTRAINT "CHK_document_processing",
       DROP CONSTRAINT "CHK_document_revision",
       DROP CONSTRAINT "CHK_document_stage",
@@ -15,14 +15,14 @@ export class AssessThenUnslopify1793880900000 implements MigrationInterface {
       ADD COLUMN preview jsonb,
       ADD COLUMN "editingCompleted" integer,
       ADD COLUMN "editingTotal" integer`);
-    await database.query(`UPDATE document SET phase = 'rewrite' WHERE status = 'completed'`);
-    await database.query(`UPDATE allowance_reservation SET state = 'released'
+    await queryRunner.query(`UPDATE document SET phase = 'rewrite' WHERE status = 'completed'`);
+    await queryRunner.query(`UPDATE allowance_reservation SET state = 'released'
       WHERE state = 'active' AND "documentId" IN (SELECT id FROM document WHERE status IN ('queued', 'processing'))`);
-    await database.query(`UPDATE document SET status = 'queued', phase = 'assessment', assessment = NULL,
+    await queryRunner.query(`UPDATE document SET status = 'queued', phase = 'assessment', assessment = NULL,
       "claimToken" = NULL, "leaseExpiresAt" = NULL, "processingStage" = NULL, "nextRequestAt" = NULL,
       "processingAttemptId" = NULL, "providerRequests" = '{}'::jsonb, "processingStartedAt" = NULL,
       "processingDeadline" = NULL WHERE status IN ('queued', 'processing')`);
-    await database.query(`ALTER TABLE document
+    await queryRunner.query(`ALTER TABLE document
       ADD CONSTRAINT "CHK_document_processing" CHECK (
         (status = 'stored' AND phase = 'assessment' AND assessment IS NULL AND "failureCode" IS NULL AND "claimToken" IS NULL) OR
         (status = 'queued' AND "failureCode" IS NULL AND "claimToken" IS NULL AND ((phase = 'assessment' AND assessment IS NULL) OR (phase = 'rewrite' AND assessment IS NOT NULL))) OR
@@ -59,8 +59,8 @@ export class AssessThenUnslopify1793880900000 implements MigrationInterface {
       )`);
   }
 
-  async down(database: { query(sql: string): Promise<unknown> }): Promise<void> {
-    await database.query(`ALTER TABLE document
+  async down(queryRunner: { query(sql: string): Promise<unknown> }): Promise<void> {
+    await queryRunner.query(`ALTER TABLE document
       DROP CONSTRAINT "CHK_document_processing",
       DROP CONSTRAINT "CHK_document_phase",
       DROP CONSTRAINT "CHK_document_stage",
@@ -69,14 +69,14 @@ export class AssessThenUnslopify1793880900000 implements MigrationInterface {
       DROP CONSTRAINT "CHK_document_final_assessment",
       DROP CONSTRAINT "CHK_document_preview",
       DROP CONSTRAINT "CHK_document_progress"`);
-    await database.query(`UPDATE allowance_reservation SET state = 'released'
+    await queryRunner.query(`UPDATE allowance_reservation SET state = 'released'
       WHERE state = 'active' AND "documentId" IN (SELECT id FROM document WHERE status IN ('queued', 'processing'))`);
-    await database.query(`UPDATE document SET status = 'failed', "failureCode" = 'interrupted', assessment = NULL,
+    await queryRunner.query(`UPDATE document SET status = 'failed', "failureCode" = 'interrupted', assessment = NULL,
       "claimToken" = NULL, "leaseExpiresAt" = NULL, "processingStage" = NULL, "nextRequestAt" = NULL,
       "providerRequests" = '{}'::jsonb, "revisedKey" = NULL, "revisedSize" = NULL, "revisionNotices" = NULL
       WHERE status IN ('queued', 'processing')`);
-    await database.query(`UPDATE document SET assessment = NULL WHERE status = 'failed'`);
-    await database.query(`ALTER TABLE document
+    await queryRunner.query(`UPDATE document SET assessment = NULL WHERE status = 'failed'`);
+    await queryRunner.query(`ALTER TABLE document
       DROP COLUMN phase, DROP COLUMN strength, DROP COLUMN "finalAssessment", DROP COLUMN preview,
       DROP COLUMN "editingCompleted", DROP COLUMN "editingTotal",
       ADD CONSTRAINT "CHK_document_processing" CHECK (

@@ -1,14 +1,9 @@
+import { createDocumentTestSchema } from '@api/shared/testing/document-database';
 import { Test } from '@nestjs/testing';
 import { PGlite } from '@electric-sql/pglite';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
-import { DocumentAssessment1793880300000 } from '../../database/migrations/1793880300000-DocumentAssessment';
-import { DocumentRevision1793880400000 } from '../../database/migrations/1793880400000-DocumentRevision';
-import { ProviderRetries1793880500000 } from '../../database/migrations/1793880500000-ProviderRetries';
-import { MonthlyAllowance1793880600000 } from '../../database/migrations/1793880600000-MonthlyAllowance';
-import { RevisionNotices1793880800000 } from '../../database/migrations/1793880800000-RevisionNotices';
-import { AssessThenUnslopify1793880900000 } from '../../database/migrations/1793880900000-AssessThenUnslopify';
 import { DocumentStorage } from '../document-storage';
 import { MonthlyAllowance } from '../monthly-allowance';
 import { assessmentRubric } from '../assessment-workflow';
@@ -53,14 +48,7 @@ describe('Delete a stored document', () => {
   let handler: DeleteDocumentHandler;
 
   beforeAll(async () => {
-    await database.exec(`CREATE TABLE "user" (id uuid PRIMARY KEY, status varchar NOT NULL DEFAULT 'FREE');
-      CREATE TABLE document (id uuid PRIMARY KEY, "ownerId" uuid NOT NULL REFERENCES "user"(id), "originalKey" text, size integer, "createdAt" timestamptz DEFAULT now());`);
-    await new DocumentAssessment1793880300000().up({ query });
-    await new DocumentRevision1793880400000().up({ query });
-    await new ProviderRetries1793880500000().up({ query });
-    await new MonthlyAllowance1793880600000().up({ query });
-    await new RevisionNotices1793880800000().up({ query });
-    await new AssessThenUnslopify1793880900000().up({ query });
+    await createDocumentTestSchema(database);
     const module = await Test.createTestingModule({
       providers: [
         DeleteDocumentHandler,
@@ -280,14 +268,7 @@ describe('Delete an active document', () => {
 
   beforeAll(async () => {
     original = await assessmentDocxFixture();
-    await database.exec(`CREATE TABLE "user" (id uuid PRIMARY KEY, status varchar NOT NULL DEFAULT 'FREE');
-      CREATE TABLE document (id uuid PRIMARY KEY, "ownerId" uuid NOT NULL REFERENCES "user"(id), "originalKey" text, size integer, "createdAt" timestamptz DEFAULT now());`);
-    await new DocumentAssessment1793880300000().up({ query });
-    await new DocumentRevision1793880400000().up({ query });
-    await new ProviderRetries1793880500000().up({ query });
-    await new MonthlyAllowance1793880600000().up({ query });
-    await new RevisionNotices1793880800000().up({ query });
-    await new AssessThenUnslopify1793880900000().up({ query });
+    await createDocumentTestSchema(database);
     const module = await Test.createTestingModule({
       providers: [
         DeleteDocumentHandler,

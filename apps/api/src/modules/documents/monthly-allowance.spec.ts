@@ -1,3 +1,4 @@
+import { createDocumentTestSchema } from '@api/shared/testing/document-database';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Readable } from 'node:stream';
@@ -8,12 +9,6 @@ import { faithfulRevisionProvider } from '@api/shared/testing/revision-fixtures'
 import { PGlite } from '@electric-sql/pglite';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { DocumentAssessment1793880300000 } from '../database/migrations/1793880300000-DocumentAssessment';
-import { DocumentRevision1793880400000 } from '../database/migrations/1793880400000-DocumentRevision';
-import { ProviderRetries1793880500000 } from '../database/migrations/1793880500000-ProviderRetries';
-import { MonthlyAllowance1793880600000 } from '../database/migrations/1793880600000-MonthlyAllowance';
-import { RevisionNotices1793880800000 } from '../database/migrations/1793880800000-RevisionNotices';
-import { AssessThenUnslopify1793880900000 } from '../database/migrations/1793880900000-AssessThenUnslopify';
 import { MonthlyAllowance } from './monthly-allowance';
 import { UploadDocumentHandler } from './commands/upload-document.handler';
 import { Document } from './entities/document.entity';
@@ -96,14 +91,7 @@ describe('Monthly allowance at Unslopify and worker boundaries', () => {
   const query = async (sql: string, values?: unknown[]) => (await database.query(sql, values)).rows;
   beforeAll(async () => {
     harness = await allowanceHarness(database, allowance);
-    await database.exec(`CREATE TABLE "user" (id uuid PRIMARY KEY, status varchar NOT NULL DEFAULT 'FREE');
-      CREATE TABLE document (id uuid PRIMARY KEY, "ownerId" uuid NOT NULL REFERENCES "user"(id), "originalKey" text, size integer, "createdAt" timestamptz DEFAULT now());`);
-    await new DocumentAssessment1793880300000().up({ query });
-    await new DocumentRevision1793880400000().up({ query });
-    await new ProviderRetries1793880500000().up({ query });
-    await new MonthlyAllowance1793880600000().up({ query });
-    await new RevisionNotices1793880800000().up({ query });
-    await new AssessThenUnslopify1793880900000().up({ query });
+    await createDocumentTestSchema(database);
   });
   beforeEach(async () => {
     await database.exec('TRUNCATE document, allowance_reservation, "user" CASCADE');
@@ -509,7 +497,7 @@ describe('Monthly allowance at Unslopify and worker boundaries', () => {
       FOR EACH ROW WHEN (NEW.state = 'charged') EXECUTE FUNCTION reject_fixture_charge()`);
     try {
       await expect(harness.jobs.complete(claim, null)).rejects.toThrow('Fixture accounting write failed');
-      expect(await harness.jobs.isPublished(claim.id, 'atomic.docx')).toBe(false);
+      expect(await query('SELECT status FROM document WHERE id = $1', [claim.id])).toEqual([{ status: 'processing' }]);
       expect(await read()).toMatchObject({ used: 0, reserved: 1 });
     } finally {
       await query('DROP TRIGGER reject_fixture_charge ON allowance_reservation');

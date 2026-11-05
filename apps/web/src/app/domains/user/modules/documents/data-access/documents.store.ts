@@ -28,6 +28,8 @@ export interface UploadProgress {
   percent: number | null;
 }
 
+export const defaultRewriteStrength = 50;
+
 export function strengthLabel(strength: number): 'Light' | 'Balanced' | 'Thorough' {
   if (strength <= 33) return 'Light';
   if (strength <= 66) return 'Balanced';
@@ -56,7 +58,7 @@ export class DocumentsStore {
     stored: 'Original saved',
     queued: 'Queued',
     processing: 'Processing',
-    assessed: 'Ready to edit',
+    assessed: 'Ready to unslopify',
     completed: 'Download ready',
     failed: 'Failed'
   };
@@ -90,10 +92,6 @@ export class DocumentsStore {
     }
   }
 
-  progress(document: IDocumentResponse): string {
-    return this.phase(document).label;
-  }
-
   private observe(documents: IDocumentResponse[]): void {
     for (const document of documents) {
       const phase = this.phase(document);
@@ -124,7 +122,7 @@ export class DocumentsStore {
   readonly phaseAnnouncement = signal('');
   readonly strength = linkedSignal<string | undefined, number>({
     source: () => this.selected()?.id,
-    computation: () => this.selected()?.strength ?? 50
+    computation: () => this.selected()?.strength ?? defaultRewriteStrength
   });
   readonly strengthLabel = computed(() => strengthLabel(this.strength()));
   readonly unslopifying = signal<string | null>(null);
@@ -373,7 +371,11 @@ export class DocumentsStore {
           this.observe([queued]);
           this.items.update((items) => items.map((item) => (item.id === queued.id ? queued : item)));
           if (this.selected()?.id === queued.id) this.select(queued);
-          this.announcement.set('Retry queued. Assessment and editing will start again.');
+          this.announcement.set(
+            document.phase === 'rewrite'
+              ? 'Retry queued. Editing will start again.'
+              : 'Retry queued. Assessment will start again.'
+          );
           this.listPending = false;
           this.load(this.page(), true);
         },

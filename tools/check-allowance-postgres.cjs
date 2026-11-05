@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
 const { resolve } = require('node:path');
 const { DataSource } = require('typeorm');
+const { ConfigService } = require('@nestjs/config');
 const { Document } = require('../apps/api/src/modules/documents/entities/document.entity');
 const { User, StatusChange } = require('../apps/api/src/modules/users/entities');
 const { Role } = require('../apps/api/src/modules/roles/entities');
@@ -103,21 +104,13 @@ async function main() {
       await blocker.query(`SELECT id FROM "${table}" WHERE id = $1 FOR UPDATE`, [id]);
     };
     const holdOwner = (owner) => holdRow('user', owner);
-    const waitForStage = async (id, stage) => {
-      const until = Date.now() + 10000;
-      while (Date.now() < until) {
-        const [row] = await database.query('SELECT "processingStage" AS stage FROM document WHERE id = $1', [id]);
-        if (row?.stage === stage) return;
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      }
-      throw new Error(`The worker did not reach the ${stage} stage`);
-    };
     const releaseLock = async () => {
       await blocker.commitTransaction();
       await blocker.release();
       blocker = null;
     };
     for (let round = 0; round < 10; round++) {
+      await database.query('DELETE FROM document');
       const owner = await createOwner();
       const documents = await assessed(owner, 4);
       assert.deepEqual(await allowance.read(database, owner), {
@@ -154,6 +147,7 @@ async function main() {
       'PASS PostgreSQL last-slot race: 10 rounds, two blocked Unslopify requests per round, exactly one accepted'
     );
 
+    await database.query('DELETE FROM document');
     const boundaryOwner = await createOwner();
     const [boundary] = await assessed(boundaryOwner, 1);
     await holdOwner(boundaryOwner);
@@ -214,7 +208,10 @@ async function main() {
 
     const adminId = await createOwner();
     const adminUser = { id: adminId, email: `${adminId}@example.invalid`, isAdmin: true };
-    const statuses = new UpdateStatusHandler(database.getRepository(User));
+    const statuses = new UpdateStatusHandler(
+      database.getRepository(User),
+      new ConfigService({ ADMIN_EMAIL: adminUser.email })
+    );
     const [first, second, third, fourth] = await assessed(owner, 4);
     await unslopify(owner, first.id);
     await unslopify(owner, second.id);
@@ -236,6 +233,7 @@ async function main() {
       'PASS actual admin status changes preserve usage; downgrade permits completion; terminal accounting is idempotent'
     );
 
+    await database.query('DELETE FROM document');
     const duplicateOwner = await createOwner();
     const duplicate = await assessed(duplicateOwner, 1);
     await unslopify(duplicateOwner, duplicate[0].id);
@@ -311,14 +309,30 @@ async function main() {
       const gate = new Promise((resolve) => {
         openGate = resolve;
       });
-      const gated = faithfulRevisionProvider();
-      const assessRevised = gated.assess;
-      gated.assess = async (...args) => {
+      let readyToPublish;
+      const publishing = new Promise((resolve) => {
+        readyToPublish = resolve;
+      });
+      const racingJobs = new DocumentJobs(database);
+      const publish = racingJobs.complete.bind(racingJobs);
+      racingJobs.complete = async (...args) => {
+        readyToPublish();
         await gate;
-        return assessRevised(...args);
+        return publish(...args);
       };
-      const running = worker(gated).runOnce();
-      await waitForStage(raced.id, 'final-assessment');
+      const running = new AssessmentWorker(
+        racingJobs,
+        storage,
+        faithfulRevisionProvider(),
+        'fixture rules',
+        timeouts
+      ).runOnce();
+      await Promise.race([
+        publishing,
+        running.then(() => {
+          throw new Error('The worker ended before publication');
+        })
+      ]);
       await holdRow('document', raced.id);
       let deleting;
       if (round % 2 === 0) {
@@ -354,7 +368,7 @@ async function main() {
         1
       );
     }
-    assert.ok(outcomes.deletedFirst >= 1);
+    assert.deepEqual(outcomes, { deletedFirst: 5, completedFirst: 5 });
     console.log(
       `PASS PostgreSQL deletion against publication: 10 rounds, ${outcomes.deletedFirst} deleted first with a released slot, ${outcomes.completedFirst} completed first with a kept charge, no row or file left behind`
     );
@@ -369,7 +383,11 @@ async function main() {
     console.log('Disposable allowance database removed');
   }
 }
-main().catch(() => {
+main().catch((error) => {
   console.error('PostgreSQL allowance verification failed; no credentials or document contents logged.');
+  const frames = String(error.stack ?? '')
+    .split('\n')
+    .filter((line) => line.trim().startsWith('at '));
+  console.error(frames.join('\n'));
   process.exitCode = 1;
 });

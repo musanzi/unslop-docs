@@ -1,5 +1,4 @@
-import { ProcessingStage } from '../documents/document-processing';
-import { DocumentPhase, ProcessingFailure } from '../documents/document-processing';
+import { DocumentPhase, ProcessingFailure, ProcessingStage } from '../documents/document-processing';
 import { randomUUID } from 'node:crypto';
 import { WritingAssessment } from '../documents/assessment-workflow';
 import { ProviderFailureCategory } from '../documents/provider-failure';
@@ -203,14 +202,6 @@ export class DocumentJobs {
       RETURNING id
     ) SELECT id FROM advanced`,
       [claim.id, claim.claimToken, completed, total]
-    );
-    return rows.length === 1;
-  }
-
-  async isPublished(id: string, key: string): Promise<boolean> {
-    const rows = await this.database.query(
-      `SELECT id FROM document WHERE id = $1 AND status = 'completed' AND "revisedKey" = $2`,
-      [id, key]
     );
     return rows.length === 1;
   }

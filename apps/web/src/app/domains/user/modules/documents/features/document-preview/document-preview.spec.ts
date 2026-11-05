@@ -1,13 +1,11 @@
-import { Input } from '@angular/core';
+import { enableJitSignalInput } from '@web/shared/testing/signal-input';
 import { TestBed } from '@angular/core/testing';
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { IPreviewBlockResponse } from '@unslop-docs/api-contracts';
 import { DocumentPreview } from './document-preview';
 
-// Vitest uses JIT without Angular's signal-input metadata transform.
-const blocksInput = { alias: 'blocks', isSignal: true };
-Input(blocksInput)(DocumentPreview.prototype, 'blocks');
+enableJitSignalInput(DocumentPreview, 'blocks');
 
 const text = (value: string, extra: Partial<IPreviewBlockResponse> = {}): IPreviewBlockResponse => ({
   kind: 'paragraph',

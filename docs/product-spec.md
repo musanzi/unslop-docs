@@ -1,6 +1,6 @@
 # Unslop-docs product specification
 
-This document records accepted product decisions, including the November 5, 2026 workflow revision. The application is live. Issues #15 and #16 implemented the document support and the API lifecycle below, and #11 and #12 implemented deletion in every state; the workspace presentation (#13) is still open. This specification is not a completion report.
+This document records accepted product decisions, including the November 5, 2026 workflow revision. The application is live. The repository implements document support (#15), the API lifecycle (#16), deletion in every state (#11 and #12), and the workspace (#13). The [verification record](evidence/workflow/verification.md) describes the checks and their limits.
 
 ## Accounts and allowances
 

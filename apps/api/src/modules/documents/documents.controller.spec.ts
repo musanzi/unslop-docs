@@ -502,6 +502,26 @@ describe('Private documents HTTP', () => {
     );
     expect(await readdir(join(root, 'public'))).toEqual([]);
   });
+  it('does not report a failed final assessment for a legacy completed document', async () => {
+    const { data: document } = await (await upload(await docxFixture())).json();
+    Object.assign(records[0], {
+      status: 'completed',
+      phase: 'rewrite',
+      strength: null,
+      assessment: { patterns: [] },
+      finalAssessment: null
+    });
+    const response = await fetch(`${base}/documents/${document.id}`, { headers: { 'test-identity': 'owner' } });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      data: {
+        assessment: { rubric: null, score: null },
+        finalAssessment: null,
+        finalScoreUnavailable: false
+      }
+    });
+  });
+
   it('shows assessment and status only to the owner, including after failure', async () => {
     const { data: document } = await (await upload(await docxFixture())).json();
     const get = (id: string, identity: string) =>

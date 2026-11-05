@@ -18,7 +18,12 @@ import { AuthStore } from '@web/domains/auth/shared/data-access';
 import { User } from '@web/shared/ui/user/user';
 import { subscriptionContactUrl, subscriptionPlans } from '@web/shared/data/subscription-plans';
 import { firstValueFrom } from 'rxjs';
-import { DocumentsStore, strengthLabel, type DocumentPhaseKey } from '../../data-access/documents.store';
+import {
+  defaultRewriteStrength,
+  DocumentsStore,
+  strengthLabel,
+  type DocumentPhaseKey
+} from '../../data-access/documents.store';
 import { DeleteDocumentDialog } from '../../data-access/delete-document-dialog';
 import { DocumentPreview } from '../document-preview/document-preview';
 
@@ -32,8 +37,6 @@ const phaseIcons: Record<DocumentPhaseKey, string> = {
   'download-ready': 'circle-check',
   failed: 'circle-alert'
 };
-
-const activePhases: DocumentPhaseKey[] = ['queued', 'assessing', 'editing', 'checking-result'];
 
 @Component({
   selector: 'document-workspace',
@@ -78,7 +81,6 @@ export class Workspace {
     return document ? this.store.phase(document) : null;
   });
   protected readonly phaseIcon = computed(() => phaseIcons[this.phase()?.key ?? 'stored']);
-  protected readonly active = computed(() => activePhases.includes(this.phase()?.key ?? 'stored'));
   protected readonly celebrating = computed(() => {
     const document = this.store.selected();
     return !!document && this.store.celebrating() === document.id;
@@ -102,7 +104,7 @@ export class Workspace {
         return 'Choose a rewrite strength, then start Unslopify.';
       case 'editing': {
         const progress = this.editing();
-        return progress ? `${progress.completed} of ${progress.total} sections edited.` : 'Rewriting each section.';
+        return progress ? `${progress.completed} of ${progress.total} edits complete.` : 'Rewriting your document.';
       }
       case 'checking-result':
         return document.processingStage === 'validating'
@@ -121,16 +123,18 @@ export class Workspace {
   );
   protected readonly score = computed(() => this.store.detail()?.assessment?.score ?? null);
   protected readonly finalScore = computed(() => this.store.detail()?.finalAssessment?.score ?? null);
-  protected readonly scoreChange = computed(() => {
-    const before = this.score();
-    const after = this.finalScore();
-    if (before === null || after === null) return null;
-    const delta = after - before;
-    if (delta === 0) return { tone: 'same', text: 'Unchanged' } as const;
-    const points = Math.abs(delta) === 1 ? '1 point' : `${Math.abs(delta)} points`;
-    return delta < 0
-      ? ({ tone: 'down', text: `Down ${points}` } as const)
-      : ({ tone: 'up', text: `Up ${points}` } as const);
+  protected readonly finalScoreNote = computed(() => {
+    const detail = this.store.detail();
+    if (detail?.finalScoreUnavailable)
+      return 'The revised document is ready, but its final score is unavailable: the final assessment did not finish.';
+    if (detail?.status === 'completed' && detail.strength === null && this.finalScore() === null)
+      return 'Scores were not recorded for this document.';
+    return null;
+  });
+  protected readonly unslopifyNote = computed(() => {
+    const document = this.store.selected();
+    if (document && this.store.unslopifyError()?.id === document.id) return 'unslopify-error';
+    return this.store.allowanceBlocked() ? 'allowance-limit' : null;
   });
   protected readonly savedStrength = computed(() => {
     const strength = this.store.selected()?.strength;
@@ -174,7 +178,7 @@ export class Workspace {
   protected setStrength(event: Event): void {
     const input = event.target;
     if (!(input instanceof HTMLInputElement)) return;
-    this.store.strength.set(Math.min(100, Math.max(1, Number(input.value) || 50)));
+    this.store.strength.set(Math.min(100, Math.max(1, Number(input.value) || defaultRewriteStrength)));
   }
 
   protected async download(document: IDocumentResponse, version: 'original' | 'revised' = 'original'): Promise<void> {

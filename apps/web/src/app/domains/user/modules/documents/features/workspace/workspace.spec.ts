@@ -1,5 +1,6 @@
+import { enableJitSignalInput } from '@web/shared/testing/signal-input';
 import { TestBed } from '@angular/core/testing';
-import { Input, Provider, signal } from '@angular/core';
+import { Provider, signal } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { HttpEventType, provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
@@ -23,11 +24,8 @@ import { MatDialog } from '@angular/material/dialog';
 import DeleteDocument from '../delete-document/delete-document';
 import { DocumentPreview } from '../document-preview/document-preview';
 
-// Vitest uses JIT without Angular's signal-input metadata transform.
-const subscriptionInput = { alias: 'subscriptionStatus', isSignal: true };
-Input(subscriptionInput)(User.prototype, 'subscriptionStatus');
-const blocksInput = { alias: 'blocks', isSignal: true };
-Input(blocksInput)(DocumentPreview.prototype, 'blocks');
+enableJitSignalInput(User, 'subscriptionStatus');
+enableJitSignalInput(DocumentPreview, 'blocks');
 
 function overrideTemplates(workspaceProviders?: Provider[]) {
   const shared = `${import.meta.dirname}/../../../../../../shared/ui`;
@@ -417,7 +415,9 @@ describe('Document workspace results', () => {
       phase: (item: IDocumentAssessmentResponse) =>
         item.status === 'completed'
           ? { key: 'download-ready', label: 'Download ready' }
-          : { key: 'failed', label: 'Failed' }
+          : item.status === 'assessed'
+            ? { key: 'ready-to-edit', label: 'Ready to unslopify' }
+            : { key: 'failed', label: 'Failed' }
     };
     TestBed.configureTestingModule({
       providers: [
@@ -494,20 +494,46 @@ describe('Document workspace results', () => {
     expect(page.querySelector('h1')?.textContent).toContain('Welcome back.');
   });
 
-  it('explains a full allowance and disables uploads while preserving downloads', async () => {
-    const page = await render(document, {
-      status: 'FREE',
-      limit: 3,
-      used: 2,
-      reserved: 1,
-      remaining: 0,
-      month: '2026-12',
-      resetsAt: '2027-01-01T00:00:00.000Z'
-    });
-    expect(page.textContent).toContain('Your monthly document limit is reached');
+  const exhausted: IAllowanceResponse = {
+    status: 'FREE',
+    limit: 3,
+    used: 2,
+    reserved: 1,
+    remaining: 0,
+    month: '2026-12',
+    resetsAt: '2027-01-01T00:00:00.000Z'
+  };
+
+  it('keeps uploads and downloads available when the allowance is exhausted', async () => {
+    const page = await render(document, exhausted);
+    expect(page.textContent).not.toContain('Your monthly document limit is reached');
     const buttons = [...page.querySelectorAll('button')];
-    expect(buttons.find((button) => button.textContent.includes('Upload DOCX'))?.disabled).toBe(true);
+    const upload = buttons.find((button) => button.textContent.includes('Upload DOCX'))!;
+    expect(upload.disabled).toBe(false);
+    expect(upload.getAttribute('aria-describedby')).toBe('upload-limit');
+    expect(page.querySelector<HTMLInputElement>('input[type="file"]')?.disabled).toBe(false);
     expect(buttons.find((button) => button.textContent.includes('Download original'))?.disabled).toBe(false);
+  });
+
+  it('refuses only Unslopify with the allowance explanation beside it when the allowance is exhausted', async () => {
+    const page = await render(
+      {
+        ...document,
+        status: 'assessed',
+        phase: 'assessment',
+        strength: null,
+        assessment: { rubric: 'ai-style-v1', score: 62, patterns: [] },
+        finalScoreUnavailable: false
+      },
+      exhausted
+    );
+    const buttons = [...page.querySelectorAll('button')];
+    const unslopify = buttons.find((button) => button.textContent.trim() === 'Unslopify')!;
+    expect(unslopify.disabled).toBe(true);
+    expect(unslopify.getAttribute('aria-describedby')).toBe('allowance-limit');
+    expect(page.querySelector('#allowance-limit')?.textContent).toContain('Your monthly document limit is reached');
+    expect(buttons.find((button) => button.textContent.includes('Upload DOCX'))?.disabled).toBe(false);
+    expect(page.querySelector('input[type="range"]')).not.toBeNull();
   });
 
   it('shows both downloads and only the review sentence for a completed document without a final score', async () => {
@@ -522,6 +548,23 @@ describe('Document workspace results', () => {
     expect(buttons).toContain('Download original');
     expect(buttons).toContain('Download revised DOCX');
     expect(page.querySelector('textarea')).toBeNull();
+  });
+
+  it('keeps legacy downloads available without claiming their final assessment failed', async () => {
+    const page = await render({
+      ...document,
+      strength: null,
+      assessment: { rubric: null, score: null, patterns: [] },
+      finalAssessment: null,
+      finalScoreUnavailable: false
+    });
+    expect(page.textContent).toContain('Scores were not recorded for this document.');
+    expect(page.textContent).not.toContain('final assessment did not finish');
+    expect(page.querySelector('#final-score-unavailable')).toBeNull();
+    const download = [...page.querySelectorAll('button')].find((button) =>
+      button.textContent.includes('Download revised DOCX')
+    );
+    expect(download?.disabled).toBe(false);
   });
 
   it('shows an actionable failure and only the original download', async () => {
@@ -557,10 +600,10 @@ describe('Private document downloads', () => {
       request.flush(new Blob([version]));
       expect(await download).toBeInstanceOf(Blob);
     }
-    expect(store.progress({ ...document, status: 'processing', processingStage: 'editing' })).toBe(
+    expect(store.phase({ ...document, status: 'processing', processingStage: 'editing' }).label).toBe(
       'Editing your document'
     );
-    expect(store.progress({ ...document, status: 'processing', processingStage: 'validating' })).toBe(
+    expect(store.phase({ ...document, status: 'processing', processingStage: 'validating' }).label).toBe(
       'Checking the revised document'
     );
     http.verify();
@@ -670,7 +713,7 @@ describe('Document phases', () => {
     [{ status: 'queued', phase: 'assessment' }, 'queued', 'Queued for assessment'],
     [{ status: 'processing', phase: 'assessment', processingStage: 'assessing' }, 'assessing', 'Assessing writing'],
     [{ status: 'processing', phase: 'assessment' }, 'assessing', 'Processing'],
-    [{ status: 'assessed', phase: 'assessment' }, 'ready-to-edit', 'Ready to edit'],
+    [{ status: 'assessed', phase: 'assessment' }, 'ready-to-edit', 'Ready to unslopify'],
     [{ status: 'queued', phase: 'rewrite' }, 'queued', 'Queued for editing'],
     [{ status: 'processing', phase: 'rewrite', processingStage: 'editing' }, 'editing', 'Editing your document'],
     [
@@ -691,7 +734,6 @@ describe('Document phases', () => {
     const phase = store.phase({ ...document, processingStage: null, ...fields });
     expect(phase.key).toBe(key);
     expect(phase.label).toBe(label);
-    expect(store.progress({ ...document, processingStage: null, ...fields })).toBe(label);
   });
 });
 
@@ -1069,8 +1111,8 @@ describe('Workspace flow', () => {
     const context = await mount([assessed]);
     await open(context, assessed);
     const { main, history, http } = context;
-    expect(element(main, '#phase-heading').textContent).toContain('Ready to edit');
-    expect(history.textContent).toContain('Ready to edit');
+    expect(element(main, '#phase-heading').textContent).toContain('Ready to unslopify');
+    expect(history.textContent).toContain('Ready to unslopify');
     expect(main.querySelector('[role="progressbar"]')).toBeNull();
     expect(main.innerHTML).not.toContain('animate-pulse');
     expect(main.textContent).toContain('62');
@@ -1131,7 +1173,7 @@ describe('Workspace flow', () => {
   it('keeps the preview and shows an allowance refusal beside Unslopify', async () => {
     const context = await mount([assessed]);
     await open(context, assessed);
-    const { main, http, fixture } = context;
+    const { main, page, http, fixture } = context;
     const unslopify = [...main.querySelectorAll('button')].find(
       (button) => button.textContent?.trim() === 'Unslopify'
     )!;
@@ -1144,7 +1186,9 @@ describe('Workspace flow', () => {
     await fixture.whenStable();
     expect(element(main, '#unslopify-error[role="alert"]').textContent).toContain(message);
     expect(unslopify.getAttribute('aria-describedby')).toBe('unslopify-error');
-    expect(unslopify.disabled).toBe(false);
+    expect(unslopify.disabled).toBe(true);
+    expect(main.querySelector('#allowance-limit')).toBeNull();
+    expect(element<HTMLInputElement>(page, 'input[type="file"]').disabled).toBe(false);
     expect(main.querySelector('[role="region"][aria-labelledby="preview-heading"]')?.textContent).toContain(
       'Chapter 3'
     );
@@ -1161,7 +1205,7 @@ describe('Workspace flow', () => {
     const bar = element(main, '[role="progressbar"]');
     expect(bar.getAttribute('aria-valuenow')).toBe('3');
     expect(bar.getAttribute('aria-valuemax')).toBe('8');
-    expect(main.textContent).toContain('3 of 8 sections edited');
+    expect(main.textContent).toContain('3 of 8 edits complete');
     expect(main.querySelector('input[type="range"]')).toBeNull();
     await poll(context, { ...editing, progress: { completed: 8, total: 8 }, processingStage: 'validating' });
     const checking = element(main, '[role="progressbar"]');
@@ -1191,7 +1235,7 @@ describe('Workspace flow', () => {
     const scores = element(main, 'section[aria-labelledby="score-heading"]');
     expect(scores.textContent).toMatch(/Before\s*62/);
     expect(scores.textContent).toMatch(/After\s*31/);
-    expect(scores.textContent).toContain('Down 31 points');
+    expect(scores.textContent).not.toMatch(/Down|Up|points|Unchanged/);
     const buttons = [...main.querySelectorAll('button')].map((button) => button.textContent?.trim());
     expect(buttons).toContain('Download revised DOCX');
     expect(buttons).toContain('Download original');
@@ -1216,7 +1260,8 @@ describe('Workspace flow', () => {
     await open(context, { ...completed, finalAssessment: { rubric: 'ai-style-v1', score: 66, patterns: [] } });
     const { main, http } = context;
     expect(main.querySelector('.workspace-celebrate')).toBeNull();
-    expect(main.textContent).toContain('Up 4 points');
+    expect(main.textContent).toMatch(/After\s*66/);
+    expect(main.textContent).not.toMatch(/Up \d+ points/);
     expect(
       element<HTMLButtonElement>(main, 'button[aria-describedby="final-score-note"], button:not([disabled])')
     ).not.toBeNull();
@@ -1305,6 +1350,14 @@ describe('Workspace flow', () => {
     const bar = element(page, '[role="progressbar"][aria-label="Upload"]');
     expect(bar.getAttribute('aria-valuenow')).toBe('25');
     expect(page.textContent).toContain('Uploading… 25%');
+    const announcements = () => [...page.querySelectorAll('[role="status"]')].map((node) => node.textContent);
+    const beforeProgress = announcements();
+    expect(beforeProgress.join(' ')).toContain('Uploading your original…');
+    expect(beforeProgress.join(' ')).not.toContain('25%');
+    request.event({ type: HttpEventType.UploadProgress, loaded: 500, total: 1000 });
+    await fixture.whenStable();
+    expect(bar.getAttribute('aria-valuenow')).toBe('50');
+    expect(announcements()).toEqual(beforeProgress);
     request.event({ type: HttpEventType.UploadProgress, loaded: 600 });
     await fixture.whenStable();
     expect(element(page, '[role="progressbar"][aria-label="Upload"]').getAttribute('aria-valuenow')).toBeNull();
@@ -1333,7 +1386,7 @@ describe('Workspace flow', () => {
     const remove = element<HTMLButtonElement>(history, 'button[aria-label="Delete river.docx"]');
     const row = remove.parentElement!;
     expect(row.querySelector('button[aria-current], button:first-child')?.textContent).toContain('river.docx');
-    expect(row.textContent).toContain('Ready to edit');
+    expect(row.textContent).toContain('Ready to unslopify');
     expect(remove.tabIndex).toBe(0);
     expect(remove.className).toContain('focus-visible:opacity-100');
     expect(row.className).toContain('group');

@@ -109,7 +109,7 @@ export function documentAssessmentResponse(document: Document, base: DocumentRes
     ...base,
     assessment: assessmentResponse(document.assessment ?? null),
     finalAssessment,
-    finalScoreUnavailable: completed && finalAssessment === null,
+    finalScoreUnavailable: completed && document.strength != null && finalAssessment === null,
     revisionNotices: completed ? noticesResponse(document.revisionNotices ?? null) : null
   };
 }

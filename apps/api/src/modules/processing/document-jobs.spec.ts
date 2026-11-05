@@ -1015,7 +1015,7 @@ describe('Durable document jobs', () => {
     ]);
     expect(await reservations(legacy.queued)).toEqual(['released']);
     expect(await reservations(legacy.active)).toEqual(['released']);
-    expect(await jobs.isPublished(legacy.completed, 'legacy-revised.docx')).toBe(true);
+    expect(await jobs.ownsRevision(legacy.completed, 'legacy-revised.docx')).toBe(true);
     expect((await jobs.claim(timeouts))?.id).toBe(legacy.queued);
     expect((await jobs.claim(timeouts))?.id).toBe(legacy.active);
     expect(await jobs.claim(timeouts)).toBeNull();
@@ -1028,7 +1028,7 @@ describe('Durable document jobs', () => {
       { status: 'failed', failureCode: 'interrupted' }
     ]);
     await migration.up(sql);
-    expect(await jobs.isPublished(legacy.completed, 'legacy-revised.docx')).toBe(true);
+    expect(await jobs.ownsRevision(legacy.completed, 'legacy-revised.docx')).toBe(true);
     expect(await jobs.claim(timeouts)).toBeNull();
   });
 });
