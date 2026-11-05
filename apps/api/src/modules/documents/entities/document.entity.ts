@@ -3,6 +3,7 @@ import type { ProcessingStage } from '../document-workflow';
 import type { WritingAssessment } from '../assessment-workflow';
 import type { DocumentStatus, ProcessingFailure } from '../document-processing';
 import { User } from '../../users/entities';
+import type { ProviderRequestCheckpoint } from '../../processing/document-jobs';
 
 @Entity()
 @Index('IDX_document_owner_history', ['ownerId', 'createdAt', 'id'])
@@ -40,6 +41,15 @@ export class Document {
 
   @Column({ type: 'uuid', nullable: true, select: false })
   claimToken: string | null;
+
+  @Column({ type: 'uuid', nullable: true, select: false })
+  processingAttemptId: string | null;
+
+  @Column({ type: 'jsonb', default: {}, select: false })
+  providerRequests: Record<string, ProviderRequestCheckpoint>;
+
+  @Column({ type: 'timestamptz', nullable: true, select: false })
+  nextRequestAt: Date | null;
 
   @Column({ type: 'timestamptz', nullable: true })
   processingStartedAt: Date | null;

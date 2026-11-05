@@ -2,6 +2,56 @@ import { describe, expect, it, vi } from 'vitest';
 import { DeepSeekProvider, workerSettings, loadAssessmentSkill } from './deepseek-provider';
 
 describe('DeepSeek worker boundary', () => {
+  it('classifies a failed network transport without a hidden SDK retry', async () => {
+    const fetcher = vi.fn(async () => {
+      throw new TypeError('private network error');
+    });
+    const provider = new DeepSeekProvider(
+      workerSettings({ DEEPSEEK_API_KEY: 'fake', DEEPSEEK_MODEL: 'explicit' }),
+      fetcher
+    );
+    await expect(provider.assess('Rules', 'Source')).rejects.toMatchObject({ category: 'network', temporary: true });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it('does not retry or classify cancellation as a temporary timeout', async () => {
+    const shutdown = new AbortController();
+    shutdown.abort();
+    const fetcher = vi.fn();
+    const provider = new DeepSeekProvider(
+      workerSettings({ DEEPSEEK_API_KEY: 'fake', DEEPSEEK_MODEL: 'explicit' }),
+      fetcher
+    );
+    await expect(provider.assess('Rules', 'Source', shutdown.signal)).rejects.toMatchObject({
+      category: 'cancelled',
+      temporary: false
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+  it.each([
+    [408, 'timeout', true],
+    [429, 'rate_limit', true],
+    [500, 'server', true],
+    [503, 'server', true],
+    [400, 'request', false],
+    [401, 'authentication', false],
+    [403, 'authentication', false]
+  ])('classifies HTTP %s without retaining private provider details', async (status, category, temporary) => {
+    const fetcher = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ error: { message: 'private-key private-document', code: 'private-code' } }), {
+          status: Number(status)
+        })
+    );
+    const provider = new DeepSeekProvider(
+      workerSettings({ DEEPSEEK_API_KEY: 'fake', DEEPSEEK_MODEL: 'explicit' }),
+      fetcher
+    );
+    const error = await provider.assess('Rules', 'Private source').catch((error: unknown) => error);
+    expect(error).toMatchObject({ category, temporary, status });
+    expect(JSON.stringify(error)).not.toContain('private-');
+    expect(error).not.toHaveProperty('cause');
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
   it('requires explicit credentials and model with safe startup messages', () => {
     expect(() => workerSettings({})).toThrow('DEEPSEEK_API_KEY is required');
     expect(() => workerSettings({ DEEPSEEK_API_KEY: 'private-key' })).toThrow('DEEPSEEK_MODEL is required');

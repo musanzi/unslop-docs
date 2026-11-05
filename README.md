@@ -147,7 +147,11 @@ The owner must rebuild and recreate the API, web, and new worker containers to p
 
 Valid uploads automatically enter the durable PostgreSQL queue. The HTTP upload returns after storage and database commit, before assessment. The worker reads the original, runs LangChain DeepSeek through a LangGraph workflow, and publishes validated writing patterns. The workspace refreshes its sidebar and selected assessment without a reload. A failed assessment keeps the original downloadable and shows a fixed explanation. Existing uploads stay original-only until uploaded again.
 
-A queued job survives container restarts. Interrupted processing fails after its lease expires. Deadlines default to 15 minutes from processing start and are persisted for each claim. Provider waits are finite. No library retries run in this slice. Editing and allowance reservations follow in #7 and #9.
+A queued job survives container restarts. Timeouts, network failures, rate limits, and provider server errors receive up to two automatic retries per request, including each editing chunk. Retries wait at least one second, then two seconds, and keep the document processing. A third failure, permanent error, or invalid output fails the document. LangChain and SDK retries remain disabled.
+
+Retries reuse the same document and processing attempt, with no new reservation or charge. Request counts and validated results survive worker restarts, so completed requests are reused. A crash during a request with an unknown outcome fails after lease expiry. The original persisted deadline, 15 minutes by default, bounds all calls and delays. Allowance enforcement and user-requested retries remain #9 and #10.
+
+Apply `ProviderRetries1793880500000` before deploying the updated worker. Stop old workers during the deployment: their recovery code treats delayed work as failed. Follow the [automatic retry acceptance guide](docs/provider-retry-acceptance.md) for isolated restart and migration checks.
 
 See the [worker reference](docs/assessment-worker.md) for lifecycle and privacy rules and the [assessment acceptance guide](docs/assessment-acceptance.md) for fake-provider smoke tests and remaining live evidence. Production Compose also defines a separate worker using the API image and its `worker.js` entry point. Full production hardening remains #14.
 

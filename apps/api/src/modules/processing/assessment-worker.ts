@@ -1,11 +1,16 @@
 import { Logger } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createDocumentWorkflow, DocumentProvider } from '../documents/document-workflow';
 import { DocumentStorage } from '../documents/document-storage';
 import { ProcessingFailure } from '../documents/document-processing';
 import { RevisionValidationError } from '../documents/revision-validation';
 import { readDocx } from '../documents/validate-docx';
 import { DocumentJobs } from './document-jobs';
+import { classifyProviderFailure, ProviderFailure } from '../documents/provider-failure';
+import { validateAssessment } from '../documents/assessment-workflow';
+import { validateChunkResult } from '../documents/revise-docx';
+
+class RetryScheduled extends Error {}
 
 export class AssessmentWorker {
   private readonly logger = new Logger(AssessmentWorker.name);
@@ -39,6 +44,10 @@ export class AssessmentWorker {
       Math.max(0, claim.processingDeadline.getTime() - Date.now())
     );
     const active = async () => {
+      if (Date.now() >= claim.processingDeadline.getTime()) {
+        failure = 'deadline';
+        controller.abort();
+      }
       controller.signal.throwIfAborted();
       if (!(await this.jobs.heartbeat(claim))) {
         interrupt();
@@ -56,17 +65,20 @@ export class AssessmentWorker {
           renewing = false;
         });
     }, 10000);
-    const request = async (call: (signal: AbortSignal) => Promise<unknown>): Promise<unknown> => {
+    const invoke = async (call: (signal: AbortSignal) => Promise<unknown>): Promise<unknown> => {
       await active();
       const requestController = new AbortController();
       const abort = () => requestController.abort();
       controller.signal.addEventListener('abort', abort, { once: true });
       let rejectStopped: () => void;
       const stopped = new Promise<never>((_resolve, reject) => {
-        rejectStopped = () => reject(new Error('Provider request stopped'));
+        rejectStopped = () => reject(new ProviderFailure(controller.signal.aborted ? 'cancelled' : 'timeout'));
         requestController.signal.addEventListener('abort', rejectStopped, { once: true });
       });
-      const providerTimer = setTimeout(abort, this.settings.providerTimeoutMs);
+      const providerTimer = setTimeout(
+        abort,
+        Math.min(this.settings.providerTimeoutMs, claim.processingDeadline.getTime() - Date.now())
+      );
       try {
         const result = await Promise.race([call(requestController.signal), stopped]);
         await active();
@@ -77,6 +89,59 @@ export class AssessmentWorker {
         requestController.signal.removeEventListener('abort', rejectStopped);
       }
     };
+    const request = async (
+      operation: string,
+      input: unknown,
+      call: (signal: AbortSignal) => Promise<unknown>,
+      validate: (raw: unknown) => unknown
+    ): Promise<unknown> => {
+      await active();
+      const inputHash = createHash('sha256').update(JSON.stringify(input)).digest('hex');
+      const prior = claim.providerRequests[operation];
+      if (prior && prior.inputHash !== inputHash) throw new Error('Provider request changed during recovery');
+      if (prior?.state === 'succeeded') return validate(prior.outcome);
+      const checkpoint = await this.jobs.startRequest(claim, operation, inputHash);
+      if (!checkpoint) throw new Error('Provider request cannot start');
+      let raw: unknown;
+      try {
+        raw = await invoke(call);
+      } catch (error) {
+        await active();
+        const providerFailure = classifyProviderFailure(error, controller.signal);
+        const retry = providerFailure.temporary && checkpoint.attempts < 3;
+        const saved = await this.jobs.finishRequest(
+          claim,
+          operation,
+          {
+            ...checkpoint,
+            state: retry ? 'retry' : 'failed',
+            failure: {
+              category: providerFailure.category,
+              ...(providerFailure.status ? { status: providerFailure.status } : {})
+            }
+          },
+          retry ? 1000 * 2 ** (checkpoint.attempts - 1) : undefined
+        );
+        if (!saved) throw providerFailure;
+        if (retry) throw new RetryScheduled();
+        throw providerFailure;
+      }
+      let outcome: unknown;
+      try {
+        outcome = validate(raw);
+      } catch (error) {
+        await this.jobs.finishRequest(claim, operation, {
+          ...checkpoint,
+          state: 'failed',
+          failure: { category: 'output' }
+        });
+        throw error;
+      }
+      await active();
+      if (!(await this.jobs.finishRequest(claim, operation, { ...checkpoint, state: 'succeeded', outcome })))
+        throw new Error('Inactive claim');
+      return outcome;
+    };
     const revisedKey = `${randomUUID()}.docx`;
     let written = false;
     let published = false;
@@ -86,8 +151,20 @@ export class AssessmentWorker {
       await active();
       const workflow = createDocumentWorkflow(
         {
-          assess: (system, text) => request((signal) => this.provider.assess(system, text, signal)),
-          edit: (system, chunk) => request((signal) => this.provider.edit(system, chunk, signal))
+          assess: (system, text) =>
+            request(
+              'assess:v1',
+              { system, text },
+              (signal) => this.provider.assess(system, text, signal),
+              (raw) => validateAssessment(raw, text)
+            ),
+          edit: (system, chunk) =>
+            request(
+              `edit:${chunk.id}`,
+              { system, chunk },
+              (signal) => this.provider.edit(system, chunk, signal),
+              (raw) => ({ edits: validateChunkResult(chunk, raw) })
+            )
         },
         this.skill,
         async (stage) => {
@@ -104,9 +181,11 @@ export class AssessmentWorker {
       published = await this.jobs.complete(claim, result.assessment, { key: revisedKey, size: result.revised.length });
       if (!published) await this.jobs.recover();
     } catch (error) {
-      if (error instanceof RevisionValidationError) failure = error.check;
-      this.logger.warn(`Document processing failed: ${failure}.`);
-      await this.jobs.fail(claim, failure);
+      if (!(error instanceof RetryScheduled)) {
+        if (error instanceof RevisionValidationError) failure = error.check;
+        this.logger.warn(`Document processing failed: ${failure}.`);
+        await this.jobs.fail(claim, failure);
+      }
     } finally {
       clearTimeout(timeout);
       clearInterval(heartbeat);

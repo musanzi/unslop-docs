@@ -40,7 +40,7 @@ const ruleNames: Record<number, string> = {
   33: 'Over-compression'
 };
 
-function validateAssessment(raw: unknown, text: string): WritingAssessment {
+export function validateAssessment(raw: unknown, text: string): WritingAssessment {
   if (
     !raw ||
     typeof raw !== 'object' ||

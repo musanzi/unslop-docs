@@ -38,3 +38,7 @@ _Avoid_: AI detection rate, AI authorship percentage.
 **Failed document**: A document whose processing ended without a usable result. Its original remains available.
 
 **Processing deadline**: The latest time an active document may finish processing. Starting processing fixes this time for that attempt.
+
+**Processing attempt**: One run of assessment, editing, and validation for a document, bounded by one processing deadline. Automatic provider retries belong to that same attempt.
+
+**Automatic provider retry**: Another call for the same assessment request or editing chunk after a temporary provider failure. Each request permits two retries after its initial call.

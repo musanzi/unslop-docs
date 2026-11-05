@@ -6,6 +6,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { DocumentProvider } from './document-workflow';
 import { EditChunk } from './revise-docx';
+import { classifyProviderFailure, ProviderFailure } from './provider-failure';
 
 export function workerSettings(env: NodeJS.ProcessEnv) {
   const required = (key: string) => {
@@ -76,10 +77,14 @@ export class DeepSeekProvider implements DocumentProvider {
         maxRetries: 0
       });
       if (typeof result.content !== 'string' || result.response_metadata['finish_reason'] !== 'stop')
-        throw new Error('Incomplete assessment');
-      return JSON.parse(result.content);
-    } catch {
-      throw new Error('Assessment provider failed');
+        throw new ProviderFailure('output');
+      try {
+        return JSON.parse(result.content);
+      } catch {
+        throw new ProviderFailure('output');
+      }
+    } catch (error) {
+      throw classifyProviderFailure(error, signal);
     }
   }
 }

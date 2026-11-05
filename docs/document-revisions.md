@@ -1,6 +1,6 @@
 # Revised document reference
 
-An accepted upload runs assessment, editing, construction, and validation automatically through LangGraph. An empty assessment does not skip editing. The existing LangChain `ChatDeepSeek` adapter sends every provider request. Both library retry settings remain zero. Issue #8 owns automatic retries; issue #9 owns reservations and charges.
+An accepted upload runs assessment, editing, construction, and validation automatically through LangGraph. An empty assessment does not skip editing. The existing LangChain `ChatDeepSeek` adapter sends every provider request. Both library retry settings remain zero. The worker persists automatic retries per request; issue #9 owns reservations and charges.
 
 ## Editing and reconstruction
 
@@ -8,7 +8,7 @@ An accepted upload runs assessment, editing, construction, and validation automa
 
 The provider returns one text replacement for every span, in order. Missing, duplicated, reordered, malformed, or oversized results fail. Empty editable content requires no editing request. Protected content is never offered as an editable span. Fragmentary or uncertain prose can remain unchanged.
 
-The graph collects validated results by chunk ID. `constructRevisedDocx` requires every chunk before constructing an archive. This interface lets #8 persist request outcomes keyed by document attempt, operation, and chunk ID, then reuse successful chunks. This slice does not persist provider responses or resume partial attempts.
+The graph collects validated results by chunk ID. `constructRevisedDocx` requires every chunk before constructing an archive. The worker persists validated request outcomes by processing attempt, operation, and chunk ID. Resumed attempts reuse successful chunks and revalidate them before construction. Failed or incomplete provider output is never cached as a success. The [worker reference](assessment-worker.md#durable-provider-retries) describes recovery and the shared deadline.
 
 The pinned skill is subordinate to preservation instructions. The prompt forbids translation, invented sources, deleted factual claims, and moving prose between spans. Source text is JSON-encoded in a separate user message and treated as untrusted data. Prompt separation constrains the request; it does not prove model obedience.
 
