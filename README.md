@@ -2,7 +2,7 @@
 
 Unslopy is a document-editing product for clearer, more natural writing. The planned first release accepts DOCX files in English or French, reports writing patterns in a writing assessment, edits the document, and returns a revised DOCX. A writing assessment does not establish AI authorship.
 
-Google-only sign-in, profile management, private DOCX uploads and original downloads, admin user listing, status management with audit history, CSV export, and account statistics are available. Background writing assessments are available. Editing, revised downloads, and monthly allowances are not implemented yet. The [product specification](docs/product-spec.md) describes the intended behavior, and the [ticket index](docs/ticket-drafts/README.md) links the implementation issues.
+Google-only sign-in, profile management, private DOCX uploads and original downloads, admin user listing, status management with audit history, CSV export, and account statistics are available. Background writing assessments, validated revisions, private revised downloads, and monthly allowance reservations are available. The [product specification](docs/product-spec.md) describes the intended behavior, and the [ticket index](docs/ticket-drafts/README.md) links the implementation issues.
 
 The product brand is Unslopy. Repository, package, database, and Compose identifiers remain `unslop-docs`.
 
@@ -60,7 +60,7 @@ After applying the migrations, sign in with the configured admin account and ope
 
 The `UserStatuses1793880100000` migration gives every existing user FREE and creates the status history table. New Google accounts start with FREE. Profile edits and later Google sign-ins preserve the assigned status. Initial FREE assignments do not create history records.
 
-Each change locks the user's database row and commits the status and history record in one transaction. Submitting the current status writes no record. A failed audit write rolls back the status update. Reverting this migration removes all statuses and their history. Monthly allowance enforcement belongs to [issue #9](https://github.com/musanzi/unslop-docs/issues/9).
+Each change locks the user's database row and commits the status and history record in one transaction. Submitting the current status writes no record. A failed audit write rolls back the status update. Reverting this migration removes all statuses and their history. Status changes apply to the next allowance reservation immediately without resetting usage.
 
 The API exposes these endpoints:
 
@@ -76,7 +76,7 @@ To verify the UI on the owner's stack, apply the migration, change a user's stat
 
 ### Upload and download documents
 
-`/` redirects to `/auth/sign-in`. Signed-in users continue to `/user/documents`, including when they visit sign-in directly. Google sign-in opens `/user/documents`. Choose **Upload DOCX** after reading the DeepSeek privacy notice. The workspace lists your originals, newest first, with 20 entries per page. On phones, **Open documents** opens the history drawer. Choose an entry, then **Download original**. This slice stores originals only. Assessment, editing, allowances, and deletion belong to later issues. Uploads already enforce the processing eligibility rules below.
+`/` redirects to `/auth/sign-in`. Signed-in users continue to `/user/documents`, including when they visit sign-in directly. Google sign-in opens `/user/documents`. Choose **Upload DOCX** after reading the DeepSeek privacy notice. The workspace lists your originals, newest first, with 20 entries per page. On phones, **Open documents** opens the history drawer. Choose an entry, then **Download original**. Assessment and editing start automatically after a valid upload reserves a monthly allowance slot. Completed entries offer **Download revised DOCX**. Deletion controls remain a later issue. Uploads already enforce the processing eligibility rules below.
 
 The `PrivateDocuments1793880200000` migration adds document ownership, display filename, byte size, upload time, and a generated original storage key. No document relation is added to user responses or CSV exports. Admin access does not grant access to another user's documents. The original has its own download endpoint and remains separate from future revised files.
 
@@ -106,7 +106,7 @@ Language screening runs locally and sends no text to a provider. It uses script 
 
 Images, equations, and reference fields are accepted as protected content. Footnotes, endnotes, comments, headers, footers, styles, numbering, relationship targets, and media retain their original bytes. Bold, italic, and hyperlink information remains available in the reader model. The worker creates and validates revised output using these protections. See the [revision reference](docs/document-revisions.md) for the checks and their limits.
 
-Rejections return HTTP 400 with an actionable message beside **Upload DOCX**. The upload control becomes available immediately, including for selecting the same file again. Rejected uploads add no history entry, make no provider request, and use no allowance. Rejected uploads never reach the worker. Allowance reservations are deferred to issue #9.
+Rejections return HTTP 400 with an actionable message beside **Upload DOCX**. The upload control becomes available immediately, including for selecting the same file again. Rejected uploads add no history entry, make no provider request, and use no allowance. Rejected uploads never reach the worker. A valid upload must reserve a slot before it enters the queue.
 
 #### Shared DOCX reader
 
@@ -139,6 +139,30 @@ Reverting the migration removes metadata but leaves files in the volume. Restore
 
 Automated HTTP tests cover ownership, admin denial, signed-out requests, pagination, public route isolation, safe filenames, byte-for-byte original downloads, malformed archives, the exact size boundary, and failure cleanup. Filesystem tests cover storage reinitialization, permissions, and symlink isolation. Live PostgreSQL migration execution and container restart verification remain owner-run checks. Capture empty and populated workspaces at desktop and phone widths from a stack running this revision; a different checkout cannot provide valid UI evidence. The original-after-editing check becomes runnable when editing exists.
 
+### Monthly allowance rules
+
+FREE allows 3 documents per UTC calendar month, PREMIUM allows 15, and GOLD allows 35. The workspace shows successful documents used, active reservations, and remaining slots. `GET /documents/allowance` reads the signed-in user's current status and usage with private, no-store caching.
+
+A validated upload reserves one slot and commits it with the queued document. The API locks the owner row before checking usage, using the same row that admin status changes lock. It reads the reservation time after obtaining that lock. Concurrent uploads cannot take the same last slot. At the limit, the API returns HTTP 409 with the allowance and UTC reset time. It saves no file or runnable job for that rejection.
+
+The reservation belongs to the UTC month in which it starts. At 00:00 UTC on the first day, usage for the new month starts at zero without a reset job. Prior-month reservations can finish without taking another slot. Success charges their original month. A status change does not reset usage. Reserved jobs can finish after a downgrade, while new jobs remain blocked if current usage meets or exceeds the new limit. An upgrade makes additional slots available immediately.
+
+Assessment alone does not charge usage. Only publication of a validated revised DOCX converts an active reservation into one charge. Completion and charging commit together. Repeated completion cannot charge twice. Failure, deadline recovery, and deletion of an active document release its reservation. Automatic provider retries keep the same reservation. Workers refuse unreserved jobs and check the reservation before each provider request.
+
+Deleting a completed document does not restore usage. Accounting retains the owner, reservation timestamp, month, and charge state. It stores no filename, storage key, or document text. Deletion removes the document reference from the charge.
+
+`MonthlyAllowance1793880600000` creates the accounting table. For an upgrade, it marks pre-existing queued and processing documents as interrupted, preserving their originals. These jobs have no historical reservations and cannot safely dispatch. Existing completed documents remain downloadable and receive no invented reservation month or retroactive charge. The first allowance month therefore counts only reservations created after this migration. Rollback fails active work and removes all allowance accounting; restoring a backup is required to recover those charges.
+
+Deploy the allowance migration and matching API and worker versions together. Old API versions create unreserved jobs, which the new worker refuses. Old workers do not perform terminal accounting. The isolated verification command does not deploy migrations to the live app database or restart services.
+
+Run the real PostgreSQL acceptance check against an existing API container:
+
+```sh
+bash tools/check-allowance-postgres.sh unslopy-api-1
+```
+
+The check copies source into a temporary directory in that container, creates a random test database, applies migrations there, and uses fake DeepSeek responses. It proves the last-slot race with two blocked PostgreSQL connections in each of ten rounds, then checks month boundaries, publication, deletion, status changes, and reservation uniqueness. It removes the test database and copied files on exit. The database role must have permission to create a database. No application services start or restart. See the [issue #9 verification record](docs/evidence/issue-9/verification.md) for results and remaining UI evidence.
+
 ### Run background writing assessments
 
 Set `DEEPSEEK_API_KEY` and an explicit `DEEPSEEK_MODEL` in your private environment. Select a model with JSON output support from [DeepSeek's official model list](https://api-docs.deepseek.com/quick_start/pricing/). The worker fails startup with a setting name if either value is blank. Compose passes these settings only to the worker.
@@ -149,7 +173,7 @@ Valid uploads automatically enter the durable PostgreSQL queue. The HTTP upload 
 
 A queued job survives container restarts. Timeouts, network failures, rate limits, and provider server errors receive up to two automatic retries per request, including each editing chunk. Retries wait at least one second, then two seconds, and keep the document processing. A third failure, permanent error, or invalid output fails the document. LangChain and SDK retries remain disabled.
 
-Retries reuse the same document and processing attempt, with no new reservation or charge. Request counts and validated results survive worker restarts, so completed requests are reused. A crash during a request with an unknown outcome fails after lease expiry. The original persisted deadline, 15 minutes by default, bounds all calls and delays. Allowance enforcement and user-requested retries remain #9 and #10.
+Retries reuse the same document and processing attempt, with no new reservation or charge. Request counts and validated results survive worker restarts, so completed requests are reused. A crash during a request with an unknown outcome fails after lease expiry. The original persisted deadline, 15 minutes by default, bounds all calls and delays. Automatic retries retain their original allowance reservation. User-requested retries remain #10.
 
 Apply `ProviderRetries1793880500000` before deploying the updated worker. Stop old workers during the deployment: their recovery code treats delayed work as failed. Follow the [automatic retry acceptance guide](docs/provider-retry-acceptance.md) for isolated restart and migration checks.
 

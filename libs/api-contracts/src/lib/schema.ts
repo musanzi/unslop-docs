@@ -276,6 +276,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/documents/allowance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read your current UTC monthly allowance */
+        get: operations["DocumentsController_allowance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/documents/{id}": {
         parameters: {
             query?: never;
@@ -436,6 +453,23 @@ export interface components {
             total: number;
             page: number;
             pageSize: number;
+        };
+        AllowanceResponse: {
+            /** @enum {string} */
+            status: "FREE" | "PREMIUM" | "GOLD";
+            limit: number;
+            /** @description Successful documents charged to this reservation month */
+            used: number;
+            /** @description Active reservations created in this month */
+            reserved: number;
+            remaining: number;
+            /** @example 2026-11 */
+            month: string;
+            /**
+             * Format: date-time
+             * @description First instant of the next UTC calendar month
+             */
+            resetsAt: string;
         };
         WritingPatternResponse: {
             rule: number;
@@ -1058,6 +1092,13 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Monthly allowance fully used or reserved; message includes limit and UTC reset */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Original exceeds 10,000,000 bytes */
             413: {
                 headers: {
@@ -1067,6 +1108,32 @@ export interface operations {
             };
             /** @description Upload could not be confirmed; refresh history before retrying */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    DocumentsController_allowance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AllowanceResponse"];
+                };
+            };
+            /** @description Sign-in required */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

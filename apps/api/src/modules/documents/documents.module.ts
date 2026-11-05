@@ -1,3 +1,5 @@
+import { FindAllowanceHandler } from './queries/find-allowance.handler';
+import { AllowanceClock, MonthlyAllowance } from './monthly-allowance';
 import { FindDocumentHandler } from './queries/find-document.handler';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -14,6 +16,9 @@ import { DownloadDocumentHandler } from './queries/download-document.handler';
   providers: [
     { provide: DocumentStorage, useFactory: () => new DocumentStorage() },
     UploadDocumentHandler,
+    FindAllowanceHandler,
+    AllowanceClock,
+    MonthlyAllowance,
     FindDocumentsHandler,
     FindDocumentHandler,
     DownloadDocumentHandler

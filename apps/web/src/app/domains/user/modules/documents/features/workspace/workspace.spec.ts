@@ -7,7 +7,7 @@ import { MatIconRegistry } from '@angular/material/icon';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { of } from 'rxjs';
-import { IDocumentAssessmentResponse } from '@unslop-docs/api-contracts';
+import { IAllowanceResponse, IDocumentAssessmentResponse } from '@unslop-docs/api-contracts';
 import { AuthStore } from '@web/domains/auth/shared/data-access';
 import { Media } from '@web/core/media';
 import { DocumentsStore } from '../../data-access/documents.store';
@@ -27,9 +27,23 @@ const document: IDocumentAssessmentResponse = {
 afterEach(() => TestBed.resetTestingModule());
 
 describe('Document workspace results', () => {
-  async function render(detail: IDocumentAssessmentResponse) {
+  async function render(
+    detail: IDocumentAssessmentResponse,
+    allowance: IAllowanceResponse = {
+      status: 'FREE',
+      limit: 3,
+      used: 1,
+      reserved: 1,
+      remaining: 1,
+      month: '2026-11',
+      resetsAt: '2026-12-01T00:00:00.000Z'
+    }
+  ) {
     const store = {
       start: vi.fn(),
+      allowance: signal(allowance),
+      allowanceError: signal(''),
+      allowanceBlocked: () => allowance.remaining === 0,
       page: signal(1),
       pageCount: signal(1),
       loading: signal(false),
@@ -69,6 +83,33 @@ describe('Document workspace results', () => {
     await fixture.whenStable();
     return fixture.nativeElement as HTMLElement;
   }
+
+  it('shows used documents, active reservations, remaining allowance and a UTC reset date', async () => {
+    const page = await render(document);
+    expect(page.textContent).toContain('1 used');
+    expect(page.textContent).toContain('1 reserved');
+    expect(page.textContent).toContain('1 remaining');
+    expect(page.textContent).toContain('FREE · 3 documents');
+    expect(page.textContent).toContain('Dec 1, 2026');
+    expect(page.textContent).toContain('00:00 UTC');
+  });
+
+  it('explains a full allowance and disables uploads while preserving downloads', async () => {
+    const page = await render(document, {
+      status: 'FREE',
+      limit: 3,
+      used: 2,
+      reserved: 1,
+      remaining: 0,
+      month: '2026-12',
+      resetsAt: '2027-01-01T00:00:00.000Z'
+    });
+    expect(page.textContent).toContain('Monthly allowance reached');
+    expect(page.textContent).toContain('Jan 1, 2027');
+    const buttons = [...page.querySelectorAll('button')];
+    expect(buttons.find((button) => button.textContent.includes('Upload DOCX'))?.disabled).toBe(true);
+    expect(buttons.find((button) => button.textContent.includes('Download original'))?.disabled).toBe(false);
+  });
 
   it('shows both downloads and a review reminder for a completed no-pattern document', async () => {
     const page = await render(document);
@@ -120,6 +161,95 @@ describe('Private document downloads', () => {
     expect(store.progress({ ...document, status: 'processing', processingStage: 'validating' })).toBe(
       'Checking the revised document'
     );
+    http.verify();
+  });
+});
+
+describe('Workspace allowance HTTP state', () => {
+  function setup() {
+    TestBed.configureTestingModule({
+      providers: [
+        DocumentsStore,
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: AuthStore, useValue: { setUser: vi.fn() } }
+      ]
+    });
+    return { store: TestBed.inject(DocumentsStore), http: TestBed.inject(HttpTestingController) };
+  }
+
+  it('refreshes allowance on history polling, including an upgrade and a UTC month reset', () => {
+    const { store, http } = setup();
+    const statuses: IAllowanceResponse[] = [
+      {
+        status: 'FREE',
+        limit: 3,
+        used: 3,
+        reserved: 0,
+        remaining: 0,
+        month: '2026-12',
+        resetsAt: '2027-01-01T00:00:00Z'
+      },
+      {
+        status: 'PREMIUM',
+        limit: 15,
+        used: 3,
+        reserved: 0,
+        remaining: 12,
+        month: '2026-12',
+        resetsAt: '2027-01-01T00:00:00Z'
+      },
+      {
+        status: 'PREMIUM',
+        limit: 15,
+        used: 0,
+        reserved: 0,
+        remaining: 15,
+        month: '2027-01',
+        resetsAt: '2027-02-01T00:00:00Z'
+      }
+    ];
+    for (const allowance of statuses) {
+      store.load(1, true);
+      http.expectOne((request) => request.url === '/documents').flush({ items: [], total: 0, page: 1 });
+      const request = http.expectOne('/documents/allowance');
+      expect(request.request.transferCache).toBe(false);
+      request.flush(allowance);
+      expect(store.allowance()).toEqual(allowance);
+      expect(store.allowanceBlocked()).toBe(allowance.remaining === 0);
+    }
+    http.verify();
+  });
+
+  it('retains the server limit/reset explanation after a competing upload takes the last slot', () => {
+    const { store, http } = setup();
+    store.upload(new File(['fixture'], 'fixture.docx'));
+    http
+      .expectOne('/documents')
+      .flush(
+        {
+          message:
+            'Your FREE allowance of 3 documents is fully used or reserved. It resets on 2027-01-01T00:00:00.000Z (UTC).'
+        },
+        { status: 409, statusText: 'Conflict' }
+      );
+    expect(store.uploadError()).toContain('3 documents');
+    expect(store.uploadError()).toContain('2027-01-01');
+    http
+      .expectOne('/documents/allowance')
+      .flush({
+        status: 'FREE',
+        limit: 3,
+        used: 2,
+        reserved: 1,
+        remaining: 0,
+        month: '2026-12',
+        resetsAt: '2027-01-01T00:00:00Z'
+      });
+    expect(store.allowanceBlocked()).toBe(true);
+    expect(store.items()).toEqual([]);
+    expect(store.uploading()).toBe(false);
     http.verify();
   });
 });

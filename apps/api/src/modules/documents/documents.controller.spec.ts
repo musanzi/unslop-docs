@@ -1,3 +1,5 @@
+import { FindAllowanceHandler } from './queries/find-allowance.handler';
+import { AllowanceClock, MonthlyAllowance } from './monthly-allowance';
 import { FindDocumentHandler } from './queries/find-document.handler';
 import { DataSource } from 'typeorm';
 import { UsersController } from '../users/controllers';
@@ -41,6 +43,17 @@ describe('Private documents HTTP', () => {
   let records: Document[] = [];
   let databaseFailure = '';
   let settleCommit: (() => void) | undefined;
+  const query = async (sql: string, values: unknown[]) => {
+    if (sql.includes('GROUP BY'))
+      return [
+        {
+          status: 'GOLD',
+          used: records.filter((r) => r.ownerId === values[0] && r.status === 'completed').length,
+          reserved: records.filter((r) => r.ownerId === values[0] && ['queued', 'processing'].includes(r.status)).length
+        }
+      ];
+    return [];
+  };
   const repository = {
     create: (data) => Object.assign(new Document(), { id: randomUUID(), createdAt: new Date() }, data),
     findOne: async ({ where }) => repository.findOneBy(where),
@@ -61,6 +74,7 @@ describe('Private documents HTTP', () => {
       transaction: async (work) => {
         const pending = [...records];
         const result = await work({
+          query,
           getRepository: () => ({
             save: async (record) => {
               if (databaseFailure === 'save') throw new Error('Write failed');
@@ -115,7 +129,10 @@ describe('Private documents HTTP', () => {
         AuthGuard,
         RolesGuard,
         UploadDocumentHandler,
+        MonthlyAllowance,
+        AllowanceClock,
         FindDocumentsHandler,
+        FindAllowanceHandler,
         FindDocumentHandler,
         DownloadDocumentHandler,
         {
@@ -127,6 +144,7 @@ describe('Private documents HTTP', () => {
         {
           provide: DataSource,
           useValue: {
+            query,
             getRepository: (entity) => {
               if (entity !== User && entity !== Role) throw new Error('Admin document access is forbidden');
               return { count: async () => 1 };
@@ -174,6 +192,39 @@ describe('Private documents HTTP', () => {
   async function download(id: string, identity = 'owner') {
     return fetch(`${base}/documents/${id}/original`, { headers: identity ? { 'test-identity': identity } : {} });
   }
+
+  it('returns only the signed-in owner allowance with private caching', async () => {
+    await upload(await docxFixture());
+    const response = await fetch(`${base}/documents/allowance?ownerId=other`, {
+      headers: { 'test-identity': 'owner' }
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(await response.json()).toMatchObject({
+      data: { status: 'GOLD', limit: 35, used: 0, reserved: 1, remaining: 34 }
+    });
+    for (const identity of ['other', 'admin']) {
+      const privateResponse = await fetch(`${base}/documents/allowance?ownerId=owner`, {
+        headers: { 'test-identity': identity }
+      });
+      expect(await privateResponse.json()).toMatchObject({ data: { reserved: 0, remaining: 35 } });
+    }
+    expect((await fetch(`${base}/documents/allowance`)).status).toBe(401);
+  });
+
+  it('returns the allowance limit and reset on HTTP 409 without adding a file or history entry', async () => {
+    const bytes = await docxFixture();
+    for (let index = 0; index < 35; index++) expect((await upload(bytes)).status).toBe(201);
+    const before = await readdir(join(root, 'private'));
+    const blocked = await upload(bytes);
+    expect(blocked.status).toBe(409);
+    expect(blocked.headers.get('cache-control')).toBe('private, no-store');
+    expect(await blocked.json()).toMatchObject({
+      message: expect.stringMatching(/GOLD allowance of 35.*resets on .*UTC/)
+    });
+    expect(await readdir(join(root, 'private'))).toEqual(before);
+    expect(await (await list()).json()).toMatchObject({ data: { total: 35 } });
+  });
 
   it('uploads a DOCX, lists its metadata and downloads the exact original privately', async () => {
     const bytes = await docxFixture();

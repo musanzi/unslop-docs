@@ -1,3 +1,5 @@
+import { FindAllowance } from './queries/find-allowance.handler';
+import { AllowanceResponse } from './dto/allowance-response';
 import { FindDocument } from './queries/find-document.handler';
 import { DocumentAssessmentResponse } from './dto/document-assessment-response';
 import {
@@ -14,6 +16,7 @@ import {
 import { DocumentUploadInterceptor } from './document-upload.interceptor';
 import {
   ApiBadRequestResponse,
+  ApiConflictResponse,
   ApiBody,
   ApiConsumes,
   ApiCreatedResponse,
@@ -47,6 +50,9 @@ export class DocumentsController extends AbstractController {
     schema: { type: 'object', required: ['file'], properties: { file: { type: 'string', format: 'binary' } } }
   })
   @ApiCreatedResponse({ type: DocumentResponse })
+  @ApiConflictResponse({
+    description: 'Monthly allowance fully used or reserved; message includes limit and UTC reset'
+  })
   @ApiBadRequestResponse({ description: 'Missing, invalid or unsafe DOCX content' })
   @ApiPayloadTooLargeResponse({ description: 'Original exceeds 10,000,000 bytes' })
   @ApiServiceUnavailableResponse({ description: 'Upload could not be confirmed; refresh history before retrying' })
@@ -61,6 +67,14 @@ export class DocumentsController extends AbstractController {
   @ApiBadRequestResponse({ description: 'Invalid pagination' })
   list(@CurrentUser('id') ownerId: string, @Query() pagination: ListDocumentsDto): Promise<DocumentPage> {
     return this.queryHandler.execute(new FindDocuments(ownerId, pagination));
+  }
+
+  @Get('allowance')
+  @Header('Cache-Control', 'private, no-store')
+  @ApiOperation({ summary: 'Read your current UTC monthly allowance' })
+  @ApiOkResponse({ type: AllowanceResponse })
+  allowance(@CurrentUser('id') ownerId: string): Promise<AllowanceResponse> {
+    return this.queryHandler.execute(new FindAllowance(ownerId));
   }
 
   @Get(':id')

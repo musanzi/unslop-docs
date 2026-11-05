@@ -232,6 +232,29 @@
           [class.mt-12]="store.selected()"
           [class.border-t]="store.selected()"
           [class.pt-6]="store.selected()">
+          <section class="mb-6 text-sm" aria-label="Monthly allowance" aria-live="polite">
+            @if (store.allowance(); as allowance) {
+              <p class="font-medium">{{ allowance.status }} · {{ allowance.limit }} documents / month</p>
+              <p class="mt-1 text-muted tabular-nums">
+                {{ allowance.used }} used · {{ allowance.reserved }} reserved · {{ allowance.remaining }} remaining
+              </p>
+              <p class="mt-1 text-muted">Resets {{ allowance.resetsAt | date: 'MMM d, y' : 'UTC' }} at 00:00 UTC.</p>
+              @if (store.allowanceBlocked()) {
+                <p id="allowance-limit" class="mt-3 text-danger">
+                  Monthly allowance reached. Your {{ allowance.limit }} slots are used or reserved. Wait for a
+                  reservation to be released or for the monthly reset.
+                </p>
+              }
+            } @else if (!store.allowanceError()) {
+              <p class="text-muted">Loading monthly allowance…</p>
+            }
+            @if (store.allowanceError()) {
+              <p class="text-danger">{{ store.allowanceError() }}</p>
+              <button class="mt-2 min-h-11 underline" type="button" (click)="store.loadAllowance()">
+                Refresh allowance
+              </button>
+            }
+          </section>
           <p id="document-privacy" class="mb-5 max-w-xl text-[0.875rem] leading-[1.6] text-muted">
             Uploading sends your document text to DeepSeek for assessment and editing. Your original and revised DOCX
             stay private.
@@ -240,7 +263,7 @@
             class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-divider px-3.5 py-[0.6rem] enabled:hover:bg-hover"
             type="button"
             (click)="fileInput.click()"
-            [disabled]="store.uploading()"
+            [disabled]="store.uploading() || store.allowanceBlocked()"
             [attr.aria-describedby]="
               store.uploadError() ? 'document-privacy upload-limit upload-error' : 'document-privacy upload-limit'
             ">
@@ -252,7 +275,7 @@
             type="file"
             accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             (change)="upload($event)"
-            [disabled]="store.uploading()"
+            [disabled]="store.uploading() || store.allowanceBlocked()"
             hidden
             aria-label="Choose a DOCX file" />
           <p id="upload-limit" class="ml-3.5 inline-block text-[0.8125rem] text-muted">

@@ -12,6 +12,9 @@ export interface ProviderRequestCheckpoint {
   failure?: { category: ProviderFailureCategory; status?: number };
 }
 
+const reserved = `EXISTS (SELECT 1 FROM allowance_reservation r
+  WHERE r."documentId" = document.id AND r.state = 'active')`;
+
 const resumable = `"processingAttemptId" IS NOT NULL AND "providerRequests" <> '{}'::jsonb
   AND NOT EXISTS (SELECT 1 FROM jsonb_each("providerRequests") AS request
     WHERE request.value->>'state' NOT IN ('retry', 'succeeded'))`;
@@ -37,10 +40,10 @@ export class DocumentJobs {
   async claim(processingTimeoutMs: number): Promise<JobClaim | null> {
     const rows = await this.database.query(
       `WITH candidate AS (
-        SELECT id FROM document WHERE status = 'queued' OR
+        SELECT id FROM document WHERE ${reserved} AND (status = 'queued' OR
           (status = 'processing' AND "leaseExpiresAt" <= clock_timestamp()
             AND "processingDeadline" > clock_timestamp()
-            AND ("nextRequestAt" IS NULL OR "nextRequestAt" <= clock_timestamp()) AND ${resumable})
+            AND ("nextRequestAt" IS NULL OR "nextRequestAt" <= clock_timestamp()) AND ${resumable}))
         ORDER BY "createdAt", id FOR UPDATE SKIP LOCKED LIMIT 1
       ), claimed AS (
         UPDATE document SET status = 'processing', "processingStage" = 'assessing', "claimToken" = $1,
@@ -65,7 +68,8 @@ export class DocumentJobs {
           jsonb_build_object('inputHash', $4::text, 'state', 'running',
             'attempts', COALESCE(("providerRequests"->$3->>'attempts')::int, 0) + 1))
         WHERE id = $1 AND "claimToken" = $2 AND status = 'processing'
-          AND "processingDeadline" > clock_timestamp() AND "leaseExpiresAt" > clock_timestamp()
+          AND ${reserved}
+        AND "processingDeadline" > clock_timestamp() AND "leaseExpiresAt" > clock_timestamp()
           AND ("providerRequests"->$3 IS NULL OR
             ("providerRequests"->$3->>'state' = 'retry' AND "providerRequests"->$3->>'inputHash' = $4
               AND ("providerRequests"->$3->>'attempts')::int < 3))
@@ -88,7 +92,8 @@ export class DocumentJobs {
           "nextRequestAt" = CASE WHEN $5::int IS NULL THEN NULL ELSE clock_timestamp() + $5 * interval '1 millisecond' END,
           "leaseExpiresAt" = CASE WHEN $5::int IS NULL THEN "leaseExpiresAt" ELSE clock_timestamp() END
         WHERE id = $1 AND "claimToken" = $2 AND status = 'processing'
-          AND "processingDeadline" > clock_timestamp() AND "leaseExpiresAt" > clock_timestamp()
+          AND ${reserved}
+        AND "processingDeadline" > clock_timestamp() AND "leaseExpiresAt" > clock_timestamp()
           AND "providerRequests"->$3->>'state' = 'running'
           AND "providerRequests"->$3->>'attempts' = $6
           AND "providerRequests"->$3->>'inputHash' = $7
@@ -116,7 +121,12 @@ export class DocumentJobs {
       `WITH completed AS (
       UPDATE document SET status = 'completed', assessment = $3::jsonb, "revisedKey" = $4, "revisedSize" = $5, "processingStage" = NULL, "claimToken" = NULL, "leaseExpiresAt" = NULL
       WHERE id = $1 AND "claimToken" = $2 AND status = 'processing'
+        AND ${reserved}
         AND "processingDeadline" > clock_timestamp() AND "leaseExpiresAt" > clock_timestamp()
+      RETURNING id
+    ), charged AS (
+      UPDATE allowance_reservation SET state = 'charged'
+      WHERE "documentId" IN (SELECT id FROM completed) AND state = 'active'
       RETURNING id
     ) SELECT id FROM completed`,
       [claim.id, claim.claimToken, JSON.stringify(assessment), revised.key, revised.size]
@@ -128,6 +138,7 @@ export class DocumentJobs {
       `WITH advanced AS (
       UPDATE document SET "processingStage" = $3
       WHERE id = $1 AND "claimToken" = $2 AND status = 'processing'
+        AND ${reserved}
         AND "processingDeadline" > clock_timestamp() AND "leaseExpiresAt" > clock_timestamp()
       RETURNING id
     ) SELECT id FROM advanced`,
@@ -149,6 +160,7 @@ export class DocumentJobs {
       `WITH renewed AS (
       UPDATE document SET "leaseExpiresAt" = clock_timestamp() + interval '30 seconds'
       WHERE id = $1 AND "claimToken" = $2 AND status = 'processing'
+        AND ${reserved}
         AND "processingDeadline" > clock_timestamp() AND "leaseExpiresAt" > clock_timestamp()
       RETURNING id
     ) SELECT id FROM renewed`,
@@ -164,6 +176,10 @@ export class DocumentJobs {
       WHERE status = 'processing' AND ("processingDeadline" <= clock_timestamp() OR
         ("leaseExpiresAt" <= clock_timestamp() AND NOT (${resumable})))
       RETURNING id
+    ), released AS (
+      UPDATE allowance_reservation SET state = 'released'
+      WHERE "documentId" IN (SELECT id FROM recovered) AND state = 'active'
+      RETURNING id
     ) SELECT id FROM recovered`);
     return rows.length;
   }
@@ -174,6 +190,10 @@ export class DocumentJobs {
       UPDATE document SET status = 'failed', assessment = NULL, "processingStage" = NULL, "revisedKey" = NULL, "revisedSize" = NULL, "claimToken" = NULL, "leaseExpiresAt" = NULL,
         "failureCode" = CASE WHEN "processingDeadline" <= clock_timestamp() THEN 'deadline' ELSE $3 END
       WHERE id = $1 AND "claimToken" = $2 AND status = 'processing'
+      RETURNING id
+    ), released AS (
+      UPDATE allowance_reservation SET state = 'released'
+      WHERE "documentId" IN (SELECT id FROM failed) AND state = 'active'
       RETURNING id
     ) SELECT id FROM failed`,
       [claim.id, claim.claimToken, reason]

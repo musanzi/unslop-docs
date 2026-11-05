@@ -927,6 +927,9 @@
           "401": {
             "description": "Sign-in required"
           },
+          "409": {
+            "description": "Monthly allowance fully used or reserved; message includes limit and UTC reset"
+          },
           "413": {
             "description": "Original exceeds 10,000,000 bytes"
           },
@@ -992,6 +995,31 @@
           }
         },
         "summary": "List your documents, newest first",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/documents/allowance": {
+      "get": {
+        "operationId": "DocumentsController_allowance",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AllowanceResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required"
+          }
+        },
+        "summary": "Read your current UTC monthly allowance",
         "tags": [
           "documents"
         ]
@@ -1404,6 +1432,51 @@
           "total",
           "page",
           "pageSize"
+        ]
+      },
+      "AllowanceResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "FREE",
+              "PREMIUM",
+              "GOLD"
+            ]
+          },
+          "limit": {
+            "type": "number"
+          },
+          "used": {
+            "type": "number",
+            "description": "Successful documents charged to this reservation month"
+          },
+          "reserved": {
+            "type": "number",
+            "description": "Active reservations created in this month"
+          },
+          "remaining": {
+            "type": "number"
+          },
+          "month": {
+            "type": "string",
+            "example": "2026-11"
+          },
+          "resetsAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "First instant of the next UTC calendar month"
+          }
+        },
+        "required": [
+          "status",
+          "limit",
+          "used",
+          "reserved",
+          "remaining",
+          "month",
+          "resetsAt"
         ]
       },
       "WritingPatternResponse": {

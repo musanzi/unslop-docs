@@ -1,3 +1,4 @@
+import { MonthlyAllowance1793880600000 } from '../database/migrations/1793880600000-MonthlyAllowance';
 import { Logger } from '@nestjs/common';
 import { faithfulRevisionProvider } from '@api/shared/testing/revision-fixtures';
 import { DocumentRevision1793880400000 } from '../database/migrations/1793880400000-DocumentRevision';
@@ -30,13 +31,16 @@ describe('Durable document jobs', () => {
       ).rows
   };
   const jobs = new DocumentJobs(sql);
+  const owner = randomUUID();
   beforeAll(async () => {
     await database.exec(
-      `CREATE TABLE document (id uuid PRIMARY KEY, "originalKey" text, size integer, "createdAt" timestamptz DEFAULT now())`
+      `CREATE TABLE "user" (id uuid PRIMARY KEY); CREATE TABLE document (id uuid PRIMARY KEY, "originalKey" text, size integer, "createdAt" timestamptz DEFAULT now())`
     );
     await new DocumentAssessment1793880300000().up(sql);
     await new DocumentRevision1793880400000().up(sql);
     await new ProviderRetries1793880500000().up(sql);
+    await new MonthlyAllowance1793880600000().up(sql);
+    await database.query('INSERT INTO "user" (id) VALUES ($1)', [owner]);
   });
   beforeEach(async () => {
     await database.exec('DELETE FROM document');
@@ -50,6 +54,11 @@ describe('Durable document jobs', () => {
       id,
       `${id}.docx`
     ]);
+    await database.query(
+      `INSERT INTO allowance_reservation (id, "ownerId", "documentId", "reservedAt", month, state)
+      VALUES ($1, $2, $3, now(), date_trunc('month', now() AT TIME ZONE 'UTC')::date, 'active')`,
+      [randomUUID(), owner, id]
+    );
     return id;
   }
   it('keeps one job processing through two delayed retries and fails on the third provider call', async () => {

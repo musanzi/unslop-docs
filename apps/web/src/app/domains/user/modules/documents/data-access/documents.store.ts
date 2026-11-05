@@ -3,7 +3,12 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { computed, DestroyRef, inject, Injectable, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router } from '@angular/router';
-import type { IDocumentAssessmentResponse, IDocumentPage, IDocumentResponse } from '@unslop-docs/api-contracts';
+import type {
+  IAllowanceResponse,
+  IDocumentAssessmentResponse,
+  IDocumentPage,
+  IDocumentResponse
+} from '@unslop-docs/api-contracts';
 import { AuthStore } from '@web/domains/auth/shared/data-access';
 import { firstValueFrom } from 'rxjs';
 
@@ -14,10 +19,14 @@ export class DocumentsStore {
   private readonly auth = inject(AuthStore);
   private readonly router = inject(Router);
   private request = 0;
+  private allowanceRequest = 0;
   private detailRequest = 0;
   private listPending = false;
   private detailPending = false;
   private readonly browserDocument = inject(DOCUMENT);
+  readonly allowance = signal<IAllowanceResponse | null>(null);
+  readonly allowanceError = signal('');
+  readonly allowanceBlocked = computed(() => this.allowance()?.remaining === 0);
   readonly detail = signal<IDocumentAssessmentResponse | null>(null);
   readonly detailError = signal('');
   readonly detailLoading = signal(false);
@@ -64,6 +73,7 @@ export class DocumentsStore {
 
   load(page = this.page(), background = false): void {
     if (background && this.listPending) return;
+    this.loadAllowance();
     this.listPending = true;
     const request = ++this.request;
     if (!background) this.loading.set(true);
@@ -85,6 +95,25 @@ export class DocumentsStore {
           this.listPending = false;
           this.listError.set(this.errorMessage(error, 'Could not load your documents. Try again.'));
           this.loading.set(false);
+        }
+      });
+  }
+
+  loadAllowance(): void {
+    const request = ++this.allowanceRequest;
+    this.http
+      .get<IAllowanceResponse>('/documents/allowance', { transferCache: false })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (allowance) => {
+          if (request !== this.allowanceRequest) return;
+          this.allowance.set(allowance);
+          this.allowanceError.set('');
+        },
+        error: (error: unknown) => {
+          if (request !== this.allowanceRequest) return;
+          this.allowance.set(null);
+          this.allowanceError.set(this.errorMessage(error, 'Could not refresh your monthly allowance. Try again.'));
         }
       });
   }
@@ -161,6 +190,7 @@ export class DocumentsStore {
           this.uploading.set(false);
           this.uploadError.set(this.errorMessage(error, 'Upload failed. Check your history before trying again.'));
           if (error instanceof HttpErrorResponse && (error.status === 0 || error.status >= 500)) this.load(1);
+          else this.loadAllowance();
         }
       });
   }
@@ -194,7 +224,8 @@ export class DocumentsStore {
         void this.router.navigate(['/auth/sign-in']);
         return 'Your session expired. Sign in again.';
       }
-      if ([400, 413].includes(error.status) && typeof error.error?.message === 'string') return error.error.message;
+      if ([400, 409, 413].includes(error.status) && typeof error.error?.message === 'string')
+        return error.error.message;
     }
     return fallback;
   }
