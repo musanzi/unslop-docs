@@ -171,6 +171,7 @@ export function documentModel(mainPart: string, trees: Map<string, XmlNode>) {
             .map((node) => ({ source: source(node), contentStart: node.contentStart, text: node.text })),
           source: source(item),
           text: textOf(item),
+          ...(rPr ? { properties: source(rPr) } : {}),
           bold: enabled(property('b')),
           italic: enabled(property('i')),
           ...(hyperlink ? { hyperlink } : {})

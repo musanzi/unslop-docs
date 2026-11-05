@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { ZipFile } from 'yazl';
-import { DocxDocument, DocxSource } from './docx-model';
+import { DocxDocument, DocxRun, DocxSource } from './docx-model';
 import { isValidationCheck, KeptPassage, passageExcerpt, RevisionNotices, uneditedElements } from './revision-notices';
 import {
   paragraphs,
@@ -30,39 +30,116 @@ export interface EditChunk {
 export interface EditProvider {
   edit(system: string, chunk: EditChunk, signal?: AbortSignal): Promise<unknown>;
 }
+interface TextNode {
+  readonly source: DocxSource;
+  readonly contentStart: number;
+  readonly text: string;
+}
+interface Passage {
+  readonly nodes: TextNode[];
+}
 interface SourceSpan extends EditSpan {
   readonly source: DocxSource;
   readonly offset: number;
   readonly contentStart: number;
+  readonly emptied: readonly TextNode[];
+}
+
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+function passages(document: DocxDocument): Passage[] {
+  const xml = document.readXmlPart(document.mainPart);
+  const raw = (source?: DocxSource) => (source ? xml.slice(source.start, source.end) : '');
+  const prefix = (node: TextNode) =>
+    /^<([\w.-]+:)?t\b/.exec(xml.slice(node.source.start, node.contentStart))?.[1] ?? '';
+  const preserved = (node: TextNode) =>
+    /\sxml:space\s*=\s*["']preserve["']/.test(xml.slice(node.source.start, node.contentStart));
+  const continuous = (previous: TextNode, next: TextNode, run: DocxRun | undefined) => {
+    const name = escapeRegExp(prefix(previous));
+    const withinRun = `(?:\\s|<${name}lastRenderedPageBreak\\b[^<>]*/>)`;
+    const acrossRuns = `(?:${withinRun}|</${name}r>|<${name}r(?:\\s[^<>]*)?>|<${name}(?:proofErr|bookmarkStart|bookmarkEnd)\\b[^<>]*/>)`;
+    if (!run) return new RegExp(`^${withinRun}*$`).test(xml.slice(previous.source.end, next.source.start));
+    const properties = run.properties ?? { start: next.source.start, end: next.source.start };
+    if (properties.start < previous.source.end || properties.end > next.source.start) return false;
+    const gap = xml.slice(previous.source.end, properties.start) + xml.slice(properties.end, next.source.start);
+    return new RegExp(`^${acrossRuns}*$`).test(gap);
+  };
+  const sameFormatting = (left: DocxRun, right: DocxRun) =>
+    left.bold === right.bold &&
+    left.italic === right.italic &&
+    JSON.stringify(left.hyperlink) === JSON.stringify(right.hyperlink) &&
+    raw(left.properties) === raw(right.properties);
+  const result: Passage[] = [];
+  for (const paragraph of paragraphs(document.blocks)) {
+    let current: Passage | undefined;
+    let previousRun: DocxRun | undefined;
+    let previousNode: TextNode | undefined;
+    const open = (node: TextNode) => {
+      current = { nodes: [node] };
+      result.push(current);
+    };
+    const close = () => {
+      if (!current) return;
+      while (current.nodes.length > 1 && !preserved(current.nodes[0]) && /\s$/.test(current.nodes.at(-1).text)) {
+        const node = current.nodes.pop();
+        const rest = current;
+        open(node);
+        if (!/\s$/.test(rest.nodes.map((item) => item.text).join(''))) return;
+      }
+    };
+    for (const inline of paragraph.inlines) {
+      if (inline.kind !== 'run') {
+        close();
+        current = undefined;
+        previousRun = undefined;
+        continue;
+      }
+      for (const node of inline.textNodes) {
+        const joins =
+          !!current &&
+          !!previousNode &&
+          (previousRun === inline
+            ? continuous(previousNode, node, undefined)
+            : !!previousRun && sameFormatting(previousRun, inline) && continuous(previousNode, node, inline));
+        if (joins) current.nodes.push(node);
+        else {
+          close();
+          open(node);
+        }
+        previousNode = node;
+        previousRun = inline;
+      }
+    }
+    close();
+  }
+  return result;
 }
 
 function sourceSpans(document: DocxDocument): SourceSpan[] {
-  return paragraphs(document.blocks).flatMap((paragraph) =>
-    paragraph.inlines.flatMap((inline) => {
-      if (inline.kind !== 'run') return [];
-      return inline.textNodes.flatMap((node) => {
-        const spans: SourceSpan[] = [];
-        let offset = 0;
-        while (offset < node.text.length) {
-          let end = Math.min(offset + 1600, node.text.length);
-          if (end < node.text.length) {
-            const space = node.text.lastIndexOf(' ', end - 1);
-            if (space > offset) end = space + 1;
-            else if (/[\uD800-\uDBFF]/.test(node.text[end - 1])) end--;
-          }
-          spans.push({
-            id: `${node.source.start}:${offset}`,
-            text: node.text.slice(offset, end),
-            source: node.source,
-            contentStart: node.contentStart,
-            offset
-          });
-          offset = end;
-        }
-        return spans;
+  return passages(document).flatMap((passage) => {
+    const [first, ...emptied] = passage.nodes;
+    const text = passage.nodes.map((node) => node.text).join('');
+    const spans: SourceSpan[] = [];
+    let offset = 0;
+    while (offset < text.length) {
+      let end = Math.min(offset + 1600, text.length);
+      if (end < text.length) {
+        const space = text.lastIndexOf(' ', end - 1);
+        if (space > offset) end = space + 1;
+        else if (/[\uD800-\uDBFF]/.test(text[end - 1])) end--;
+      }
+      spans.push({
+        id: `${first.source.start}:${offset}`,
+        text: text.slice(offset, end),
+        source: first.source,
+        contentStart: first.contentStart,
+        offset,
+        emptied
       });
-    })
-  );
+      offset = end;
+    }
+    return spans;
+  });
 }
 
 export function planDocxEdits(document: DocxDocument): readonly EditChunk[] {
@@ -72,7 +149,7 @@ export function planDocxEdits(document: DocxDocument): readonly EditChunk[] {
   const append = () => {
     if (!spans.length) return;
     const id = createHash('sha256')
-      .update('docx-edit-v1\n')
+      .update('docx-edit-v2\n')
       .update(document.readPart(document.mainPart))
       .update(JSON.stringify(spans))
       .digest('hex');
@@ -149,6 +226,8 @@ export async function constructRevisedDocx(
     const node = nodes.get(span.source.start) ?? { source: span.source, contentStart: span.contentStart, text: '' };
     node.text += edits.get(span.id);
     nodes.set(span.source.start, node);
+    for (const emptied of span.emptied)
+      nodes.set(emptied.source.start, { source: emptied.source, contentStart: emptied.contentStart, text: '' });
   }
   let xml = document.readXmlPart(document.mainPart);
   const escape = (text: string) =>

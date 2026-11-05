@@ -9,6 +9,7 @@ export interface DocxRun {
   readonly source: DocxSource;
   readonly text: string;
   readonly textNodes: readonly { readonly source: DocxSource; readonly contentStart: number; readonly text: string }[];
+  readonly properties?: DocxSource;
   readonly bold: boolean;
   readonly italic: boolean;
   readonly hyperlink?: { readonly target?: string; readonly anchor?: string };

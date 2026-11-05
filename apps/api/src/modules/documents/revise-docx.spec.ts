@@ -258,6 +258,52 @@ describe('Revision preservation corpus', () => {
   });
 });
 
+describe('Passage-level spans', () => {
+  it('offers one span across runs that share formatting and writes the rewrite back without losing runs', async () => {
+    const source = await readDocx(
+      await readerFixture(
+        '<w:p><w:r w:rsidR="00A1"><w:rPr><w:lang w:val="en-GB"/></w:rPr><w:t xml:space="preserve">In order </w:t></w:r>' +
+          '<w:proofErr w:type="spellStart"/><w:r w:rsidR="00B2"><w:rPr><w:lang w:val="en-GB"/></w:rPr><w:t xml:space="preserve">to compare </w:t></w:r>' +
+          '<w:r><w:rPr><w:lang w:val="en-GB"/></w:rPr><w:t>the</w:t><w:t xml:space="preserve"> results, the students kept notes.</w:t></w:r></w:p>'
+      )
+    );
+    const plan = planDocxEdits(source);
+    expect(plan.flatMap((chunk) => chunk.spans.map((span) => span.text))).toEqual([
+      'In order to compare the results, the students kept notes.'
+    ]);
+    const result = await createDocumentWorkflow(faithfulRevisionProvider(), 'rules').invoke({ source });
+    const revised = await readDocx(result.revised);
+    expect(revised.text).toBe('To compare the results, the students kept notes.');
+    expect(revised.blocks[0]).toMatchObject({
+      inlines: [
+        { text: 'To compare the results, the students kept notes.' },
+        { text: '' },
+        { text: '', textNodes: [{ text: '' }, { text: '' }] }
+      ]
+    });
+    await expect(validateRevisedDocx(source, result.revised)).resolves.toBeUndefined();
+  });
+
+  it('keeps separate spans across formatting changes, tabs, links and unsafe trailing whitespace', async () => {
+    const source = await readDocx(
+      await readerFixture(
+        '<w:p><w:r><w:t xml:space="preserve">Plain </w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">bold </w:t></w:r>' +
+          '<w:r><w:rPr><w:b/></w:rPr><w:t>tab</w:t><w:tab/><w:t xml:space="preserve">after </w:t></w:r>' +
+          '<w:hyperlink r:id="link"><w:r><w:rPr><w:b/></w:rPr><w:t>link</w:t></w:r></w:hyperlink>' +
+          '<w:r><w:rPr><w:b/></w:rPr><w:t>unsafe</w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">end </w:t></w:r></w:p>'
+      )
+    );
+    expect(planDocxEdits(source).flatMap((chunk) => chunk.spans.map((span) => span.text))).toEqual([
+      'Plain ',
+      'bold tab',
+      'after ',
+      'link',
+      'unsafe',
+      'end '
+    ]);
+  });
+});
+
 describe('Revision archive edge cases', () => {
   it('preserves accepted UTF-16 source markup and XML attributes containing greater-than signs', async () => {
     const xml =
