@@ -19,7 +19,7 @@ import { CqrsModule } from '@nestjs/cqrs';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdtemp, readdir, rm, mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -345,15 +345,6 @@ describe('Private documents HTTP', () => {
   it('rejects unprocessable uploads without records or files and accepts an immediate retry', async () => {
     const rejected = [
       [await readerFixture(textParagraph('word '.repeat(10001))), '10,001'],
-      [await readerFixture('<w:p><w:ins w:id="1"><w:r><w:t>Changed text</w:t></w:r></w:ins></w:p>'), 'tracked changes'],
-      [
-        await readerFixture('<w:p><w:r><w:pict><w:txbxContent><w:p/></w:txbxContent></w:pict></w:r></w:p>'),
-        'text boxes'
-      ],
-      [
-        await readerFixture('<w:sdt><w:sdtContent>' + textParagraph('Controlled') + '</w:sdtContent></w:sdt>'),
-        'content controls'
-      ],
       [await readerFixture('<w:p><w:r><w:object/></w:r></w:p>'), 'embedded objects'],
       [await readerFixture(textParagraph(languageSamples.spanish)), 'English or French'],
       [Buffer.from('d0cf11e0a1b11ae1', 'hex'), 'password'],
@@ -370,6 +361,18 @@ describe('Private documents HTTP', () => {
     const accepted = await upload(await readerFixture(textParagraph(languageSamples.french)));
     expect(accepted.status).toBe(201);
     expect(await (await list()).json()).toMatchObject({ data: { total: 1 } });
+  });
+
+  it('accepts the formerly rejected content-control and tracked-change fixtures and stores their originals', async () => {
+    for (const name of ['content-control', 'tracked-changes']) {
+      const bytes = await readFile(join(__dirname, `../../shared/testing/fixtures/docx/${name}.docx`));
+      const response = await upload(bytes, `${name}.docx`);
+      expect(response.status).toBe(201);
+      const { data } = await response.json();
+      const original = await download(data.id);
+      expect(Buffer.from(await original.arrayBuffer())).toEqual(bytes);
+    }
+    expect(await (await list()).json()).toMatchObject({ data: { total: 2 } });
   });
 
   it('accepts exactly 10 MB and rejects one byte over without storage', async () => {
