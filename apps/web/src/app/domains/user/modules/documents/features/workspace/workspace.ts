@@ -6,16 +6,17 @@ import { RouterLink } from '@angular/router';
 import type { IDocumentResponse } from '@unslop-docs/api-contracts';
 import { Media } from '@web/core/media';
 import { AuthStore } from '@web/domains/auth/shared/data-access';
+import { User } from '@web/shared/ui/user/user';
 import { DocumentsStore } from '../../data-access/documents.store';
 
 @Component({
   selector: 'document-workspace',
-  imports: [DatePipe, DecimalPipe, MatIcon, MatSidenav, MatSidenavContainer, MatSidenavContent, RouterLink],
+  imports: [DatePipe, DecimalPipe, MatIcon, MatSidenav, MatSidenavContainer, MatSidenavContent, RouterLink, User],
   providers: [DocumentsStore],
   templateUrl: './workspace.html',
   host: {
     class:
-      'document-workspace-theme block text-[0.9375rem] leading-[1.5] text-ink scheme-dark selection:bg-ink selection:text-canvas [&_a]:text-inherit [&_a]:no-underline [&_a:hover]:underline [&_a:hover]:underline-offset-[0.2em] [&_button]:cursor-pointer [&_button:disabled]:cursor-default [&_button:disabled]:text-muted [&_button:disabled]:opacity-65 [&_:is(a,button):focus-visible]:outline-2 [&_:is(a,button):focus-visible]:outline-offset-[3px] [&_:is(a,button):focus-visible]:outline-ink [&_mat-icon]:size-4.5 [&_mat-icon]:shrink-0'
+      'document-workspace-theme block bg-panel font-sans text-[0.9375rem] leading-[1.5] text-ink scheme-dark selection:bg-ink selection:text-canvas [&_mat-icon]:size-4.5 [&_mat-icon]:shrink-0'
   },
   changeDetection: ChangeDetectionStrategy.OnPush
 })

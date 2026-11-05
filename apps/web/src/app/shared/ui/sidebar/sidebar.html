@@ -1,14 +1,29 @@
-<div class="flex h-full w-70 min-h-0 flex-col overflow-hidden bg-primary-950 text-white">
-  <div class="relative flex shrink-0 items-center gap-x-2.5 pt-5 pr-4 pb-0 pl-6">
-    <a routerLink="/" class="flex items-center gap-2">
-      <!-- <img src="/images/logo/logo-w.png" alt="" class="size-8 object-contain" /> -->
-      <span class="text-2xl font-bold tracking-tight transition-colors">Unslopy</span>
-    </a>
-  </div>
-
-  <navigation class="mt-8 mb-4 min-h-0 flex-1 overflow-y-auto" [items]="navigation()" />
-
-  <div class="shrink-0 p-2">
-    <user [user]="user()" (editProfile)="editProfile.emit()" (signedOut)="signedOut.emit()" />
-  </div>
+<div class="flex h-full min-h-0 flex-col bg-canvas p-3 text-ink">
+  <a
+    routerLink="/user/documents"
+    class="mx-2 mb-8 mt-3 flex min-h-11 items-center gap-2.5 rounded-lg text-[1.125rem] font-medium"
+    aria-label="Unslopy documents"
+    ><img src="/brand/unslopy-mark.svg" width="28" height="28" alt="" />Unslopy</a
+  >
+  <nav class="flex flex-1 flex-col gap-1" aria-label="Administration">
+    <a
+      class="ui-button ui-ghost justify-start"
+      routerLink="/admin"
+      routerLinkActive="bg-hover text-ink"
+      [routerLinkActiveOptions]="{ exact: true }"
+      ariaCurrentWhenActive="page"
+      ><mat-icon svgIcon="layout-dashboard" />Overview</a
+    >
+    <a
+      class="ui-button ui-ghost justify-start"
+      routerLink="/admin/users"
+      routerLinkActive="bg-hover text-ink"
+      ariaCurrentWhenActive="page"
+      ><mat-icon svgIcon="users" />Users</a
+    >
+    <a class="ui-button ui-ghost mt-5 justify-start" routerLink="/user/documents"
+      ><mat-icon svgIcon="files" />My documents</a
+    >
+  </nav>
+  <user />
 </div>

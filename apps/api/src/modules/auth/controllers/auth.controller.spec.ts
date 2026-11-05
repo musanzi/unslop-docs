@@ -295,6 +295,19 @@ describe('Google-only HTTP surface', () => {
     });
   });
 
+  it('allows direct user details only for the current admin', async () => {
+    const { cookie, userCookie } = await adminSession();
+    const url = `${base}/users/by-id/user-1`;
+    expect((await fetch(url)).status).toBe(401);
+    expect((await fetch(url, { headers: { cookie: userCookie } })).status).toBe(403);
+    const response = await fetch(url, { headers: { cookie } });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ id: 'user-1', status: 'FREE' });
+    expect((await fetch(`${base}/users/by-id/missing-user`, { headers: { cookie } })).status).toBe(404);
+    config.set('ADMIN_EMAIL', 'replacement@example.com');
+    expect((await fetch(url, { headers: { cookie } })).status).toBe(403);
+  });
+
   it('rejects non-admin status edits and history reads with 403 and leaves status unchanged', async () => {
     const { cookie, userCookie } = await adminSession();
     expect((await changeStatus(userCookie, 'GOLD')).status).toBe(403);

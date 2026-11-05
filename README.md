@@ -2,7 +2,7 @@
 
 Unslopy is a document-editing product for clearer, more natural writing. The planned first release accepts DOCX files in English or French, reports writing patterns in a writing assessment, edits the document, and returns a revised DOCX. A writing assessment does not establish AI authorship.
 
-Google-only sign-in, profile management, private DOCX uploads and original downloads, admin user listing, status management with audit history, CSV export, and account statistics are available. Background writing assessments are available. Editing, revised downloads, and monthly allowances are not implemented yet. The [product specification](docs/product-spec.md) describes the intended behavior, and the [ticket index](docs/ticket-drafts/README.md) links the implementation issues.
+Google-only sign-in, profile management, private DOCX uploads and original downloads, admin user listing, status management with audit history, CSV export, and account statistics are available. Background writing assessment, editing, validated revised downloads, and automatic provider retries are available. Monthly allowances are not implemented yet. The [product specification](docs/product-spec.md) describes the intended behavior, and the [ticket index](docs/ticket-drafts/README.md) links the implementation issues.
 
 The product brand is Unslopy. Repository, package, database, and Compose identifiers remain `unslop-docs`.
 
@@ -56,7 +56,7 @@ Password endpoints and admin account creation, CSV import, deletion, and role mu
 
 ### Manage user statuses
 
-After applying the migrations, sign in with the configured admin account and open **Users**. Choose **Status and history** for a user, select FREE, PREMIUM, or GOLD, then choose **Save status**. The list updates without a page reload. The history shows the previous and new statuses, the admin email at the time of the change, and the date, newest first. The browser displays dates in your local time.
+After applying the migrations, sign in with the configured admin account and open **Users**. Choose **View details** to open `/admin/users/:id`, select FREE, PREMIUM, or GOLD, then choose **Save status**. The detail page updates without a reload, and its URL supports direct links. The history shows the previous and new statuses, the admin email at the time of the change, and the date, newest first. The browser displays dates in your local time.
 
 The `UserStatuses1793880100000` migration gives every existing user FREE and creates the status history table. New Google accounts start with FREE. Profile edits and later Google sign-ins preserve the assigned status. Initial FREE assignments do not create history records.
 
@@ -68,11 +68,18 @@ The API exposes these endpoints:
 | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | `PATCH /users/:id/status` with `{ "status": "PREMIUM" }` | Updated user, including status. Requires admin access.                                                                                     |
 | `GET /users/:id/status-changes`                          | Records with `id`, `userId`, `adminId`, `adminEmail`, `createdAt`, `previousStatus`, and `newStatus`, newest first. Requires admin access. |
+| `GET /users/by-id/:id`                                   | User details for a direct admin link. Requires admin access.                                                                               |
 | `GET /auth/me`                                           | Current profile, including status. Requires sign-in.                                                                                       |
 
 The two status endpoints return 403 for non-admins and 404 for an unknown user. Invalid status values return 400. The API derives the acting admin from the authenticated session.
 
-To verify the UI on the owner's stack, apply the migration, change a user's status, and reopen their history. Confirm that the list and profile show the saved status, then sign in again as that user. Capture the status control and history for issue #3. Automated HTTP specs cover authorization, audit contents, no-op submissions, history order, rollback, and persistence, including concurrent profile and sign-in writes. PostgreSQL migration execution and browser screenshots require the running stack.
+To verify the UI on the owner's stack, apply the migration, change a user's status, and reopen their history. Confirm that the list and detail page show the saved status, then sign in again as that user. Capture the status control and history for issue #3. Automated HTTP specs cover authorization, audit contents, no-op submissions, history order, rollback, and persistence, including concurrent profile and sign-in writes. PostgreSQL migration execution and browser screenshots require the running stack.
+
+### Edit your profile
+
+In either portal, choose your account at the bottom of the sidebar to open **Edit profile**. Name changes apply after **Save changes**. **Cancel** discards the name draft. Photo changes save immediately. Escape closes the dialog when no save is running, and focus returns to the account control. Old `/user/profile` and `/admin/profile` links redirect to documents and the admin overview.
+
+All web interface text uses the bundled Inter font. Shared controls and dark Material overrides live in `apps/web/src/styles/`; component layout uses Tailwind utilities.
 
 ### Upload and download documents
 

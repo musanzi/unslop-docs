@@ -1,0 +1,64 @@
+@utility ui-button {
+  @apply inline-flex min-h-11 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-lg border border-transparent px-4 py-2.5 font-sans text-[0.875rem] font-medium leading-5 no-underline transition-colors motion-reduce:transition-none;
+  &:focus-visible {
+    @apply outline-2 outline-offset-2 outline-ink;
+  }
+  &:disabled,
+  &[aria-disabled='true'] {
+    @apply pointer-events-none cursor-default opacity-50;
+  }
+  & mat-icon {
+    @apply size-4.5;
+  }
+}
+@utility ui-primary {
+  @apply bg-ink text-canvas hover:bg-white active:bg-paper-pressed;
+}
+@utility ui-secondary {
+  @apply border-divider bg-panel text-ink hover:bg-hover;
+}
+@utility ui-ghost {
+  @apply text-muted hover:bg-hover hover:text-ink;
+}
+@utility ui-icon {
+  @apply size-11 p-0;
+}
+@utility ui-destructive {
+  @apply border-danger/30 bg-danger/10 text-danger hover:bg-danger/20;
+}
+@utility ui-logout {
+  @apply text-muted hover:bg-danger/10 hover:text-danger;
+}
+@utility ui-field {
+  @apply min-h-11 w-full rounded-lg border border-divider bg-canvas px-3 py-2.5 font-sans text-[1rem] leading-6 text-ink placeholder:text-muted;
+  &:focus-visible {
+    @apply border-ink outline-2 outline-offset-2 outline-ink;
+  }
+  &:disabled {
+    @apply cursor-default opacity-50;
+  }
+  &[aria-invalid='true'] {
+    @apply border-danger;
+  }
+}
+@utility ui-alert {
+  @apply rounded-xl border border-danger/30 bg-danger/5 p-4 text-[0.875rem] leading-6 text-danger;
+}
+@utility ui-badge {
+  @apply inline-flex rounded-md border border-divider bg-canvas px-2 py-1 text-[0.75rem] font-medium leading-4 text-muted;
+}
+@utility ui-table {
+  @apply w-full border-collapse text-left text-[0.875rem] leading-6;
+  & th {
+    @apply border-b border-divider px-5 py-3 font-medium text-muted;
+  }
+  & td {
+    @apply border-b border-divider/60 px-5 py-4 align-middle;
+  }
+  & tbody tr:last-child td {
+    @apply border-b-0;
+  }
+  & tbody tr:hover {
+    @apply bg-hover/40;
+  }
+}

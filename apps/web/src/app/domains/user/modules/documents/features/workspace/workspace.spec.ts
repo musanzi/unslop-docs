@@ -12,6 +12,7 @@ import { AuthStore } from '@web/domains/auth/shared/data-access';
 import { Media } from '@web/core/media';
 import { DocumentsStore } from '../../data-access/documents.store';
 import { Workspace } from './workspace';
+import { User } from '@web/shared/ui/user/user';
 
 const document: IDocumentAssessmentResponse = {
   id: '00000000-0000-4000-8000-000000000001',
@@ -51,9 +52,24 @@ describe('Document workspace results', () => {
       providers: [
         provideRouter([]),
         provideHttpClient(),
-        { provide: AuthStore, useValue: { isAdmin: () => false, signOut: vi.fn() } },
+        {
+          provide: AuthStore,
+          useValue: {
+            user: signal(null),
+            isAdmin: () => false,
+            signOut: vi.fn(),
+            isSigningOut: signal(false),
+            signOutError: signal('')
+          }
+        },
         { provide: Media, useValue: { match: () => signal(false) } }
       ]
+    });
+    TestBed.overrideComponent(User, {
+      set: {
+        template: readFileSync(`${import.meta.dirname}/../../../../../../shared/ui/user/user.html`, 'utf8'),
+        templateUrl: undefined
+      }
     });
     TestBed.overrideComponent(Workspace, {
       set: {

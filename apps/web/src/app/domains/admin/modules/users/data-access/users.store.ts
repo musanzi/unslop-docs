@@ -1,10 +1,9 @@
-import type { IUpdateStatusDto, IUserResponse } from '@unslop-docs/api-contracts';
 import { DOCUMENT } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { patchState, signalStore, withMethods, withProps, withState } from '@ngrx/signals';
 import { rxMethod } from '@ngrx/signals/rxjs-interop';
-import { catchError, EMPTY, exhaustMap, finalize, pipe, switchMap, tap } from 'rxjs';
+import { catchError, EMPTY, finalize, pipe, switchMap, tap } from 'rxjs';
 
 import { getApiErrorMessage } from '@/app/core/api';
 
@@ -14,8 +13,6 @@ import { UsersService } from './users.service';
 
 const initialState: IUsersState = {
   isExporting: false,
-  isUpdating: false,
-  statusMessage: '',
   error: ''
 };
 
@@ -27,28 +24,6 @@ export const UsersStore = signalStore(
     _http: inject(HttpClient)
   })),
   withMethods(({ _data, _document, _http, ...store }) => ({
-    updateStatus: rxMethod<{ userId: string; status: IUpdateStatusDto['status'] }>(
-      pipe(
-        exhaustMap(({ userId, status }) => {
-          patchState(store, { isUpdating: true, error: '', statusMessage: '' });
-          return _http.patch<IUserResponse>(`/users/${userId}/status`, { status }).pipe(
-            tap((user) => {
-              _data.applyUser(user);
-              patchState(store, { statusMessage: `Status saved as ${user.status}.` });
-            }),
-            catchError((error: unknown) => {
-              patchState(store, { error: getApiErrorMessage(error, 'Unable to change status. Please try again.') });
-              return EMPTY;
-            }),
-            finalize(() => patchState(store, { isUpdating: false }))
-          );
-        })
-      )
-    ),
-    selectUser(user: IUserResponse): void {
-      patchState(store, { error: '', statusMessage: '' });
-      _data.selectedUser.set(user);
-    },
     exportUsers: rxMethod<void>(
       pipe(
         tap(() => patchState(store, { isExporting: true, error: '' })),

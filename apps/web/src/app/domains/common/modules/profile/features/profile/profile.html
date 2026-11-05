@@ -1,81 +1,70 @@
-<section
-  class="flex max-h-[calc(100dvh-2rem)] min-h-0 flex-col overflow-hidden bg-surface"
-  [class]="ref ? '' : 'mx-auto my-6 w-[calc(100%-2rem)] max-w-xl rounded-md border'">
-  <header class="flex shrink-0 items-center justify-between gap-4 border-b p-4 sm:p-6">
-    @if (ref) {
-      <h2 id="profile-dialog-heading" tabindex="-1" class="text-xl font-semibold">My profile</h2>
-    } @else {
-      <h1 class="text-xl font-semibold">My profile</h1>
-    }
-    @if (ref) {
-      <button matIconButton type="button" aria-label="Close profile" (click)="ref.close()" [disabled]="isSaving()">
-        <mat-icon svgIcon="x" />
-      </button>
-    }
+<section class="flex max-h-[calc(100dvh-2rem)] min-h-0 flex-col bg-panel text-ink">
+  <header class="flex shrink-0 items-center justify-between gap-4 border-b border-divider px-6 py-4">
+    <h2 id="profile-dialog-heading" tabindex="-1" class="text-[1.125rem] font-medium">Edit profile</h2>
+    <button
+      class="ui-button ui-ghost ui-icon"
+      type="button"
+      aria-label="Close profile"
+      (click)="ref.close()"
+      [disabled]="isSaving()">
+      <mat-icon svgIcon="x" />
+    </button>
   </header>
-  <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
-    <div class="px-1 pt-6 pb-1">
-      <div class="relative mb-6 size-24">
-        <img
-          class="size-full rounded-full object-cover ring-2 ring-primary"
-          [src]="profileImageUrl()"
-          alt="Profile photo" />
+  <div class="min-h-0 overflow-y-auto overscroll-contain p-6">
+    <div class="mb-7 flex items-center gap-4">
+      <img class="size-16 rounded-full object-cover" [src]="profileImageUrl()" alt="Profile photo" />
+      <div>
         <input
           #profileImageInput
           type="file"
           accept="image/jpeg,image/png,image/webp"
           (change)="onProfileImageSelected($event)"
           [disabled]="isSaving()"
-          hidden />
+          hidden
+          aria-label="Choose a profile photo" />
         <button
-          matIconButton
+          class="ui-button ui-secondary"
           type="button"
-          class="absolute -right-1 -bottom-1 rounded-full bg-surface text-primary shadow-sm ring-2 ring-surface transition-transform duration-200 [--mat-icon-button-hover-state-layer-opacity:0] enabled:hover:scale-105 motion-reduce:transform-none motion-reduce:transition-none"
-          aria-label="Change profile photo"
           (click)="profileImageInput.click()"
           [disabled]="isSaving()">
-          <mat-icon
-            [svgIcon]="store.isUpdatingProfileImage() ? 'loader-circle' : 'camera'"
-            [class.animate-spin]="store.isUpdatingProfileImage()" />
+          {{ store.isUpdatingProfileImage() ? 'Uploading...' : 'Change photo' }}
         </button>
+        <p class="mt-2 text-[0.75rem] text-muted">Photo changes save immediately.</p>
       </div>
-      @if (store.isUpdatingProfileImage()) {
-        <p role="status" class="sr-only">Uploading profile photo...</p>
-      }
-      @if (store.profileImageError()) {
-        <message class="mb-4" [message]="store.profileImageError()" (dismissed)="store.clearProfileImageMessage()" />
-      }
-      <form [id]="profileFormId" class="flex flex-col gap-4" (submit)="onUpdateProfile($event)">
-        <mat-form-field subscriptSizing="dynamic">
-          <mat-label>Name</mat-label>
-          <input matInput [formField]="profileForm.name" autocomplete="name" />
-          @if (profileForm.name().touched() && profileForm.name().errors()[0]; as error) {
-            <mat-error>{{ error.message }}</mat-error>
-          }
-        </mat-form-field>
-        <p class="text-sm text-on-surface-variant">Google account: {{ user?.email }}</p>
-        @if (!ref && store.profileUpdated()) {
-          <p role="status" class="text-sm text-primary">Your profile has been saved.</p>
-        }
-        @if (store.profileError()) {
-          <message [message]="store.profileError()" (dismissed)="store.clearProfileMessage()" />
-        }
-      </form>
     </div>
-  </div>
-  <footer class="admin-actions shrink-0 justify-end border-t p-4 sm:p-6">
-    @if (ref) {
-      <button matButton="outlined" type="button" class="admin-action" [disabled]="isSaving()" (click)="ref.close()">
-        Cancel
-      </button>
+    @if (store.profileImageError()) {
+      <p class="ui-alert mb-4" role="alert">{{ store.profileImageError() }}</p>
     }
+    @if (store.profileImageUpdated()) {
+      <p class="mb-4 text-[0.875rem] text-muted" role="status">Photo saved.</p>
+    }
+    <form [id]="profileFormId" class="flex flex-col gap-3" (submit)="onUpdateProfile($event)">
+      <label for="profile-name" class="text-[0.875rem] font-medium">Display name</label>
+      <input
+        id="profile-name"
+        class="ui-field"
+        [formField]="profileForm.name"
+        autocomplete="name"
+        aria-describedby="profile-name-error" />
+      <p id="profile-name-error" class="text-[0.875rem] text-danger" role="status">
+        @if (profileForm.name().touched() && profileForm.name().errors()[0]; as error) {
+          {{ error.message }}
+        }
+      </p>
+      <p class="text-[0.875rem] text-muted break-words">Google account: {{ user?.email }}</p>
+      @if (store.profileError()) {
+        <p class="ui-alert" role="alert">{{ store.profileError() }}</p>
+      }
+    </form>
+  </div>
+  <footer class="flex shrink-0 justify-end gap-3 border-t border-divider p-5">
+    <button class="ui-button ui-ghost" type="button" [disabled]="isSaving()" (click)="ref.close()">Cancel</button>
     <button
-      matButton="filled"
-      class="admin-action"
+      class="ui-button ui-primary"
       type="submit"
       [attr.form]="profileFormId"
       [disabled]="isSaving() || profileForm().invalid()">
-      {{ isSaving() ? 'Saving...' : 'Save' }}
+      {{ isSaving() ? 'Saving...' : 'Save changes' }}
     </button>
   </footer>
 </section>
