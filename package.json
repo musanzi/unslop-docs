@@ -30,7 +30,8 @@
     "test": "nx test api",
     "test:api": "nx test api",
     "test:api:watch": "nx run api:test-watch",
-    "typecheck:api:tests": "nx run api:typecheck-spec"
+    "typecheck:api:tests": "nx run api:typecheck-spec",
+    "test:web": "nx test web"
   },
   "dependencies": {
     "@angular/aria": "22.1.0",

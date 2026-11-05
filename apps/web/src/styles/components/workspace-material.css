@@ -1,0 +1,6 @@
+.document-workspace-theme {
+  --mat-sidenav-container-background-color: var(--color-panel);
+  --mat-sidenav-sidenav-background-color: var(--color-canvas);
+  --mat-sidenav-content-background-color: var(--color-panel);
+  --mat-sidenav-container-text-color: var(--color-ink);
+}

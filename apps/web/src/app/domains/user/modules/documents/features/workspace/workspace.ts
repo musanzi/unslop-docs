@@ -13,7 +13,10 @@ import { DocumentsStore } from '../../data-access/documents.store';
   imports: [DatePipe, DecimalPipe, MatIcon, MatSidenav, MatSidenavContainer, MatSidenavContent, RouterLink],
   providers: [DocumentsStore],
   templateUrl: './workspace.html',
-  styleUrl: './workspace.scss',
+  host: {
+    class:
+      'document-workspace-theme block text-[0.9375rem] leading-[1.5] text-ink scheme-dark selection:bg-ink selection:text-canvas [&_a]:text-inherit [&_a]:no-underline [&_a:hover]:underline [&_a:hover]:underline-offset-[0.2em] [&_button]:cursor-pointer [&_button:disabled]:cursor-default [&_button:disabled]:text-muted [&_button:disabled]:opacity-65 [&_:is(a,button):focus-visible]:outline-2 [&_:is(a,button):focus-visible]:outline-offset-[3px] [&_:is(a,button):focus-visible]:outline-ink [&_mat-icon]:size-4.5 [&_mat-icon]:shrink-0'
+  },
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class Workspace {

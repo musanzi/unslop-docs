@@ -2,6 +2,19 @@
 /* Main theme configuration                                                   */
 /* -------------------------------------------------------------------------- */
 @theme {
+  --font-editorial: 'Newsreader', Georgia, serif;
+  --font-interface: 'Inter', Arial, sans-serif;
+  --font-document: Georgia, 'Times New Roman', serif;
+  --color-canvas: #191919;
+  --color-panel: #202020;
+  --color-hover: #303030;
+  --color-divider: #454540;
+  --color-ink: #ecebe8;
+  --color-muted: #aaa9a5;
+  --color-danger: #ffb4a5;
+  --color-paper-hover: #d4d3cb;
+  --color-paper-pressed: #d5d4d0;
+
   /* Font family */
   --font-sans: 'DM Sans', sans-serif;
 
