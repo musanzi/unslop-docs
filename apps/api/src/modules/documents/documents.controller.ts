@@ -5,6 +5,7 @@ import { DocumentAssessmentResponse } from './dto/document-assessment-response';
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Header,
   HttpCode,
@@ -22,6 +23,7 @@ import {
   ApiBody,
   ApiConsumes,
   ApiCreatedResponse,
+  ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -36,6 +38,7 @@ import { CurrentUser } from '../auth/decorators';
 import { UploadDocument } from './commands/upload-document.handler';
 import { RetryDocument } from './commands/retry-document.handler';
 import { UnslopifyDocument } from './commands/unslopify-document.handler';
+import { DeleteDocument } from './commands/delete-document.handler';
 import { UnslopifyDocumentDto } from './dto/unslopify-document.dto';
 import { FindDocumentPreview } from './queries/find-document-preview.handler';
 import { DocumentPreviewResponse } from './dto/document-preview-response';
@@ -154,6 +157,24 @@ export class DocumentsController extends AbstractController {
   original(@CurrentUser('id') ownerId: string, @Param('id') id: string): Promise<StreamableFile> {
     return this.queryHandler.execute(new DownloadDocument(ownerId, id));
   }
+  @Delete(':id')
+  @HttpCode(204)
+  @Header('Cache-Control', 'private, no-store')
+  @ApiOperation({
+    summary: 'Delete your document and everything stored for it',
+    description:
+      'Removes the record, original, preview, assessments, revised DOCX, revision notices and processing checkpoints. Usage records stay unchanged, so deleting a completed document never restores allowance. Once the document is gone, repeating the request returns the same 404 as a document that never existed.'
+  })
+  @ApiNoContentResponse({ description: 'Document and its stored files are deleted' })
+  @ApiNotFoundResponse({ description: 'Document does not exist, belongs to another user, or was already deleted' })
+  @ApiConflictResponse({ description: 'Document is queued or processing; wait until it finishes or fails' })
+  @ApiServiceUnavailableResponse({
+    description: 'A stored file could not be removed; the record remains so the deletion can be repeated'
+  })
+  remove(@CurrentUser('id') ownerId: string, @Param('id') id: string): Promise<void> {
+    return this.commandHandler.execute(new DeleteDocument(ownerId, id));
+  }
+
   @Get(':id/revised')
   @Header('Cache-Control', 'private, no-store')
   @ApiOperation({ summary: 'Download your validated revised DOCX' })

@@ -33,6 +33,7 @@ import { UploadDocumentHandler } from './commands/upload-document.handler';
 import { RetryDocumentHandler } from './commands/retry-document.handler';
 import { FindDocumentsHandler } from './queries/find-documents.handler';
 import { DownloadDocumentHandler } from './queries/download-document.handler';
+import { DeleteDocumentHandler } from './commands/delete-document.handler';
 import { UnslopifyDocumentHandler } from './commands/unslopify-document.handler';
 import { FindDocumentPreviewHandler } from './queries/find-document-preview.handler';
 import { assessmentRubric } from './assessment-workflow';
@@ -48,9 +49,14 @@ describe('Private documents HTTP', () => {
   let records: Document[] = [];
   let databaseFailure = '';
   let settleCommit: (() => void) | undefined;
+  const deleted = new Set<string>();
   const query = async (sql: string, values: unknown[]) => {
     if (sql.startsWith('SELECT * FROM document'))
       return records.filter((record) => record.id === values[0] && record.ownerId === values[1]);
+    if (sql.startsWith('DELETE FROM document')) {
+      deleted.add(values[0] as string);
+      return [];
+    }
     if (sql.startsWith('UPDATE document')) {
       const record = records.find((record) => record.id === values[0]);
       Object.assign(record, { status: 'queued', failureCode: null });
@@ -105,7 +111,8 @@ describe('Private documents HTTP', () => {
           throw new Error('Connection lost while committing');
         }
         if (databaseFailure === 'commit' || databaseFailure === 'unavailable') throw new Error('Commit failed');
-        records = pending;
+        records = pending.filter((record) => !deleted.has(record.id));
+        deleted.clear();
         if (databaseFailure === 'acknowledgement') throw new Error('Commit acknowledgement lost');
         return result;
       }
@@ -154,6 +161,7 @@ describe('Private documents HTTP', () => {
         FindAllowanceHandler,
         FindDocumentHandler,
         DownloadDocumentHandler,
+        DeleteDocumentHandler,
         {
           provide: DocumentStorage,
           useFactory: () => new DocumentStorage(join(root, 'private'), join(root, 'public'))
@@ -192,6 +200,7 @@ describe('Private documents HTTP', () => {
   });
   beforeEach(async () => {
     records = [];
+    deleted.clear();
     databaseFailure = '';
     await rm(join(root, 'private'), { recursive: true, force: true });
     await mkdir(join(root, 'private'));
@@ -397,6 +406,64 @@ describe('Private documents HTTP', () => {
       data: { status: 'assessed', phase: 'assessment', strength: null, assessment }
     });
     expect((await previewOf(documents[35].id)).status).toBe(200);
+  });
+
+  function remove(id: string, identity = 'owner') {
+    return fetch(`${base}/documents/${id}`, {
+      method: 'DELETE',
+      headers: identity ? { 'test-identity': identity } : {}
+    });
+  }
+
+  it('deletes an owned idle document with every stored file and refuses strangers, repeats and active work', async () => {
+    const { data } = await (await upload(await docxFixture())).json();
+    expect((await remove(data.id, '')).status).toBe(401);
+    const active = await remove(data.id);
+    expect(active.status).toBe(409);
+    expect(await active.json()).toMatchObject({
+      message: 'This document is still being processed. Wait until it finishes or fails before deleting it.'
+    });
+    Object.assign(records[0], {
+      status: 'processing',
+      phase: 'rewrite',
+      assessment,
+      preview,
+      strength: 50,
+      processingStage: 'editing'
+    });
+    expect((await remove(data.id)).status).toBe(409);
+    const revisedKey = `${randomUUID()}.docx`;
+    await writeFile(join(root, 'private', revisedKey), 'revised bytes');
+    Object.assign(records[0], { status: 'completed', processingStage: null, revisedKey, revisedSize: 13 });
+    const missing = await remove(randomUUID());
+    expect(missing.status).toBe(404);
+    const missingBody = await missing.json();
+    for (const [id, identity] of [
+      [data.id, 'other'],
+      [data.id, 'admin'],
+      ['invalid', 'owner']
+    ]) {
+      const denied = await remove(id, identity);
+      expect(denied.status).toBe(404);
+      expect(await denied.json()).toEqual(missingBody);
+    }
+    expect((await readdir(join(root, 'private'))).sort()).toEqual([records[0].originalKey, revisedKey].sort());
+    expect((await download(data.id)).status).toBe(200);
+    const response = await remove(data.id);
+    expect(response.status).toBe(204);
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(await response.text()).toBe('');
+    expect(await readdir(join(root, 'private'))).toEqual([]);
+    expect(await (await list()).json()).toMatchObject({ data: { items: [], total: 0 } });
+    expect((await fetch(`${base}/documents/${data.id}`, { headers: { 'test-identity': 'owner' } })).status).toBe(404);
+    expect((await previewOf(data.id)).status).toBe(404);
+    expect((await download(data.id)).status).toBe(404);
+    expect(
+      (await fetch(`${base}/documents/${data.id}/revised`, { headers: { 'test-identity': 'owner' } })).status
+    ).toBe(404);
+    const repeated = await remove(data.id);
+    expect(repeated.status).toBe(404);
+    expect(await repeated.json()).toEqual(missingBody);
   });
 
   it('uploads a DOCX, lists its metadata and downloads the exact original privately', async () => {

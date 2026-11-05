@@ -9,6 +9,7 @@ import { DocumentStorage } from './document-storage';
 import { UploadDocumentHandler } from './commands/upload-document.handler';
 import { RetryDocumentHandler } from './commands/retry-document.handler';
 import { UnslopifyDocumentHandler } from './commands/unslopify-document.handler';
+import { DeleteDocumentHandler } from './commands/delete-document.handler';
 import { FindDocumentPreviewHandler } from './queries/find-document-preview.handler';
 import { FindDocumentsHandler } from './queries/find-documents.handler';
 import { DownloadDocumentHandler } from './queries/download-document.handler';
@@ -21,6 +22,7 @@ import { DownloadDocumentHandler } from './queries/download-document.handler';
     UploadDocumentHandler,
     RetryDocumentHandler,
     UnslopifyDocumentHandler,
+    DeleteDocumentHandler,
     FindDocumentPreviewHandler,
     FindAllowanceHandler,
     AllowanceClock,
