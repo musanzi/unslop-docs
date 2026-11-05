@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { readerFixture, textParagraph } from '@api/shared/testing/docx-reader-fixture';
 import { languageSamples } from '@api/shared/testing/docx-language-fixtures';
@@ -76,6 +78,23 @@ describe('Revision preservation corpus', () => {
       });
     }
   );
+
+  it.each([
+    'english-content-controls',
+    'french-content-controls',
+    'header-content-controls',
+    'tracked-changes-final-version',
+    'text-box'
+  ])('revises the committed %s fixture into a readable DOCX without kept passages', async (name) => {
+    const original = await readFile(join(__dirname, `../../shared/testing/fixtures/docx/${name}.docx`));
+    const source = await readDocx(original);
+    const result = await createDocumentWorkflow(faithfulRevisionProvider(), 'rules').invoke({ source });
+    const revised = await readDocx(result.revised);
+    expect(revised.text).toBe(source.text.replaceAll('In order to', 'To').replaceAll('Dans le but de', 'Pour'));
+    expect(revised.readXmlPart(revised.mainPart)).not.toMatch(/<w:(sdt|ins|del|moveFrom|moveTo)\b/);
+    expect(result.notices.keptPassages).toEqual([]);
+    await expect(validateRevisedDocx(source, result.revised)).resolves.toBeUndefined();
+  });
 
   it('revises the final version of a document with content controls and tracked changes', async () => {
     const revision = 'w:id="1" w:author="Tutor" w:date="2026-01-01T00:00:00Z"';

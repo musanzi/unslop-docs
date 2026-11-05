@@ -341,7 +341,11 @@ describe('DOCX reader', () => {
   it.each(docxFixtureCases)('checks the committed $name upload fixture', async ({ name, rejection }) => {
     const bytes = await readFile(join(__dirname, `../../shared/testing/fixtures/docx/${name}.docx`));
     if (rejection) await expect(readDocx(bytes)).rejects.toThrow(rejection);
-    else expect((await readDocx(bytes)).wordCount).toBeGreaterThan(0);
+    else {
+      const result = await readDocx(bytes);
+      expect(result.wordCount).toBeGreaterThan(0);
+      expect(result.readXmlPart(result.mainPart)).not.toMatch(/<w:(sdt|ins|del|moveFrom|moveTo)\b/);
+    }
   });
 
   it('bounds XML node counts and cyclic style inheritance', async () => {

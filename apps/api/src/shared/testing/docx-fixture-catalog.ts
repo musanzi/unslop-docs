@@ -1,6 +1,7 @@
 import { docxFixture } from './docx-fixture';
-import { readerFixture, textParagraph } from './docx-reader-fixture';
+import { readerFixture, textParagraph, wordNamespace } from './docx-reader-fixture';
 import { languageSamples } from './docx-language-fixtures';
+import { revisionPassages } from './revision-passages';
 
 function essay(language: 'english' | 'french') {
   const title = language === 'english' ? 'River study' : 'Étude de la rivière';
@@ -11,6 +12,28 @@ function essay(language: 'english' | 'french') {
     <w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>${observation}</w:t></w:r></w:p>
     <w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w="2400"/><w:gridCol w:w="2400"/></w:tblGrid><w:tr><w:tc>${textParagraph(observation)}</w:tc><w:tc>${textParagraph('12')}</w:tc></w:tr></w:tbl>`;
 }
+
+export const contentControl = (content: string, alias: string) =>
+  `<w:sdt><w:sdtPr><w:alias w:val="${alias}"/><w:tag w:val="${alias}"/></w:sdtPr><w:sdtContent>${content}</w:sdtContent></w:sdt>`;
+
+function controlledEssay(language: 'english' | 'french') {
+  const title = language === 'english' ? 'River study' : 'Étude de la rivière';
+  const name = language === 'english' ? 'Student name' : 'Nom de l’étudiant';
+  const site = language === 'english' ? 'Sampling site' : 'Point de prélèvement';
+  return `<w:p><w:pPr><w:pStyle w:val="ResearchTitle"/></w:pPr><w:r><w:t>${title}</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">${name}: </w:t></w:r>${contentControl('<w:r><w:rPr><w:b/></w:rPr><w:t>Alex</w:t></w:r>', 'Name')}</w:p>
+    ${contentControl(textParagraph(languageSamples[language]) + contentControl(textParagraph(revisionPassages[language]), 'Passage'), 'Body')}
+    <w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w="2400"/><w:gridCol w:w="2400"/></w:tblGrid>${contentControl(
+      `<w:tr>${contentControl(`<w:tc>${textParagraph(site)}</w:tc>`, 'Cell')}<w:tc>${textParagraph('12')}</w:tc></w:tr>`,
+      'Row'
+    )}</w:tbl>`;
+}
+
+const revision = 'w:id="1" w:author="Tutor" w:date="2026-01-01T00:00:00Z"';
+const trackedChanges = `<w:p><w:pPr><w:rPr><w:ins ${revision}/></w:rPr><w:pPrChange ${revision}><w:pPr/></w:pPrChange></w:pPr><w:r><w:t xml:space="preserve">The tutor </w:t></w:r><w:ins ${revision}><w:r><w:t xml:space="preserve">inserted this clause and </w:t></w:r></w:ins><w:del ${revision}><w:r><w:delText xml:space="preserve">removed this one and </w:delText></w:r></w:del><w:r><w:rPr><w:b/><w:rPrChange ${revision}><w:rPr><w:i/></w:rPr></w:rPrChange></w:rPr><w:t>changed the formatting.</w:t></w:r></w:p>
+  <w:p><w:moveFromRangeStart ${revision} w:name="move"/><w:moveFrom ${revision}><w:r><w:t>This sentence moved down.</w:t></w:r></w:moveFrom><w:moveFromRangeEnd w:id="1"/></w:p>
+  <w:p><w:moveToRangeStart ${revision} w:name="move"/><w:moveTo ${revision}><w:r><w:t>This sentence moved down.</w:t></w:r></w:moveTo><w:moveToRangeEnd w:id="1"/></w:p>
+  <w:tbl><w:tblPr><w:tblPrChange ${revision}><w:tblPr/></w:tblPrChange></w:tblPr><w:tblGrid><w:gridCol w:w="2400"/></w:tblGrid><w:tr><w:trPr><w:del ${revision}/></w:trPr><w:tc>${textParagraph('Deleted row')}</w:tc></w:tr><w:tr><w:trPr><w:ins ${revision}/></w:trPr><w:tc>${textParagraph('Inserted row')}</w:tc></w:tr></w:tbl>`;
 
 const preserved = `<w:p><w:r><w:drawing><wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><wp:extent cx="914400" cy="914400"/><wp:docPr id="1" name="Sample image"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="0" name="Sample image"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="image"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="914400" cy="914400"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>
   <w:p><m:oMath><m:r><m:t>x = 2</m:t></m:r></m:oMath></w:p>
@@ -25,6 +48,23 @@ export const docxFixtureCases: readonly { name: string; rejection?: string; crea
   { name: 'short-uncertain', create: () => readerFixture(textParagraph('Bonjour, monde.')) },
   { name: 'exactly-10000-words', create: () => readerFixture(textParagraph('word '.repeat(10000))) },
   { name: 'over-10000-words', rejection: '10,001', create: () => readerFixture(textParagraph('word '.repeat(10001))) },
+  { name: 'english-content-controls', create: () => readerFixture(controlledEssay('english') + preserved) },
+  { name: 'french-content-controls', create: () => readerFixture(controlledEssay('french') + preserved) },
+  {
+    name: 'header-content-controls',
+    create: () =>
+      readerFixture(essay('english'), {
+        'word/header1.xml': `<w:hdr xmlns:w="${wordNamespace}"><w:p>${contentControl('<w:r><w:t>Research paper</w:t></w:r>', 'Title')}</w:p></w:hdr>`,
+        'word/footnotes.xml': `<w:footnotes xmlns:w="${wordNamespace}"><w:footnote w:id="1"><w:p><w:ins ${revision}><w:r><w:t>Footnote evidence stays unchanged.</w:t></w:r></w:ins></w:p></w:footnote></w:footnotes>`
+      })
+  },
+  { name: 'tracked-changes-final-version', create: () => readerFixture(essay('english') + trackedChanges) },
+  {
+    name: 'controls-over-10000-words',
+    rejection: '10,001',
+    create: () =>
+      readerFixture(contentControl(textParagraph('word '.repeat(5001)), 'Body') + textParagraph('word '.repeat(5000)))
+  },
   {
     name: 'tracked-changes',
     create: () =>
