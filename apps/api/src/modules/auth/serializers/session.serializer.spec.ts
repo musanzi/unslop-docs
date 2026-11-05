@@ -43,10 +43,10 @@ describe('Google sessions', () => {
     const { serializer, config, module } = await setup();
     const done = vi.fn();
     await serializer.deserializeUser('user-1', done);
-    expect(done).toHaveBeenLastCalledWith(null, expect.objectContaining({ isAdmin: true }));
+    expect(done).toHaveBeenLastCalledWith(null, expect.objectContaining({ isAdmin: true, roles: ['admin'] }));
     config.set('ADMIN_EMAIL', 'other@example.com');
     await serializer.deserializeUser('user-1', done);
-    expect(done).toHaveBeenLastCalledWith(null, expect.objectContaining({ isAdmin: false }));
+    expect(done).toHaveBeenLastCalledWith(null, expect.objectContaining({ isAdmin: false, roles: ['user'] }));
     await module.close();
   });
 });

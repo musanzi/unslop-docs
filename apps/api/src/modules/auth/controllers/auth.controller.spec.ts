@@ -382,10 +382,36 @@ describe('Google-only HTTP surface', () => {
     googleProfile.emails[0].value = 'admin@example.com';
     const cookie = await signIn();
     expect((await fetch(`${base}/users`, { headers: { cookie } })).status).toBe(200);
+    expect(await (await fetch(`${base}/auth/me`, { headers: { cookie } })).json()).toMatchObject({
+      isAdmin: true,
+      roles: ['admin']
+    });
     config.set('ADMIN_EMAIL', 'replacement@example.com');
     expect((await fetch(`${base}/users`, { headers: { cookie } })).status).toBe(403);
     const profile = await fetch(`${base}/auth/me`, { headers: { cookie } });
-    expect(await profile.json()).toMatchObject({ isAdmin: false });
+    expect(await profile.json()).toMatchObject({ isAdmin: false, roles: ['user'] });
+  });
+
+  it('reports the admin role in user listings, details, profile edits, and status edits', async () => {
+    const { cookie } = await adminSession();
+    const admin = { id: 'user-2', roles: ['admin'], isAdmin: true };
+    const headers = { cookie, 'content-type': 'application/json' };
+    const listing = await fetch(`${base}/users`, { headers });
+    expect(await listing.json()).toEqual([
+      [expect.objectContaining({ id: 'user-1', roles: ['user'], isAdmin: false }), expect.objectContaining(admin)],
+      2
+    ]);
+    const detail = await fetch(`${base}/users/by-id/user-2`, { headers });
+    expect(await detail.json()).toMatchObject(admin);
+    const edited = await fetch(`${base}/auth/me/update`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ name: 'Updated admin' })
+    });
+    expect(await edited.json()).toMatchObject({ ...admin, name: 'Updated admin' });
+    for (const status of ['FREE', 'GOLD']) {
+      expect(await (await changeStatus(cookie, status, 'user-2')).json()).toMatchObject({ ...admin, status });
+    }
   });
 
   it('does not grant admin access through a profile email or role edit', async () => {

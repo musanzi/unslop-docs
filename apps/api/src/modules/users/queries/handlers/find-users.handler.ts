@@ -1,3 +1,4 @@
+import { ConfigService } from '@nestjs/config';
 import { BadRequestException, Logger } from '@nestjs/common';
 import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -14,7 +15,8 @@ export class FindUsersHandler implements IQueryHandler<FindUsers, [IUserResponse
 
   constructor(
     @InjectRepository(User)
-    private readonly repository: Repository<User>
+    private readonly repository: Repository<User>,
+    private readonly config: ConfigService
   ) {}
 
   async execute(query: FindUsers): Promise<[IUserResponse[], number]> {
@@ -32,7 +34,7 @@ export class FindUsersHandler implements IQueryHandler<FindUsers, [IUserResponse
         .skip((pageNumber - 1) * limitNumber)
         .take(limitNumber)
         .getManyAndCount();
-      return [mapUsersRoles(users), total];
+      return [mapUsersRoles(users, this.config.getOrThrow<string>('ADMIN_EMAIL')), total];
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
 

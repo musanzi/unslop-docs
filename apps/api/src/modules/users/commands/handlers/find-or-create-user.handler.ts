@@ -1,3 +1,4 @@
+import { ConfigService } from '@nestjs/config';
 import { UnauthorizedException } from '@nestjs/common';
 import { CommandHandler, EventBus, ICommandHandler } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -14,6 +15,7 @@ export class FindOrCreateUserHandler implements ICommandHandler<FindOrCreateUser
   constructor(
     @InjectRepository(User) private readonly repository: Repository<User>,
     @InjectRepository(Role) private readonly roles: Repository<Role>,
+    private readonly config: ConfigService,
     private readonly eventBus: EventBus
   ) {}
 
@@ -42,6 +44,6 @@ export class FindOrCreateUserHandler implements ICommandHandler<FindOrCreateUser
     );
     if (!existing) this.eventBus.publish(new WelcomeUserEvent(saved));
     const current = existing ? await this.repository.findOneOrFail({ where: { id: saved.id } }) : saved;
-    return mapUserRoles(current);
+    return mapUserRoles(current, this.config.getOrThrow<string>('ADMIN_EMAIL'));
   }
 }

@@ -61,7 +61,7 @@ describe('Application navigation', () => {
   );
 
   it.each([false, true])('opens documents from the root for an authenticated account (admin: %s)', async (admin) => {
-    auth.isUser.mockReturnValue(true);
+    auth.isUser.mockReturnValue(!admin);
     auth.isAdmin.mockReturnValue(admin);
     await RouterTestingHarness.create('/');
     expect(TestBed.inject(Router).url).toBe('/user/documents');
@@ -80,7 +80,6 @@ describe('Application navigation', () => {
     expect(router.routerState.snapshot.root.firstChild?.queryParamMap.get('error')).toBe('google-cancelled');
   });
   it('opens direct admin details and supports browser back to the user list', async () => {
-    auth.isUser.mockReturnValue(true);
     auth.isAdmin.mockReturnValue(true);
     TestBed.inject(Router).setUpLocationChangeListener();
     const harness = await RouterTestingHarness.create('/admin/users/user-1');

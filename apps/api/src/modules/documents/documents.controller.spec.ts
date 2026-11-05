@@ -1,3 +1,4 @@
+import { ConfigService } from '@nestjs/config';
 import { FindAllowanceHandler } from './queries/find-allowance.handler';
 import { AllowanceClock, MonthlyAllowance } from './monthly-allowance';
 import { FindDocumentHandler } from './queries/find-document.handler';
@@ -130,6 +131,7 @@ describe('Private documents HTTP', () => {
       ],
       controllers: [DocumentsController, UsersController, StatsController],
       providers: [
+        { provide: ConfigService, useValue: new ConfigService({ ADMIN_EMAIL: 'admin@example.com' }) },
         FindUsersHandler,
         FindUserByEmailHandler,
         ExportUsersCsvHandler,

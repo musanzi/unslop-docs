@@ -27,8 +27,7 @@ export class SessionSerializer extends PassportSerializer {
         done(null, false);
         return;
       }
-      const adminEmail = this.config.getOrThrow<string>('ADMIN_EMAIL').trim().toLowerCase();
-      done(null, { ...mapUserRoles(user), isAdmin: user.email.toLowerCase() === adminEmail });
+      done(null, mapUserRoles(user, this.config.getOrThrow<string>('ADMIN_EMAIL')));
     } catch (error) {
       done(error as Error);
     }

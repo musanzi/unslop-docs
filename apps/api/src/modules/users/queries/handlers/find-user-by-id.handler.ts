@@ -1,3 +1,4 @@
+import { ConfigService } from '@nestjs/config';
 import { Logger, NotFoundException } from '@nestjs/common';
 import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -13,7 +14,8 @@ export class FindUserByIdHandler implements IQueryHandler<FindUserById, IUserRes
 
   constructor(
     @InjectRepository(User)
-    private readonly repository: Repository<User>
+    private readonly repository: Repository<User>,
+    private readonly config: ConfigService
   ) {}
 
   async execute(query: FindUserById): Promise<IUserResponse> {
@@ -22,7 +24,7 @@ export class FindUserByIdHandler implements IQueryHandler<FindUserById, IUserRes
         where: { id: query.id },
         relations: { roles: true }
       });
-      return mapUserRoles(user);
+      return mapUserRoles(user, this.config.getOrThrow<string>('ADMIN_EMAIL'));
     } catch (error) {
       this.logger.error(
         `Find user by id failed id="${query.id}": ${error instanceof Error ? error.message : String(error)}`

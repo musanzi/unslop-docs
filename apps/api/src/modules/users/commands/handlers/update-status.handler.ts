@@ -1,3 +1,4 @@
+import { ConfigService } from '@nestjs/config';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -9,7 +10,10 @@ import { UpdateStatus } from '../impl/update-status.command';
 
 @CommandHandler(UpdateStatus)
 export class UpdateStatusHandler implements ICommandHandler<UpdateStatus, IUserResponse> {
-  constructor(@InjectRepository(User) private readonly repository: Repository<User>) {}
+  constructor(
+    @InjectRepository(User) private readonly repository: Repository<User>,
+    private readonly config: ConfigService
+  ) {}
 
   async execute({ userId, status, admin }: UpdateStatus): Promise<IUserResponse> {
     if (!admin.isAdmin) throw new ForbiddenException();
@@ -18,7 +22,7 @@ export class UpdateStatusHandler implements ICommandHandler<UpdateStatus, IUserR
       const users = manager.getRepository(User);
       const user = await users.findOne({ where: { id: userId }, lock: { mode: 'pessimistic_write' } });
       if (!user) throw new NotFoundException('User not found');
-      if (user.status === status) return mapUserRoles(user);
+      if (user.status === status) return mapUserRoles(user, this.config.getOrThrow<string>('ADMIN_EMAIL'));
 
       const changes = manager.getRepository(StatusChange);
       const change = changes.create({
@@ -31,7 +35,7 @@ export class UpdateStatusHandler implements ICommandHandler<UpdateStatus, IUserR
       await users.update(userId, { status });
       await changes.save(change);
       const updated = await users.findOneByOrFail({ id: userId });
-      return mapUserRoles(updated);
+      return mapUserRoles(updated, this.config.getOrThrow<string>('ADMIN_EMAIL'));
     });
   }
 }

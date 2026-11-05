@@ -1,3 +1,4 @@
+import { ConfigService } from '@nestjs/config';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -49,7 +50,8 @@ describe('User queries', () => {
         FindUserByIdHandler,
         FindUserByEmailHandler,
         FindUsersHandler,
-        { provide: getRepositoryToken(User), useValue: repository }
+        { provide: getRepositoryToken(User), useValue: repository },
+        { provide: ConfigService, useValue: new ConfigService({ ADMIN_EMAIL: 'admin@example.com' }) }
       ]
     }).compile();
     byId = module.get(FindUserByIdHandler);

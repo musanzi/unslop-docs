@@ -44,7 +44,6 @@ export class AuthController extends AbstractController {
   @ApiOperation({ summary: 'Update the current user profile' })
   @ApiOkResponse({ type: UserResponse, description: 'Profile updated' })
   async updateProfile(@CurrentUser() user: IUserResponse, @Body() dto: UpdateProfileDto): Promise<IUserResponse> {
-    const updated = await this.commandHandler.execute(new UpdateProfile(user, dto));
-    return { ...updated, isAdmin: user.isAdmin };
+    return this.commandHandler.execute(new UpdateProfile(user, dto));
   }
 }
