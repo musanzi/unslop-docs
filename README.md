@@ -274,4 +274,12 @@ Run `pnpm test:web` to check root and fallback navigation, authentication guards
 docker compose -f compose.prod.yml up -d --build
 ```
 
-Apply migrations separately during deployment. Back up PostgreSQL and uploaded files before releases. Compose stores PostgreSQL data, Redis data, public uploads, and private documents in separate named volumes. Back up `documents_data` together with PostgreSQL. If you move a volume between development and production, give the production `node` user ownership of the private directory and its files before starting the API. `down` preserves those volumes. `down -v` deletes them.
+The production API image contains only compiled output and production dependencies, so `pnpm` and `nx` are not available inside it. Apply migrations with the TypeORM CLI against the compiled data source:
+
+```sh
+docker compose -f compose.prod.yml exec api node_modules/.bin/typeorm migration:run -d dist/apps/api/src/modules/database/orm.config.js
+```
+
+### Continuous deployment
+
+Pushes to `main` run the CI workflow. When CI succeeds, the Deploy workflow connects to the VPS over SSH and runs `tools/deploy.sh`, which pulls `main`, rebuilds the Compose stack under the `unslopy` project name, applies migrations with the command above, and waits for `/health` to respond. The workflow needs three repository secrets: `VPS_HOST`, `VPS_USER`, and `VPS_SSH_KEY` (a private key whose public half is in the server's `authorized_keys`). Trigger a redeploy without a push from the Actions tab with "Run workflow". Back up PostgreSQL and uploaded files before releases. Compose stores PostgreSQL data, Redis data, public uploads, and private documents in separate named volumes. Back up `documents_data` together with PostgreSQL. If you move a volume between development and production, give the production `node` user ownership of the private directory and its files before starting the API. `down` preserves those volumes. `down -v` deletes them.
