@@ -571,6 +571,81 @@
         ]
       }
     },
+    "/users/{id}/status": {
+      "patch": {
+        "operationId": "UsersController_updateStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateStatusDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Change a user status and record the change (admin only)",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/users/{id}/status-changes": {
+      "get": {
+        "operationId": "UsersController_findStatusChanges",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StatusChangeResponse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Read status changes, newest first (admin only)",
+        "tags": [
+          "users"
+        ]
+      }
+    },
     "/users/{email}": {
       "get": {
         "operationId": "UsersController_findOneByEmail",
@@ -826,6 +901,15 @@
       "UserResponse": {
         "type": "object",
         "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "FREE",
+              "PREMIUM",
+              "GOLD"
+            ],
+            "example": "FREE"
+          },
           "isAdmin": {
             "type": "boolean",
             "description": "Admin access derived from the verified Google account and ADMIN_EMAIL",
@@ -875,6 +959,7 @@
           }
         },
         "required": [
+          "status",
           "isAdmin",
           "id",
           "createdAt",
@@ -892,6 +977,73 @@
             "example": "Alice Student"
           }
         }
+      },
+      "UpdateStatusDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "FREE",
+              "PREMIUM",
+              "GOLD"
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "StatusChangeResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "1"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "adminId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "adminEmail": {
+            "type": "string",
+            "example": "admin@example.com"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-11-05T12:00:00.000Z"
+          },
+          "previousStatus": {
+            "type": "string",
+            "enum": [
+              "FREE",
+              "PREMIUM",
+              "GOLD"
+            ]
+          },
+          "newStatus": {
+            "type": "string",
+            "enum": [
+              "FREE",
+              "PREMIUM",
+              "GOLD"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "userId",
+          "adminId",
+          "adminEmail",
+          "createdAt",
+          "previousStatus",
+          "newStatus"
+        ]
       },
       "RoleResponse": {
         "type": "object",

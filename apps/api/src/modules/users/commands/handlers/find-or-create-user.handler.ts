@@ -35,8 +35,13 @@ export class FindOrCreateUserHandler implements ICommandHandler<FindOrCreateUser
     user.email = identity.email.toLowerCase();
     user.googleEmailVerified = true;
     user.avatar ||= identity.avatar;
-    const saved = await this.repository.save(user);
+    const saved = await this.repository.save(
+      existing
+        ? { id: user.id, email: user.email, googleEmailVerified: user.googleEmailVerified, avatar: user.avatar }
+        : user
+    );
     if (!existing) this.eventBus.publish(new WelcomeUserEvent(saved));
-    return mapUserRoles(saved);
+    const current = existing ? await this.repository.findOneOrFail({ where: { id: saved.id } }) : saved;
+    return mapUserRoles(current);
   }
 }

@@ -1,4 +1,8 @@
-import { Controller, Get, Param, Post, Query, Res, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Res, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { UpdateStatusDto } from '../dto/update-status.dto';
+import { StatusChangeResponse } from '../interfaces/status-change-response';
+import { UpdateStatus } from '../commands/impl/update-status.command';
+import { FindStatusChanges } from '../queries/impl/find-status-changes.query';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBody, ApiConsumes, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AbstractController } from '@api/shared/abstracts';
@@ -54,6 +58,26 @@ export class UsersController extends AbstractController {
   ): Promise<IUserResponse> {
     const updated = await this.commandHandler.execute(new UploadUserAvatar(user.id, file));
     return { ...updated, isAdmin: user.isAdmin };
+  }
+
+  @Patch(':id/status')
+  @HasRoles([Roles.ADMIN])
+  @ApiOperation({ summary: 'Change a user status and record the change (admin only)' })
+  @ApiOkResponse({ type: UserResponse })
+  updateStatus(
+    @Param('id') id: string,
+    @Body() body: UpdateStatusDto,
+    @CurrentUser() admin: IUserResponse
+  ): Promise<IUserResponse> {
+    return this.commandHandler.execute(new UpdateStatus(id, body.status, admin));
+  }
+
+  @Get(':id/status-changes')
+  @HasRoles([Roles.ADMIN])
+  @ApiOperation({ summary: 'Read status changes, newest first (admin only)' })
+  @ApiOkResponse({ type: [StatusChangeResponse] })
+  findStatusChanges(@Param('id') id: string): Promise<StatusChangeResponse[]> {
+    return this.queryHandler.execute(new FindStatusChanges(id));
   }
 
   @Get(':email')

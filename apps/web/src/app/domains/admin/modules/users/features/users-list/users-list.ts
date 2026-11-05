@@ -1,6 +1,7 @@
 import { DatePipe } from '@angular/common';
-import { Component, inject } from '@angular/core';
+import { Component, inject, linkedSignal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { disabled, form, FormField } from '@angular/forms/signals';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialogModule } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
@@ -15,6 +16,7 @@ import { UsersService, UsersStore } from '@web/domains/admin/modules/users/data-
   imports: [
     DatePipe,
     FormsModule,
+    FormField,
     MatButtonModule,
     MatDialogModule,
     MatIconModule,
@@ -29,7 +31,16 @@ export default class UsersList {
   protected readonly data = inject(UsersService);
   protected readonly store = inject(UsersStore);
 
-  protected readonly displayedColumns = ['name', 'email', 'createdAt'];
+  protected readonly displayedColumns = ['name', 'email', 'status', 'createdAt', 'actions'];
+  protected readonly statusModel = linkedSignal(() => ({ status: this.data.selectedUser()?.status ?? 'FREE' }));
+  protected readonly statusForm = form(this.statusModel, (path) => {
+    disabled(path.status, () => this.store.isUpdating());
+  });
+
+  protected saveStatus(): void {
+    const user = this.data.selectedUser();
+    if (user) this.store.updateStatus({ userId: user.id, status: this.statusModel().status });
+  }
 
   protected onPageChange(event: PageEvent): void {
     this.data.page.set(event.pageIndex + 1);

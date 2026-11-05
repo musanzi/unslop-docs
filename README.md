@@ -2,7 +2,7 @@
 
 unslop-docs is a document-editing product for students. The planned first release accepts DOCX files in English or French, reports writing patterns in a writing assessment, edits the document, and returns a revised DOCX. A writing assessment does not establish AI authorship.
 
-Google-only sign-in, profile management, admin user listing, CSV export, and account statistics are available. Document upload, assessment, editing, private downloads, monthly allowances, and status management are not implemented yet. The [product specification](docs/product-spec.md) describes the intended behavior, and the [ticket index](docs/ticket-drafts/README.md) links the implementation issues.
+Google-only sign-in, profile management, admin user listing, status management with audit history, CSV export, and account statistics are available. Document upload, assessment, editing, private downloads, and monthly allowances are not implemented yet. The [product specification](docs/product-spec.md) describes the intended behavior, and the [ticket index](docs/ticket-drafts/README.md) links the implementation issues.
 
 ## Stack and structure
 
@@ -51,6 +51,26 @@ The seed creates only the `user` role. Accounts are created on the first Google 
 The Google-only migration deletes stored password hashes and removes legacy role assignments. Existing accounts remain in the database, but cannot authenticate without a Google identity. The application never links accounts by email. A Google sign-in with a legacy email creates a separate account. Existing sessions must sign in again. Back up the database before applying the migration: the deleted credentials cannot be recovered by a rollback.
 
 Password endpoints and admin account creation, CSV import, deletion, and role mutations return 404. User listing and CSV export remain available to the configured admin. Status management is implemented separately in issue #3.
+
+### Manage user statuses
+
+After applying the migrations, sign in with the configured admin account and open **Users**. Choose **Status and history** for a user, select FREE, PREMIUM, or GOLD, then choose **Save status**. The list updates without a page reload. The history shows the previous and new statuses, the admin email at the time of the change, and the date, newest first. The browser displays dates in your local time.
+
+The `UserStatuses1793880100000` migration gives every existing user FREE and creates the status history table. New Google accounts start with FREE. Profile edits and later Google sign-ins preserve the assigned status. Initial FREE assignments do not create history records.
+
+Each change locks the user's database row and commits the status and history record in one transaction. Submitting the current status writes no record. A failed audit write rolls back the status update. Reverting this migration removes all statuses and their history. Monthly allowance enforcement belongs to [issue #9](https://github.com/musanzi/unslop-docs/issues/9).
+
+The API exposes these endpoints:
+
+| Endpoint                                                 | Response                                                                                                                                   |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `PATCH /users/:id/status` with `{ "status": "PREMIUM" }` | Updated user, including status. Requires admin access.                                                                                     |
+| `GET /users/:id/status-changes`                          | Records with `id`, `userId`, `adminId`, `adminEmail`, `createdAt`, `previousStatus`, and `newStatus`, newest first. Requires admin access. |
+| `GET /auth/me`                                           | Current profile, including status. Requires sign-in.                                                                                       |
+
+The two status endpoints return 403 for non-admins and 404 for an unknown user. Invalid status values return 400. The API derives the acting admin from the authenticated session.
+
+To verify the UI on the owner's stack, apply the migration, change a user's status, and reopen their history. Confirm that the list and profile show the saved status, then sign in again as that user. Capture the status control and history for issue #3. Automated HTTP specs cover authorization, audit contents, no-op submissions, history order, rollback, and persistence, including concurrent profile and sign-in writes. PostgreSQL migration execution and browser screenshots require the running stack.
 
 ### Verify Google sign-in locally
 

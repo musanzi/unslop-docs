@@ -156,6 +156,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/users/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Change a user status and record the change (admin only) */
+        patch: operations["UsersController_updateStatus"];
+        trace?: never;
+    };
+    "/users/{id}/status-changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read status changes, newest first (admin only) */
+        get: operations["UsersController_findStatusChanges"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/users/{email}": {
         parameters: {
             query?: never;
@@ -230,6 +264,11 @@ export interface components {
     schemas: {
         UserResponse: {
             /**
+             * @example FREE
+             * @enum {string}
+             */
+            status: "FREE" | "PREMIUM" | "GOLD";
+            /**
              * @description Admin access derived from the verified Google account and ADMIN_EMAIL
              * @example false
              */
@@ -262,6 +301,29 @@ export interface components {
         UpdateProfileDto: {
             /** @example Alice Student */
             name?: string;
+        };
+        UpdateStatusDto: {
+            /** @enum {string} */
+            status: "FREE" | "PREMIUM" | "GOLD";
+        };
+        StatusChangeResponse: {
+            /** @example 1 */
+            id: string;
+            /** Format: uuid */
+            userId: string;
+            /** Format: uuid */
+            adminId: string;
+            /** @example admin@example.com */
+            adminEmail: string;
+            /**
+             * Format: date-time
+             * @example 2026-11-05T12:00:00.000Z
+             */
+            createdAt: string;
+            /** @enum {string} */
+            previousStatus: "FREE" | "PREMIUM" | "GOLD";
+            /** @enum {string} */
+            newStatus: "FREE" | "PREMIUM" | "GOLD";
         };
         RoleResponse: {
             /** @example b7f2c1e0-4a5d-4c8e-9f1a-2b3c4d5e6f7a */
@@ -641,6 +703,52 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+        };
+    };
+    UsersController_updateStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateStatusDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+        };
+    };
+    UsersController_findStatusChanges: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatusChangeResponse"][];
                 };
             };
         };

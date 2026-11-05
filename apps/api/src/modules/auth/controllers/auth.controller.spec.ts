@@ -10,7 +10,9 @@ import { UsersController } from '@api/modules/users/controllers';
 import { RolesController } from '@api/modules/roles/controllers';
 import { StatsController } from '@api/modules/stats/controllers';
 import { Role } from '@api/modules/roles/entities';
-import { User } from '@api/modules/users/entities';
+import { StatusChange, User } from '@api/modules/users/entities';
+import { UpdateStatusHandler } from '@api/modules/users/commands/handlers/update-status.handler';
+import { FindStatusChangesHandler } from '@api/modules/users/queries/handlers/find-status-changes.handler';
 import { userFixture } from '@api/shared/testing/fixtures';
 import { FindOrCreateUserHandler } from '@api/modules/users/commands/handlers/find-or-create-user.handler';
 import { FindUsersHandler } from '@api/modules/users/queries/handlers/find-users.handler';
@@ -55,6 +57,22 @@ describe('Google-only HTTP surface', () => {
     GOOGLE_REDIRECT_URI: 'http://localhost/auth/google/redirect'
   });
   let users: User[] = [];
+  let changes: StatusChange[] = [];
+  let beforeUserWrite: (() => Promise<void>) | undefined;
+  let failAudit = false;
+  let failCommit = false;
+  const historyRepository = {
+    find: async ({ where, order }) =>
+      changes
+        .filter((change) => change.userId === where.userId)
+        .sort((a, b) => {
+          const time = a.createdAt.getTime() - b.createdAt.getTime();
+          return (
+            (order.createdAt === 'DESC' ? -time : time) ||
+            (order.id === 'DESC' ? Number(b.id) - Number(a.id) : Number(a.id) - Number(b.id))
+          );
+        })
+  };
   const builder = {
     leftJoinAndSelect: () => builder,
     orderBy: () => builder,
@@ -63,13 +81,45 @@ describe('Google-only HTTP surface', () => {
     getManyAndCount: async () => [users, users.length]
   };
   const repository = {
+    existsBy: async ({ id }) => users.some((user) => user.id === id),
+    manager: {
+      transaction: async (work) => {
+        const pendingUsers = users.map((user) => ({ ...user }));
+        const pendingChanges = [...changes];
+        const transactionalUsers = {
+          findOne: async ({ where }) => pendingUsers.find((user) => user.id === where.id) ?? null,
+          findOneByOrFail: async ({ id }) => pendingUsers.find((user) => user.id === id),
+          update: async (id, patch) =>
+            Object.assign(
+              pendingUsers.find((user) => user.id === id),
+              patch
+            )
+        };
+        const transactionalChanges = {
+          create: (data) => Object.assign(new StatusChange(), data),
+          save: async (change) => {
+            if (failAudit) throw new Error('Audit storage unavailable');
+            pendingChanges.push({ ...change, id: String(pendingChanges.length + 1), createdAt: new Date() });
+          }
+        };
+        const result = await work({
+          getRepository: (entity) => (entity === User ? transactionalUsers : transactionalChanges)
+        });
+        if (failCommit) throw new Error('Commit failed');
+        users = pendingUsers;
+        changes = pendingChanges;
+        return result;
+      }
+    },
     findOne: async ({ where }) =>
       users.find((user) => Object.entries(where).every(([key, value]) => user[key] === value)) ?? null,
     findOneOrFail: async ({ where }) => users.find((user) => user.id === where.id),
     create: (data) => userFixture({ ...data, id: `user-${users.length + 1}` }),
     save: async (user) => {
-      users = [...users.filter((existing) => existing.id !== user.id), user];
-      return user;
+      await beforeUserWrite?.();
+      const saved = { ...users.find((existing) => existing.id === user.id), ...user };
+      users = [...users.filter((existing) => existing.id !== user.id), saved];
+      return saved;
     },
     merge: (user, changes) =>
       Object.assign(user, Object.fromEntries(Object.entries(changes).filter(([, value]) => value !== undefined))),
@@ -88,12 +138,15 @@ describe('Google-only HTTP surface', () => {
         FindOrCreateUserHandler,
         SessionSerializer,
         FindUsersHandler,
+        UpdateStatusHandler,
+        FindStatusChangesHandler,
         FindUserByIdHandler,
         UpdateUserHandler,
         UpdateProfileHandler,
         { provide: GoogleStrategy, useClass: FakeGoogleTransport },
         { provide: ConfigService, useValue: config },
         { provide: getRepositoryToken(User), useValue: repository },
+        { provide: getRepositoryToken(StatusChange), useValue: historyRepository },
         {
           provide: getRepositoryToken(Role),
           useValue: { findOneByOrFail: async () => ({ id: 'role-user', name: 'user' }) }
@@ -111,6 +164,10 @@ describe('Google-only HTTP surface', () => {
   });
   beforeEach(() => {
     users = [];
+    changes = [];
+    beforeUserWrite = undefined;
+    failAudit = false;
+    failCommit = false;
     config.set('ADMIN_EMAIL', 'ADMIN@example.com');
     googleProfile = {
       id: 'google-stable-subject',
@@ -146,11 +203,167 @@ describe('Google-only HTTP surface', () => {
   it('creates a user through Google, rotates the session and signs out', async () => {
     const cookie = await signIn();
     const profile = await fetch(`${base}/auth/me`, { headers: { cookie } });
-    expect(await profile.json()).toMatchObject({ email: 'alice@example.com', roles: ['user'], isAdmin: false });
+    expect(await profile.json()).toMatchObject({
+      email: 'alice@example.com',
+      roles: ['user'],
+      isAdmin: false,
+      status: 'FREE'
+    });
     const out = await fetch(`${base}/auth/signout`, { method: 'POST', headers: { cookie } });
     expect(out.status).toBe(201);
     expect((await fetch(`${base}/auth/me`, { headers: { cookie } })).status).toBe(403);
   });
+
+  it('lets the admin change status and read the recorded change through the API', async () => {
+    const userCookie = await signIn();
+    googleProfile = { ...googleProfile, id: 'admin-subject', emails: [{ value: 'admin@example.com', verified: true }] };
+    const cookie = await signIn();
+    const before = Date.now();
+    const response = await fetch(`${base}/users/user-1/status`, {
+      method: 'PATCH',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ status: 'PREMIUM', adminId: 'forged-admin' })
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ id: 'user-1', status: 'PREMIUM' });
+    const history = await fetch(`${base}/users/user-1/status-changes`, { headers: { cookie } });
+    expect(history.status).toBe(200);
+    const changes = await history.json();
+    expect(changes).toHaveLength(1);
+    expect(changes[0]).toMatchObject({
+      userId: 'user-1',
+      adminId: 'user-2',
+      adminEmail: 'admin@example.com',
+      previousStatus: 'FREE',
+      newStatus: 'PREMIUM'
+    });
+    expect(Date.parse(changes[0].createdAt)).toBeGreaterThanOrEqual(before);
+    expect(Date.parse(changes[0].createdAt)).toBeLessThanOrEqual(Date.now());
+    expect(await (await fetch(`${base}/auth/me`, { headers: { cookie: userCookie } })).json()).toMatchObject({
+      status: 'PREMIUM'
+    });
+    const list = await (await fetch(`${base}/users`, { headers: { cookie } })).json();
+    expect(list[0]).toContainEqual(expect.objectContaining({ id: 'user-1', status: 'PREMIUM' }));
+  });
+
+  async function adminSession() {
+    const userCookie = await signIn();
+    googleProfile = { ...googleProfile, id: 'admin-subject', emails: [{ value: 'admin@example.com', verified: true }] };
+    return { userCookie, cookie: await signIn() };
+  }
+
+  async function changeStatus(cookie: string, status: unknown, id = 'user-1') {
+    return fetch(`${base}/users/${id}/status`, {
+      method: 'PATCH',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ status })
+    });
+  }
+
+  async function statusHistory(cookie: string, id = 'user-1') {
+    return fetch(`${base}/users/${id}/status-changes`, { headers: { cookie } });
+  }
+
+  it('suppresses unchanged statuses and returns all changes newest first for only the requested user', async () => {
+    const { cookie } = await adminSession();
+    expect(await (await statusHistory(cookie)).json()).toEqual([]);
+    expect((await changeStatus(cookie, 'FREE')).status).toBe(200);
+    expect(await (await statusHistory(cookie)).json()).toEqual([]);
+    for (const status of ['PREMIUM', 'GOLD', 'FREE']) {
+      expect((await changeStatus(cookie, status)).status).toBe(200);
+      expect((await changeStatus(cookie, status)).status).toBe(200);
+    }
+    expect((await changeStatus(cookie, 'GOLD', 'user-2')).status).toBe(200);
+    const history = await (await statusHistory(cookie)).json();
+    expect(history.map(({ previousStatus, newStatus }) => [previousStatus, newStatus])).toEqual([
+      ['GOLD', 'FREE'],
+      ['PREMIUM', 'GOLD'],
+      ['FREE', 'PREMIUM']
+    ]);
+  });
+
+  it.each(['audit', 'commit'])('preserves the previous status and history when %s fails', async (failure) => {
+    const { cookie, userCookie } = await adminSession();
+    expect((await changeStatus(cookie, 'PREMIUM')).status).toBe(200);
+    const historyBefore = await (await statusHistory(cookie)).json();
+    failAudit = failure === 'audit';
+    failCommit = failure === 'commit';
+    expect((await changeStatus(cookie, 'GOLD')).status).toBe(500);
+    expect(await (await statusHistory(cookie)).json()).toEqual(historyBefore);
+    expect(await (await fetch(`${base}/auth/me`, { headers: { cookie: userCookie } })).json()).toMatchObject({
+      status: 'PREMIUM'
+    });
+  });
+
+  it('rejects non-admin status edits and history reads with 403 and leaves status unchanged', async () => {
+    const { cookie, userCookie } = await adminSession();
+    expect((await changeStatus(userCookie, 'GOLD')).status).toBe(403);
+    expect((await statusHistory(userCookie)).status).toBe(403);
+    config.set('ADMIN_EMAIL', 'replacement@example.com');
+    expect((await changeStatus(cookie, 'GOLD')).status).toBe(403);
+    expect((await statusHistory(cookie)).status).toBe(403);
+    config.set('ADMIN_EMAIL', 'admin@example.com');
+    expect(await (await statusHistory(cookie)).json()).toEqual([]);
+    expect(await (await fetch(`${base}/auth/me`, { headers: { cookie: userCookie } })).json()).toMatchObject({
+      status: 'FREE'
+    });
+  });
+
+  it.each(['PLATINUM', 'gold', '', null, 1])('rejects invalid status %j without a change', async (status) => {
+    const { cookie } = await adminSession();
+    expect((await changeStatus(cookie, status)).status).toBe(400);
+    expect(await (await statusHistory(cookie)).json()).toEqual([]);
+  });
+
+  it('returns 404 for status operations on an unknown user', async () => {
+    const { cookie } = await adminSession();
+    expect((await changeStatus(cookie, 'GOLD', '00000000-0000-4000-8000-000000000099')).status).toBe(404);
+    expect((await statusHistory(cookie, '00000000-0000-4000-8000-000000000099')).status).toBe(404);
+  });
+
+  it('preserves an assigned status through profile edits and repeated Google sign-in', async () => {
+    const { cookie, userCookie } = await adminSession();
+    expect((await changeStatus(cookie, 'GOLD')).status).toBe(200);
+    const profile = await fetch(`${base}/auth/me/update`, {
+      method: 'PATCH',
+      headers: { cookie: userCookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Updated', status: 'FREE' })
+    });
+    expect(await profile.json()).toMatchObject({ name: 'Updated', status: 'GOLD' });
+    googleProfile = { id: 'google-stable-subject', emails: [{ value: 'new-email@example.com', verified: true }] };
+    const signedInAgain = await signIn();
+    expect(await (await fetch(`${base}/auth/me`, { headers: { cookie: signedInAgain } })).json()).toMatchObject({
+      id: 'user-1',
+      status: 'GOLD'
+    });
+    expect(await (await statusHistory(cookie)).json()).toHaveLength(1);
+  });
+
+  it.each(['profile', 'sign-in'])(
+    'does not overwrite an admin change during a concurrent %s write',
+    async (operation) => {
+      const { cookie, userCookie } = await adminSession();
+      beforeUserWrite = async () => {
+        beforeUserWrite = undefined;
+        expect((await changeStatus(cookie, 'GOLD')).status).toBe(200);
+      };
+      if (operation === 'profile') {
+        const response = await fetch(`${base}/auth/me/update`, {
+          method: 'PATCH',
+          headers: { cookie: userCookie, 'content-type': 'application/json' },
+          body: JSON.stringify({ name: 'Updated' })
+        });
+        expect(response.status).toBe(200);
+      } else {
+        googleProfile = { id: 'google-stable-subject', emails: [{ value: 'alice@example.com', verified: true }] };
+        await signIn();
+      }
+      expect(await (await fetch(`${base}/auth/me`, { headers: { cookie: userCookie } })).json()).toMatchObject({
+        status: 'GOLD'
+      });
+      expect(await (await statusHistory(cookie)).json()).toHaveLength(1);
+    }
+  );
 
   it('allows the configured verified Google admin and revokes the same session after a configuration change', async () => {
     googleProfile.emails[0].value = 'admin@example.com';

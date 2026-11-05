@@ -30,7 +30,7 @@ export class UpdateUserHandler implements ICommandHandler<UpdateUser, IUserRespo
         avatar
       });
 
-      const updatedUser = await this.repository.save(newUser);
+      const updatedUser = await this.repository.save({ id: newUser.id, name: newUser.name, avatar: newUser.avatar });
 
       return await this.queryBus.execute(new FindUserById(updatedUser.id));
     } catch (error) {

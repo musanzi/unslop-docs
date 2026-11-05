@@ -22,9 +22,10 @@ describe('Google account creation', () => {
     let saved = userFixture({ googleSubject: identity.subject, googleEmailVerified: true });
     const repository = {
       findOne: vi.fn(async ({ where }) => (where.googleSubject === saved.googleSubject ? saved : null)),
+      findOneOrFail: vi.fn(async () => saved),
       create: vi.fn((data) => userFixture(data)),
       save: vi.fn(async (data) => {
-        saved = data;
+        saved = { ...saved, ...data };
         return saved;
       })
     };

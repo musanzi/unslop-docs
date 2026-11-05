@@ -4,6 +4,7 @@ import { IUserResponse } from '../interfaces';
 export function mapUserRoles(user: User): IUserResponse {
   return {
     id: user.id,
+    status: user.status,
     name: user.name,
     email: user.email,
     avatar: user.avatar,

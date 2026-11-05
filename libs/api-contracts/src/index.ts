@@ -3,5 +3,7 @@ import type { components } from './lib/schema';
 export type { components, operations, paths } from './lib/schema';
 export type IRoleResponse = components['schemas']['RoleResponse'];
 export type IStatItem = components['schemas']['StatItem'];
+export type IStatusChangeResponse = components['schemas']['StatusChangeResponse'];
 export type IUpdateProfileDto = components['schemas']['UpdateProfileDto'];
+export type IUpdateStatusDto = components['schemas']['UpdateStatusDto'];
 export type IUserResponse = components['schemas']['UserResponse'];

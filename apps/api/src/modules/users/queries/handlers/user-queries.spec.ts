@@ -14,6 +14,7 @@ describe('User queries', () => {
   const publicUser = {
     id: user.id,
     name: 'Alice',
+    status: 'FREE',
     email: 'alice@example.com',
     avatar: null,
     roles: ['user'],
