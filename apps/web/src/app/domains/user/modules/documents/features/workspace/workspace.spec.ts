@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { signal } from '@angular/core';
+import { Input, signal } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
@@ -7,12 +7,17 @@ import { MatIconRegistry } from '@angular/material/icon';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { of } from 'rxjs';
-import { IAllowanceResponse, IDocumentAssessmentResponse } from '@unslop-docs/api-contracts';
+import { IAllowanceResponse, IDocumentAssessmentResponse, IUserResponse } from '@unslop-docs/api-contracts';
 import { AuthStore } from '@web/domains/auth/shared/data-access';
 import { Media } from '@web/core/media';
 import { DocumentsStore } from '../../data-access/documents.store';
 import { Workspace } from './workspace';
 import { User } from '@web/shared/ui/user/user';
+import { testUser } from '@web/shared/testing/user-fixture';
+
+// Vitest uses JIT without Angular's signal-input metadata transform.
+const subscriptionInput = { alias: 'subscriptionStatus', isSignal: true };
+Input(subscriptionInput)(User.prototype, 'subscriptionStatus');
 
 const document: IDocumentAssessmentResponse = {
   id: '00000000-0000-4000-8000-000000000001',
@@ -130,7 +135,7 @@ describe('Retry from document history', () => {
     await fixture.whenStable();
     expect(page.querySelector('button[aria-label="Retry river.docx"]')).toBeNull();
     expect(element(page, 'nav[aria-label="Document history"]').textContent).toContain('Queued');
-    expect(page.textContent).toContain('1 reserved');
+    expect(fixture.debugElement.injector.get(DocumentsStore).allowance()?.reserved).toBe(1);
     http.verify();
   });
 
@@ -189,7 +194,7 @@ describe('Retry from document history', () => {
 
 describe('Document workspace results', () => {
   async function render(
-    detail: IDocumentAssessmentResponse,
+    detail: IDocumentAssessmentResponse | null,
     allowance: IAllowanceResponse = {
       status: 'FREE',
       limit: 3,
@@ -198,7 +203,8 @@ describe('Document workspace results', () => {
       remaining: 1,
       month: '2026-11',
       resetsAt: '2026-12-01T00:00:00.000Z'
-    }
+    },
+    user: IUserResponse | null = testUser
   ) {
     const store = {
       start: vi.fn(),
@@ -209,7 +215,7 @@ describe('Document workspace results', () => {
       pageCount: signal(1),
       loading: signal(false),
       total: signal(1),
-      items: signal([detail]),
+      items: signal(detail ? [detail] : []),
       selected: signal(detail),
       detail: signal(detail),
       detailLoading: signal(false),
@@ -231,7 +237,7 @@ describe('Document workspace results', () => {
         {
           provide: AuthStore,
           useValue: {
-            user: signal(null),
+            user: signal(user),
             isAdmin: () => false,
             signOut: vi.fn(),
             isSigningOut: signal(false),
@@ -262,14 +268,56 @@ describe('Document workspace results', () => {
     return fixture.nativeElement as HTMLElement;
   }
 
-  it('shows used documents, active reservations, remaining allowance and a UTC reset date', async () => {
-    const page = await render(document);
-    expect(page.textContent).toContain('1 used');
-    expect(page.textContent).toContain('1 reserved');
-    expect(page.textContent).toContain('1 remaining');
-    expect(page.textContent).toContain('FREE · 3 documents');
-    expect(page.textContent).toContain('Dec 1, 2026');
-    expect(page.textContent).toContain('00:00 UTC');
+  it('welcomes the user with their plan and a WhatsApp contact, without usage or provider copy', async () => {
+    const page = await render(null);
+    expect(page.querySelector('h1')?.textContent).toContain('Welcome, Alice.');
+    expect(page.textContent).toContain('Your current plan is Free.');
+    expect(page.textContent).not.toMatch(/1 used|1 reserved|1 remaining|Resets|DeepSeek|stay private/);
+    const contact = page.querySelector<HTMLAnchorElement>('a[href^="https://wa.me/"]');
+    expect(contact?.textContent).toContain('Contact Musanzi on WhatsApp');
+    expect(new URL(contact?.href ?? '').pathname).toBe('/2432878704');
+    expect(new URL(contact?.href ?? '').searchParams.get('text')).toContain('Hi Musanzi');
+    expect(page.querySelector('details')?.open).toBe(false);
+    expect(page.querySelector('summary')?.textContent).toContain('View plans');
+    const plans = page.querySelector('section[aria-label="Subscription plans"]');
+    expect(plans?.textContent).toMatch(/Free\s*3 documents \/ month\s+\$0/);
+    expect(plans?.textContent).toMatch(/Premium\s*15 documents \/ month\s+\$7/);
+    expect(plans?.textContent).toMatch(/Gold\s*35 documents \/ month\s+\$15/);
+    for (const plan of ['Premium', 'Gold']) {
+      const link = plans?.querySelector<HTMLAnchorElement>(`a[aria-label="Upgrade to ${plan} on WhatsApp"]`);
+      const url = new URL(link?.href ?? '');
+      expect(url.pathname).toBe('/2432878704');
+      expect(url.searchParams.get('text')).toContain(`upgrade my Unslopy subscription to ${plan}`);
+    }
+  });
+
+  it.each([
+    ['FREE', 'Free', 'leaf', 2],
+    ['PREMIUM', 'Premium', 'badge-check', 1],
+    ['GOLD', 'Gold', 'crown', 0]
+  ] as const)(
+    'shows the current %s plan in the sidebar and offers only upgrades',
+    async (status, name, icon, upgrades) => {
+      const page = await render(null, {
+        status,
+        limit: 35,
+        used: 0,
+        reserved: 0,
+        remaining: 35,
+        month: '2026-11',
+        resetsAt: '2026-12-01T00:00:00Z'
+      });
+      expect(page.textContent).toContain(`Your current plan is ${name}.`);
+      const badge = page.querySelector(`user [aria-label="${name} subscription"]`);
+      expect(badge?.textContent).toContain(name);
+      expect(badge?.querySelector('mat-icon')?.getAttribute('data-mat-icon-name')).toBe(icon);
+      expect(page.querySelectorAll('section[aria-label="Subscription plans"] a')).toHaveLength(upgrades);
+    }
+  );
+
+  it('uses a welcome without a name while user data is unavailable', async () => {
+    const page = await render(null, undefined, null);
+    expect(page.querySelector('h1')?.textContent).toContain('Welcome back.');
   });
 
   it('explains a full allowance and disables uploads while preserving downloads', async () => {
@@ -282,8 +330,7 @@ describe('Document workspace results', () => {
       month: '2026-12',
       resetsAt: '2027-01-01T00:00:00.000Z'
     });
-    expect(page.textContent).toContain('Monthly allowance reached');
-    expect(page.textContent).toContain('Jan 1, 2027');
+    expect(page.textContent).toContain('Your monthly document limit is reached');
     const buttons = [...page.querySelectorAll('button')];
     expect(buttons.find((button) => button.textContent.includes('Upload DOCX'))?.disabled).toBe(true);
     expect(buttons.find((button) => button.textContent.includes('Download original'))?.disabled).toBe(false);

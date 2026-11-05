@@ -111,7 +111,7 @@
           ><mat-icon svgIcon="layout-dashboard" />Administration</a
         >
       }
-      <user />
+      <user [subscriptionStatus]="planStatus()" />
     </div>
   </mat-sidenav>
   <mat-sidenav-content class="flex flex-col text-inherit">
@@ -227,60 +227,64 @@
         } @else {
           <h1
             class="mb-5 text-balance text-[1.5rem] font-medium leading-[1.3] tracking-tight text-ink [overflow-wrap:anywhere] md:text-[1.875rem]">
-            Start with your draft.
+            {{ welcomeName() ? 'Welcome, ' + welcomeName() + '.' : 'Welcome back.' }}
           </h1>
         }
         <div class="rounded-2xl border border-divider bg-canvas p-5 sm:p-7" [class.mt-12]="store.selected()">
-          <section class="mb-6 text-sm" aria-label="Monthly allowance" aria-live="polite">
-            @if (store.allowance(); as allowance) {
-              <p class="font-medium">{{ allowance.status }} · {{ allowance.limit }} documents / month</p>
-              <p class="mt-1 text-muted tabular-nums">
-                {{ allowance.used }} used · {{ allowance.reserved }} reserved · {{ allowance.remaining }} remaining
+          <section class="mb-6 text-[0.875rem] leading-6" aria-label="Your subscription" aria-live="polite">
+            @if (currentPlan(); as plan) {
+              <p class="text-muted">
+                Your current plan is <span class="font-medium text-ink">{{ plan.name }}</span
+                >.
               </p>
-              <p class="mt-1 text-muted">Resets {{ allowance.resetsAt | date: 'MMM d, y' : 'UTC' }} at 00:00 UTC.</p>
-              @if (store.allowanceBlocked()) {
-                <p id="allowance-limit" class="mt-3 text-danger">
-                  Monthly allowance reached. Your {{ allowance.limit }} slots are used or reserved. Wait for a
-                  reservation to be released or for the monthly reset.
-                </p>
-              }
+              <p class="mt-1 text-muted">
+                {{ planStatus() === 'GOLD' ? 'Need help with your plan?' : 'Need an upgrade?' }}
+                <a
+                  class="rounded-sm text-ink underline underline-offset-4 hover:text-muted"
+                  [href]="contactUrl"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  >Contact Musanzi on WhatsApp</a
+                >.
+              </p>
             } @else if (!store.allowanceError()) {
-              <p class="text-muted">Loading monthly allowance…</p>
+              <p class="text-muted">Loading your plan…</p>
+            }
+            @if (store.allowanceBlocked()) {
+              <p id="allowance-limit" class="mt-3 text-danger">
+                Your monthly document limit is reached. Try again when a slot becomes available.
+              </p>
             }
             @if (store.allowanceError()) {
               <p class="text-danger">{{ store.allowanceError() }}</p>
-              <button class="ui-button ui-ghost mt-2" type="button" (click)="store.loadAllowance()">
-                Refresh allowance
-              </button>
+              <button class="ui-button ui-ghost mt-2" type="button" (click)="store.loadAllowance()">Try again</button>
             }
           </section>
 
-          <p id="document-privacy" class="mb-5 max-w-xl text-[0.875rem] leading-[1.6] text-muted">
-            Uploading sends your document text to DeepSeek for assessment and editing. Your original and revised DOCX
-            stay private.
-          </p>
-          <button
-            class="ui-button ui-primary"
-            type="button"
-            (click)="fileInput.click()"
-            [disabled]="store.uploading() || store.allowanceBlocked()"
-            [attr.aria-describedby]="
-              store.uploadError() ? 'document-privacy upload-limit upload-error' : 'document-privacy upload-limit'
-            ">
-            <mat-icon svgIcon="paperclip" />
-            {{ store.uploading() ? 'Uploading…' : 'Upload DOCX' }}
-          </button>
-          <input
-            #fileInput
-            type="file"
-            accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            (change)="upload($event)"
-            [disabled]="store.uploading() || store.allowanceBlocked()"
-            hidden
-            aria-label="Choose a DOCX file" />
-          <p id="upload-limit" class="ml-3.5 inline-block text-[0.8125rem] text-muted">
-            Up to 10 MB · 10,000 words · English or French
-          </p>
+          <div class="flex flex-wrap items-center gap-x-4 gap-y-3">
+            <button
+              class="ui-button ui-primary"
+              type="button"
+              (click)="fileInput.click()"
+              [disabled]="store.uploading() || store.allowanceBlocked()"
+              [attr.aria-describedby]="
+                'upload-limit' +
+                (store.allowanceBlocked() ? ' allowance-limit' : '') +
+                (store.uploadError() ? ' upload-error' : '')
+              ">
+              <mat-icon svgIcon="paperclip" />
+              {{ store.uploading() ? 'Uploading…' : 'Upload DOCX' }}
+            </button>
+            <input
+              #fileInput
+              type="file"
+              accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              (change)="upload($event)"
+              [disabled]="store.uploading() || store.allowanceBlocked()"
+              hidden
+              aria-label="Choose a DOCX file" />
+            <p id="upload-limit" class="text-[0.8125rem] text-muted">Up to 10 MB · 10,000 words · English or French</p>
+          </div>
           @if (store.uploadError()) {
             <p id="upload-error" class="mt-3 text-[0.875rem] text-danger [overflow-wrap:anywhere]" role="alert">
               {{ store.uploadError() }}
@@ -290,6 +294,47 @@
             {{ store.uploading() ? 'Uploading your original…' : store.announcement() }}
           </p>
         </div>
+        <details class="subscription-disclosure group mt-4">
+          <summary class="ui-button ui-ghost w-fit list-none [&::-webkit-details-marker]:hidden">
+            View plans
+            <mat-icon
+              svgIcon="chevron-down"
+              class="group-open:rotate-180 motion-safe:transition-transform motion-safe:duration-200" />
+          </summary>
+          <section class="mt-3 px-1" aria-label="Subscription plans">
+            <p class="mb-2 text-[0.8125rem] text-muted">Monthly plans, priced in USD.</p>
+            <ul class="divide-y divide-divider">
+              @for (plan of plans; track plan.status) {
+                <li class="flex flex-wrap items-center justify-between gap-x-5 gap-y-3 py-4">
+                  <div class="flex items-center gap-3">
+                    <mat-icon [svgIcon]="plan.icon" class="text-muted" />
+                    <div>
+                      <p class="font-medium">{{ plan.name }}</p>
+                      <p class="text-[0.8125rem] text-muted">{{ plan.documents }} documents / month</p>
+                    </div>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-3">
+                    <p class="text-[0.875rem] tabular-nums">
+                      ${{ plan.price }}<span class="text-muted"> / month</span>
+                    </p>
+                    @if (plan.status === planStatus()) {
+                      <span class="ui-badge items-center gap-1.5"><mat-icon svgIcon="check" />Current plan</span>
+                    } @else if (plan.price > (currentPlan()?.price ?? 0)) {
+                      <a
+                        class="ui-button ui-secondary"
+                        [href]="plan.contactUrl"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        [attr.aria-label]="'Upgrade to ' + plan.name + ' on WhatsApp'">
+                        Upgrade<mat-icon svgIcon="arrow-up-right" />
+                      </a>
+                    }
+                  </div>
+                </li>
+              }
+            </ul>
+          </section>
+        </details>
       </div>
     </main>
   </mat-sidenav-content>

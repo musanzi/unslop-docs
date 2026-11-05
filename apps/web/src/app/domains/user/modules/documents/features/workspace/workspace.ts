@@ -1,5 +1,13 @@
 import { DatePipe, DecimalPipe, DOCUMENT } from '@angular/common';
-import { afterNextRender, ChangeDetectionStrategy, Component, DestroyRef, inject, viewChild } from '@angular/core';
+import {
+  afterNextRender,
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  DestroyRef,
+  inject,
+  viewChild
+} from '@angular/core';
 import { MatIcon } from '@angular/material/icon';
 import { MatSidenav, MatSidenavContainer, MatSidenavContent } from '@angular/material/sidenav';
 import { RouterLink } from '@angular/router';
@@ -7,6 +15,7 @@ import type { IDocumentResponse } from '@unslop-docs/api-contracts';
 import { Media } from '@web/core/media';
 import { AuthStore } from '@web/domains/auth/shared/data-access';
 import { User } from '@web/shared/ui/user/user';
+import { subscriptionContactUrl, subscriptionPlans } from '@web/shared/data/subscription-plans';
 import { DocumentsStore } from '../../data-access/documents.store';
 
 @Component({
@@ -23,6 +32,18 @@ import { DocumentsStore } from '../../data-access/documents.store';
 export class Workspace {
   protected readonly store = inject(DocumentsStore);
   protected readonly auth = inject(AuthStore);
+  protected readonly welcomeName = computed(() => this.auth.user()?.name?.trim());
+  protected readonly planStatus = computed(() => this.store.allowance()?.status ?? this.auth.user()?.status);
+  protected readonly currentPlan = computed(() => {
+    const status = this.planStatus();
+    return status ? subscriptionPlans[status] : null;
+  });
+  protected readonly plans = Object.entries(subscriptionPlans).map(([status, plan]) => ({
+    ...plan,
+    status,
+    contactUrl: subscriptionContactUrl(plan.name)
+  }));
+  protected readonly contactUrl = subscriptionContactUrl();
   protected readonly isMobile = inject(Media).match('(max-width: 767px)');
   private readonly sidenav = viewChild(MatSidenav);
   private readonly document = inject(DOCUMENT);
