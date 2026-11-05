@@ -24,3 +24,13 @@ _Avoid_: AI detection rate, AI authorship percentage.
 **Reservation**: One allowance slot held while a document is processing. Failure or deletion during processing releases the reservation.
 
 **Status change**: An admin's change to a user's FREE, PREMIUM, or GOLD status. The change applies immediately without resetting usage.
+
+**Queued document**: An accepted upload waiting for its writing assessment to start.
+
+**Processing document**: A document whose writing assessment is in progress.
+
+**Assessed document**: A document with a complete writing assessment. Assessment alone does not mean editing has succeeded.
+
+**Failed document**: A document whose processing ended without a usable result. Its original remains available.
+
+**Processing deadline**: The latest time an active document may finish processing. Starting processing fixes this time for that attempt.

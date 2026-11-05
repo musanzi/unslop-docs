@@ -35,7 +35,8 @@ export class UploadDocumentHandler implements ICommandHandler<UploadDocument, Do
       ownerId,
       filename: documentFilename(file.originalname),
       originalKey: `${randomUUID()}.docx`,
-      size: file.buffer.length
+      size: file.buffer.length,
+      status: 'queued'
     });
     let awaitingCommit = false;
     let fileWritten = false;

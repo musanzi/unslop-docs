@@ -12,6 +12,11 @@ ENV UPLOADS_DIR=/app/apps/api/uploads
 COPY . .
 CMD ["pnpm", "--dir", "apps/api", "exec", "nest", "start", "--watch"]
 
+FROM dependencies AS worker-development
+ENV UPLOADS_DIR=/app/apps/api/uploads DOCUMENTS_DIR=/app/private-documents
+COPY . .
+CMD ["pnpm", "--dir", "apps/api", "exec", "nest", "start", "--watch", "--entryFile", "worker", "--config", "nest-worker.json"]
+
 FROM dependencies AS web-development
 COPY . .
 CMD ["pnpm", "exec", "nx", "serve", "web", "--host=0.0.0.0"]
@@ -34,6 +39,7 @@ WORKDIR /app
 COPY --from=production-dependencies /app/node_modules /app/node_modules
 COPY --from=production-dependencies /app/package.json /app/package.json
 COPY --from=api-build /app/dist/apps/api /app/dist/apps/api
+COPY vendor /app/vendor
 RUN mkdir -p "$UPLOADS_DIR" "$DOCUMENTS_DIR" && chown -R node:node "$UPLOADS_DIR" "$DOCUMENTS_DIR" && chmod 700 "$DOCUMENTS_DIR"
 USER node
 CMD ["node", "dist/apps/api/src/main.js"]

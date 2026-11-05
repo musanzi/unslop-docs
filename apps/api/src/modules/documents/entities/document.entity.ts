@@ -1,4 +1,6 @@
 import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryColumn } from 'typeorm';
+import type { WritingAssessment } from '../assessment-workflow';
+import type { DocumentStatus, ProcessingFailure } from '../document-processing';
 import { User } from '../../users/entities';
 
 @Entity()
@@ -22,6 +24,27 @@ export class Document {
 
   @Column('integer')
   size: number;
+
+  @Column({ type: 'varchar', default: 'stored' })
+  status: DocumentStatus;
+
+  @Column({ type: 'uuid', nullable: true, select: false })
+  claimToken: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  processingStartedAt: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  processingDeadline: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true, select: false })
+  leaseExpiresAt: Date | null;
+
+  @Column({ type: 'jsonb', nullable: true, select: false })
+  assessment: WritingAssessment | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  failureCode: ProcessingFailure | null;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;

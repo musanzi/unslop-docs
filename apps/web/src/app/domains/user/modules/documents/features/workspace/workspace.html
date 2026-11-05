@@ -43,6 +43,9 @@
             [attr.aria-current]="store.selected()?.id === document.id ? 'true' : null"
             (click)="select(document)">
             <span class="truncate">{{ document.filename }}</span>
+            <span [class]="document.status === 'failed' ? 'text-xs text-danger' : 'text-xs text-muted'">{{
+              store.statusLabels[document.status]
+            }}</span>
             <time class="text-[0.75rem] text-muted" [attr.datetime]="document.createdAt">{{
               document.createdAt | date: 'MMM d, y'
             }}</time>
@@ -138,6 +141,62 @@
             <mat-icon svgIcon="download" />
             {{ store.downloading() ? 'Downloading…' : 'Download original' }}
           </button>
+          <section class="mt-10" aria-labelledby="assessment-heading">
+            <h2 id="assessment-heading" class="text-lg font-medium">Writing assessment</h2>
+            <p class="my-3 flex items-center gap-2" role="status">
+              @if (document.status === 'queued' || document.status === 'processing') {
+                <span
+                  class="size-1.5 animate-pulse rounded-full bg-current motion-reduce:animate-none"
+                  aria-hidden="true"></span>
+              }
+              {{ store.statusLabels[document.status] }}
+            </p>
+            @if (document.status === 'queued') {
+              <p class="text-muted">
+                Your document is waiting for assessment. You can leave this page and return later.
+              </p>
+            } @else if (document.status === 'processing') {
+              <p class="text-muted">Reading your document for writing patterns.</p>
+            } @else if (document.status === 'failed') {
+              <p class="mt-3 text-[0.875rem] text-danger [overflow-wrap:anywhere]" role="alert">
+                {{ document.failure }}
+              </p>
+            } @else if (document.status === 'stored') {
+              <p class="text-muted">This original was saved before writing assessments were available.</p>
+            }
+            @if (store.detailLoading()) {
+              <p class="text-muted" role="status">Loading assessment…</p>
+            }
+            @if (store.detail()?.assessment; as assessment) {
+              @for (pattern of assessment.patterns; track pattern.rule) {
+                <div class="mt-6">
+                  <h3 class="text-[0.9375rem] font-medium">{{ pattern.name }}</h3>
+                  @for (example of pattern.examples; track example) {
+                    <blockquote
+                      class="my-2 border-l-2 border-divider pl-4 whitespace-pre-wrap [overflow-wrap:anywhere] text-muted">
+                      {{ example }}
+                    </blockquote>
+                  }
+                </div>
+              } @empty {
+                <p>No writing patterns found.</p>
+              }
+              <p class="mt-6 text-[0.8125rem] text-muted">
+                This assessment describes writing patterns. It does not establish who wrote the document.
+              </p>
+            }
+            @if (store.detailError()) {
+              <p class="mt-3 text-[0.875rem] text-danger [overflow-wrap:anywhere]" role="alert">
+                {{ store.detailError() }}
+              </p>
+              <button
+                class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border-0 px-3.5 py-[0.6rem] enabled:hover:bg-hover"
+                type="button"
+                (click)="store.loadSelected()">
+                Try again
+              </button>
+            }
+          </section>
           @if (store.downloadError()) {
             <p class="mt-3 text-[0.875rem] text-danger [overflow-wrap:anywhere]" role="alert">
               {{ store.downloadError() }}
@@ -155,8 +214,8 @@
           [class.border-t]="store.selected()"
           [class.pt-6]="store.selected()">
           <p id="document-privacy" class="mb-5 max-w-xl text-[0.875rem] leading-[1.6] text-muted">
-            Assessment and editing are in development and will send text to DeepSeek. For now, uploads save a private
-            original.
+            Uploading sends your document text to DeepSeek for a writing assessment. Your original stays private.
+            Editing is still in development.
           </p>
           <button
             class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-divider px-3.5 py-[0.6rem] enabled:hover:bg-hover"

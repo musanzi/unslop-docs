@@ -1,8 +1,9 @@
+import { DOCUMENT } from '@angular/common';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { computed, DestroyRef, inject, Injectable, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router } from '@angular/router';
-import type { IDocumentPage, IDocumentResponse } from '@unslop-docs/api-contracts';
+import type { IDocumentAssessmentResponse, IDocumentPage, IDocumentResponse } from '@unslop-docs/api-contracts';
 import { AuthStore } from '@web/domains/auth/shared/data-access';
 import { firstValueFrom } from 'rxjs';
 
@@ -13,6 +14,20 @@ export class DocumentsStore {
   private readonly auth = inject(AuthStore);
   private readonly router = inject(Router);
   private request = 0;
+  private detailRequest = 0;
+  private listPending = false;
+  private detailPending = false;
+  private readonly browserDocument = inject(DOCUMENT);
+  readonly detail = signal<IDocumentAssessmentResponse | null>(null);
+  readonly detailError = signal('');
+  readonly detailLoading = signal(false);
+  readonly statusLabels: Record<IDocumentResponse['status'], string> = {
+    stored: 'Original saved',
+    queued: 'Queued',
+    processing: 'Assessing writing',
+    assessed: 'Assessed',
+    failed: 'Failed'
+  };
   readonly items = signal<IDocumentResponse[]>([]);
   readonly selected = signal<IDocumentResponse | null>(null);
   readonly page = signal(1);
@@ -26,9 +41,21 @@ export class DocumentsStore {
   readonly announcement = signal('');
   readonly pageCount = computed(() => Math.max(1, Math.ceil(this.total() / 20)));
 
-  load(page = this.page()): void {
+  start(): void {
+    this.load();
+    const timer = setInterval(() => {
+      if (this.browserDocument.hidden || this.loading() || this.uploading()) return;
+      this.load(this.page(), true);
+      if (this.selected()) this.loadSelected(true);
+    }, 5000);
+    this.destroyRef.onDestroy(() => clearInterval(timer));
+  }
+
+  load(page = this.page(), background = false): void {
+    if (background && this.listPending) return;
+    this.listPending = true;
     const request = ++this.request;
-    this.loading.set(true);
+    if (!background) this.loading.set(true);
     this.listError.set('');
     this.http
       .get<IDocumentPage>('/documents', { params: { page, pageSize: 20 }, transferCache: false })
@@ -36,6 +63,7 @@ export class DocumentsStore {
       .subscribe({
         next: (result) => {
           if (request !== this.request) return;
+          this.listPending = false;
           this.items.set(result.items);
           this.total.set(result.total);
           this.page.set(result.page);
@@ -43,6 +71,7 @@ export class DocumentsStore {
         },
         error: (error: unknown) => {
           if (request !== this.request) return;
+          this.listPending = false;
           this.listError.set(this.errorMessage(error, 'Could not load your documents. Try again.'));
           this.loading.set(false);
         }
@@ -54,6 +83,43 @@ export class DocumentsStore {
     this.uploadError.set('');
     this.downloadError.set('');
     this.announcement.set('');
+    this.detailRequest++;
+    this.detail.set(null);
+    this.detailError.set('');
+    this.detailLoading.set(false);
+    if (document) this.loadSelected();
+  }
+
+  loadSelected(background = false): void {
+    const document = this.selected();
+    if (!document || (background && this.detailPending)) return;
+    this.detailPending = true;
+    const request = ++this.detailRequest;
+    if (!background) this.detailLoading.set(true);
+    this.http
+      .get<IDocumentAssessmentResponse>(`/documents/${document.id}`, { transferCache: false })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (detail) => {
+          if (request !== this.detailRequest) return;
+          this.detailPending = false;
+          this.detail.set(detail);
+          this.selected.set(detail);
+          this.items.update((items) => items.map((item) => (item.id === detail.id ? detail : item)));
+          this.detailError.set('');
+          this.detailLoading.set(false);
+        },
+        error: (error: unknown) => {
+          if (request !== this.detailRequest) return;
+          this.detailPending = false;
+          this.detailLoading.set(false);
+          this.detailError.set(this.errorMessage(error, 'Could not refresh the writing assessment. Try again.'));
+          if (error instanceof HttpErrorResponse && error.status === 404) {
+            this.detail.set(null);
+            this.detailError.set('This document is no longer available.');
+          }
+        }
+      });
   }
 
   upload(file: File): void {
@@ -74,7 +140,7 @@ export class DocumentsStore {
         next: (document) => {
           this.uploading.set(false);
           this.select(document);
-          this.announcement.set('Original uploaded.');
+          this.announcement.set('Original uploaded. Writing assessment queued.');
           this.items.set([document, ...(this.page() === 1 ? this.items() : [])].slice(0, 20));
           this.page.set(1);
           this.total.update((total) => total + 1);

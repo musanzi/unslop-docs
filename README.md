@@ -2,7 +2,7 @@
 
 Unslopy is a document-editing product for clearer, more natural writing. The planned first release accepts DOCX files in English or French, reports writing patterns in a writing assessment, edits the document, and returns a revised DOCX. A writing assessment does not establish AI authorship.
 
-Google-only sign-in, profile management, private DOCX uploads and original downloads, admin user listing, status management with audit history, CSV export, and account statistics are available. Assessment, editing, revised downloads, and monthly allowances are not implemented yet. The [product specification](docs/product-spec.md) describes the intended behavior, and the [ticket index](docs/ticket-drafts/README.md) links the implementation issues.
+Google-only sign-in, profile management, private DOCX uploads and original downloads, admin user listing, status management with audit history, CSV export, and account statistics are available. Background writing assessments are available. Editing, revised downloads, and monthly allowances are not implemented yet. The [product specification](docs/product-spec.md) describes the intended behavior, and the [ticket index](docs/ticket-drafts/README.md) links the implementation issues.
 
 The product brand is Unslopy. Repository, package, database, and Compose identifiers remain `unslop-docs`.
 
@@ -129,7 +129,7 @@ The returned `DocxDocument` and its nested arrays and objects are frozen. Its pr
 
 A complex field can span runs or paragraphs. The reader protects every paragraph that touches such a field, including adjacent prose in that paragraph. A run containing an image or another protected element is protected as a whole. Simple fields retain their own protected range. Downstream editing must replace only exposed `textNodes`, preserve all other main-part markup and all protected parts, and validate the output. The reader does not authorize reconstructing the document from plain text.
 
-Issues #6 and #7 can call this reader on a stored original and pass only the needed text and structure to their workflow. The model's part accessors stay local to the worker. Issue #6 adds the owner's required LangChain AI calls and LangGraph workflow. This reader requires neither dependency.
+Issues #6 and #7 can call this reader on a stored original and pass only the needed text and structure to their workflow. The model's part accessors stay local to the worker. The assessment worker uses LangChain for DeepSeek calls and LangGraph for assessment and validation. This reader requires neither dependency.
 
 [DOCX fixtures](apps/api/src/shared/testing/fixtures/docx/README.md) include downloadable accepted and rejected files, their generator, and the screenshot procedure for the integration stack.
 
@@ -138,6 +138,18 @@ Uploads write and sync the original before committing its metadata. A failed wri
 Reverting the migration removes metadata but leaves files in the volume. Restore the database and volume together to recover access. Container restarts preserve the named volume.
 
 Automated HTTP tests cover ownership, admin denial, signed-out requests, pagination, public route isolation, safe filenames, byte-for-byte original downloads, malformed archives, the exact size boundary, and failure cleanup. Filesystem tests cover storage reinitialization, permissions, and symlink isolation. Live PostgreSQL migration execution and container restart verification remain owner-run checks. Capture empty and populated workspaces at desktop and phone widths from a stack running this revision; a different checkout cannot provide valid UI evidence. The original-after-editing check becomes runnable when editing exists.
+
+### Run background writing assessments
+
+Set `DEEPSEEK_API_KEY` and an explicit `DEEPSEEK_MODEL` in your private environment. Select a model with JSON output support from [DeepSeek's official model list](https://api-docs.deepseek.com/quick_start/pricing/). The worker fails startup with a setting name if either value is blank. Compose passes these settings only to the worker.
+
+The owner must rebuild and recreate the API, web, and new worker containers to pick up the dependencies and environment wiring. Apply `DocumentAssessment1793880300000` before starting the worker. This implementation does not restart the owner's stack. The API's development command continues to invoke Nest directly, and the worker uses its own Nest entry point.
+
+Valid uploads automatically enter the durable PostgreSQL queue. The HTTP upload returns after storage and database commit, before assessment. The worker reads the original, runs LangChain DeepSeek through a LangGraph workflow, and publishes validated writing patterns. The workspace refreshes its sidebar and selected assessment without a reload. A failed assessment keeps the original downloadable and shows a fixed explanation. Existing uploads stay original-only until uploaded again.
+
+A queued job survives container restarts. Interrupted processing fails after its lease expires. Deadlines default to 15 minutes from processing start and are persisted for each claim. Provider waits are finite. No library retries run in this slice. Editing and allowance reservations follow in #7 and #9.
+
+See the [worker reference](docs/assessment-worker.md) for lifecycle and privacy rules and the [assessment acceptance guide](docs/assessment-acceptance.md) for fake-provider smoke tests and remaining live evidence. Production Compose also defines a separate worker using the API image and its `worker.js` entry point. Full production hardening remains #14.
 
 ### Verify Google sign-in locally
 
@@ -168,9 +180,9 @@ pnpm dev
 
 `DB_*` configures PostgreSQL. `REDIS_URL` supplies sessions and cache. `MAIL_*` configures SMTP, with `MAIL_FROM` as the sender. For existing installations, change the display name in `MAIL_FROM` to `Unslopy Support` and retain the configured email address. Mailpit uses port 1025 inside Compose and needs no credentials. `SESSION_MAX_AGE` sets the session lifetime in milliseconds. `ADMIN_EMAIL`, `GOOGLE_CLIENT_ID`, `GOOGLE_SECRET`, and `GOOGLE_REDIRECT_URI` configure Google-only sign-in. `FRONTEND_URI` sets the browser origin for redirects and CORS.
 
-`UPLOADS_DIR` holds public profile images. Compose overrides it with `/app/apps/api/uploads` and mounts `uploads_data` there. Do not store student documents there. `DOCUMENTS_DIR` holds private originals. It defaults to `private-documents`, relative to the API working directory. Both Compose files override it with `/app/private-documents` and mount the separate `documents_data` volume. The web container does not mount this volume. The API rejects overlapping public and private storage paths, including symlink aliases. The production image prepares the private directory for its `node` user. The background worker is a later issue.
+`UPLOADS_DIR` holds public profile images. Compose overrides it with `/app/apps/api/uploads` and mounts `uploads_data` there. Do not store student documents there. `DOCUMENTS_DIR` holds private originals. It defaults to `private-documents`, relative to the API working directory. Both Compose files override it with `/app/private-documents` and mount the separate `documents_data` volume. The web container does not mount this volume. The API rejects overlapping public and private storage paths, including symlink aliases. The production image prepares the private directory for its `node` user. The assessment worker mounts the same private volume read-only.
 
-`WEB_PORT` also sets the production SSR listener. `pm_id` is an optional process-manager marker used by the SSR entry point, and is not needed in Docker. `OPENAPI_INPUT` optionally selects an alternate schema for contract generation. `NODE_ENV=production` is set by the production Docker image for runtime dependencies. DeepSeek settings will be added when document processing is implemented.
+`WEB_PORT` also sets the production SSR listener. `pm_id` is an optional process-manager marker used by the SSR entry point, and is not needed in Docker. `OPENAPI_INPUT` optionally selects an alternate schema for contract generation. `NODE_ENV=production` is set by the production Docker image for runtime dependencies. `DEEPSEEK_API_KEY` and `DEEPSEEK_MODEL` are required only by the worker. `PROCESSING_TIMEOUT_MS` defaults to 900000, and `DEEPSEEK_TIMEOUT_MS` defaults to 60000.
 
 ## Everyday commands
 
@@ -190,7 +202,7 @@ pnpm dev
 
 ## API unit tests
 
-Install the locked dependencies with `pnpm install --frozen-lockfile`. Tests run without a database, Redis, SMTP, or a private environment file. HTTP specs start an isolated test application on an ephemeral loopback port.
+Install the locked dependencies with `pnpm install --frozen-lockfile`. Tests run without external database, Redis, SMTP, or provider services and without a private environment file. Queue tests use embedded PostgreSQL. HTTP specs start an isolated test application on an ephemeral loopback port.
 
 | Command                        | Purpose                                |
 | ------------------------------ | -------------------------------------- |
