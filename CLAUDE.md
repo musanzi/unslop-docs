@@ -32,6 +32,8 @@ Use two-space indentation, single quotes, and semicolons. Prettier uses a 120-ch
 
 Use Tailwind utilities for component styling. Put shared tokens, fonts, Material overrides, and essential custom styles in `apps/web/src/styles/` and import them globally. Do not use component CSS or SCSS files or inline `styles` metadata.
 
+Use the shared Inter font throughout the web UI.
+
 Don't write comments in code. Give classes, methods, and functions clear names instead.
 
 Use kebab-case filenames, PascalCase classes, and camelCase members. Follow neighboring modules and filenames, such as `create-stand.handler.ts`. Use kebab-case for Angular component selectors and camelCase for directive selectors.

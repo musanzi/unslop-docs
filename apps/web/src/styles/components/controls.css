@@ -50,10 +50,10 @@
 @utility ui-table {
   @apply w-full border-collapse text-left text-[0.875rem] leading-6;
   & th {
-    @apply border-b border-divider px-5 py-3 font-medium text-muted;
+    @apply border-b border-divider px-3 py-3 font-medium text-muted sm:px-5;
   }
   & td {
-    @apply border-b border-divider/60 px-5 py-4 align-middle;
+    @apply border-b border-divider/60 px-3 py-4 align-middle sm:px-5;
   }
   & tbody tr:last-child td {
     @apply border-b-0;

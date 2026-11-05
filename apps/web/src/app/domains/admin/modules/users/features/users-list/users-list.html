@@ -37,31 +37,31 @@
         <thead>
           <tr>
             <th scope="col">Name</th>
-            <th scope="col">Email</th>
+            <th scope="col" class="hidden md:table-cell">Email</th>
             <th scope="col">Status</th>
-            <th scope="col">Registered</th>
+            <th scope="col" class="hidden lg:table-cell">Registered</th>
             <th scope="col"><span class="sr-only">Actions</span></th>
           </tr>
         </thead>
         <tbody>
           @for (user of data.users(); track user.id) {
             <tr>
-              <td class="min-w-40 font-medium">
+              <td class="font-medium [overflow-wrap:anywhere] md:min-w-40">
                 <a class="rounded underline-offset-4 hover:underline" [routerLink]="['/admin/users', user.id]">{{
                   user.name
                 }}</a>
               </td>
-              <td class="text-muted">{{ user.email }}</td>
+              <td class="hidden text-muted md:table-cell">{{ user.email }}</td>
               <td>
                 <span class="ui-badge">{{ user.status }}</span>
               </td>
-              <td class="whitespace-nowrap text-muted">{{ user.createdAt | date: 'MMM d, y' }}</td>
+              <td class="hidden whitespace-nowrap text-muted lg:table-cell">{{ user.createdAt | date: 'MMM d, y' }}</td>
               <td>
                 <a
-                  class="ui-button ui-ghost"
+                  class="ui-button ui-ghost size-11 px-0 sm:w-auto sm:px-4"
                   [routerLink]="['/admin/users', user.id]"
                   [attr.aria-label]="'View details for ' + user.email"
-                  >View details<mat-icon svgIcon="arrow-up-right"
+                  ><span class="hidden sm:inline">View details</span><mat-icon svgIcon="arrow-up-right"
                 /></a>
               </td>
             </tr>
