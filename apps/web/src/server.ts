@@ -11,7 +11,7 @@ const browserDistFolder = join(import.meta.dirname, '../browser');
 
 const app = express();
 const angularApp = new AngularNodeAppEngine({
-  allowedHosts: ['*.localhost', 'localhost', 'unslop-docs.co', '*.unslop-docs.co']
+  allowedHosts: ['*.localhost', 'localhost', 'unslop-docs.com', '*.unslop-docs.com']
 });
 
 /**
