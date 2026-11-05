@@ -70,6 +70,9 @@ services:
     build:
       context: .
       target: web-production
+      network: host
+      entitlements:
+        - network.host
     restart: unless-stopped
     environment:
       WEB_PORT: ${WEB_PORT:-4200}
