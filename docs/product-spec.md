@@ -1,6 +1,6 @@
 # Unslop-docs product specification
 
-This document records accepted product decisions, including the November 5, 2026 workflow revision. The application is live. The revised workflow below still requires implementation; this specification is not a completion report.
+This document records accepted product decisions, including the November 5, 2026 workflow revision. The application is live. Issues #15 and #16 implemented the document support and the API lifecycle below; the workspace presentation (#13) and deletion (#11, #12) are still open. This specification is not a completion report.
 
 ## Accounts and allowances
 
@@ -10,11 +10,11 @@ New users start with FREE status. The `ADMIN_EMAIL` setting identifies the admin
 
 Admin controls retain user listing and status management. The starter's account-creation, CSV-import, role-assignment, and user-deletion controls are removed. Google sign-in is the only account-creation path.
 
-| Status | Documents per month |
-| --- | --- |
-| FREE | 3 |
-| PREMIUM | 15 |
-| GOLD | 35 |
+| Status  | Documents per month |
+| ------- | ------------------- |
+| FREE    | 3                   |
+| PREMIUM | 15                  |
+| GOLD    | 35                  |
 
 Usage resets on the first day of each month at 00:00 UTC. Clicking **Unslopify** reserves one slot atomically. A downloadable revised document counts toward usage, and failed rewriting releases its reservation. Status changes apply immediately without resetting usage.
 

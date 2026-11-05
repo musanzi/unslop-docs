@@ -1,8 +1,8 @@
 # Unslopy
 
-Unslopy is a web app that makes DOCX files in English or French read more naturally. A user uploads a document, a background worker assesses and edits it with DeepSeek, and the user downloads a revised DOCX. A writing assessment reports writing patterns. It does not prove AI authorship.
+Unslopy is a web app that makes DOCX files in English or French read more naturally. A user uploads a document, a background worker assesses it with DeepSeek and publishes an estimated AI-style score with a read-only preview, the user chooses a rewrite strength and clicks **Unslopify**, and the worker rewrites the document, assesses the result, and offers a revised DOCX. The score reports writing patterns. It does not prove AI authorship.
 
-The app is live. This README describes the current code. Of the accepted [workflow revision](docs/document-workflow-design.md), the document support from issue #15 is implemented: ordinary content controls and tracked changes are accepted, passages that fail a content check keep their original text with a notice, and formatting differences alone never block a download. The lifecycle changes from issue #16 are not implemented yet.
+The app is live. This README describes the current code. Of the accepted [workflow revision](docs/document-workflow-design.md), the document support from issue #15 and the API lifecycle from issue #16 are implemented: ordinary content controls and tracked changes are accepted, passages that fail a content check keep their original text with a notice, formatting differences alone never block a download, uploads are assessed before any editing, Unslopify reserves one monthly slot and charges it only when the revised download is ready, and the revised document receives its own assessment. The workspace changes from issue #13 and deletion from issues #11 and #12 are not implemented yet.
 
 The product name is Unslopy. Repository, package, database, and Compose identifiers use `unslop-docs`.
 
@@ -58,7 +58,7 @@ You need Docker, a Google OAuth web client, and a DeepSeek API key. Run all comm
 | OpenAPI file  | <http://localhost:8000/openapi.json> |
 | Mailpit inbox | <http://localhost:8025>              |
 
-The first Google sign-in creates an account. The account whose verified Google email matches `ADMIN_EMAIL` gets admin access. The API refuses to start if `ADMIN_EMAIL` is blank, and the worker refuses to start if a DeepSeek setting is blank.
+The first Google sign-in creates an account. The account whose verified Google email matches `ADMIN_EMAIL` gets admin access. The API refuses to start if `ADMIN_EMAIL` is blank, and the worker refuses to start if a DeepSeek setting is blank. `ASSESSMENT_TIMEOUT_MS` bounds an initial assessment and `PROCESSING_TIMEOUT_MS` bounds a rewrite including its final assessment; the [worker reference](docs/assessment-worker.md) describes both.
 
 ## Configuration
 

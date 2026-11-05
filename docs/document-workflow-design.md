@@ -1,6 +1,6 @@
 # Document workflow revision
 
-This document records the accepted workflow from the November 5, 2026 design interview. The interview is complete. Issue #15 implemented the document-support changes; see the [DOCX support reference](document-support.md). The lifecycle changes in issue #16 are not yet implemented.
+This document records the accepted workflow from the November 5, 2026 design interview. The interview is complete. Issue #15 implemented the document-support changes; see the [DOCX support reference](document-support.md). Issue #16 implemented the API lifecycle: automatic initial and final assessments with a scored rubric, the Unslopify request with rewrite strength, reservation at Unslopify, phase-aware retries, and progress data; see the [worker reference](assessment-worker.md). Issues #11–#13 remain open.
 
 ## Requested behavior
 
