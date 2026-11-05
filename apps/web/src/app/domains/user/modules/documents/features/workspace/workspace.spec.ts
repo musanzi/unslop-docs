@@ -275,7 +275,7 @@ describe('Document workspace results', () => {
     expect(page.textContent).not.toMatch(/1 used|1 reserved|1 remaining|Resets|DeepSeek|stay private/);
     const contact = page.querySelector<HTMLAnchorElement>('a[href^="https://wa.me/"]');
     expect(contact?.textContent).toContain('Contact Musanzi on WhatsApp');
-    expect(new URL(contact?.href ?? '').pathname).toBe('/2432878704');
+    expect(new URL(contact?.href ?? '').pathname).toBe('/243832878704');
     expect(new URL(contact?.href ?? '').searchParams.get('text')).toContain('Hi Musanzi');
     expect(page.querySelector('details')?.open).toBe(false);
     expect(page.querySelector('summary')?.textContent).toContain('View plans');
@@ -286,7 +286,7 @@ describe('Document workspace results', () => {
     for (const plan of ['Premium', 'Gold']) {
       const link = plans?.querySelector<HTMLAnchorElement>(`a[aria-label="Upgrade to ${plan} on WhatsApp"]`);
       const url = new URL(link?.href ?? '');
-      expect(url.pathname).toBe('/2432878704');
+      expect(url.pathname).toBe('/243832878704');
       expect(url.searchParams.get('text')).toContain(`upgrade my Unslopy subscription to ${plan}`);
     }
   });

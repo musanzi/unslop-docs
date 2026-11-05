@@ -10,5 +10,5 @@ export function subscriptionContactUrl(plan?: string): string {
   const message = plan
     ? `Hi Musanzi, I'd like to upgrade my Unslopy subscription to ${plan}.`
     : `Hi Musanzi, I'd like to ask about my Unslopy subscription.`;
-  return `https://wa.me/2432878704?text=${encodeURIComponent(message)}`;
+  return `https://wa.me/243832878704?text=${encodeURIComponent(message)}`;
 }
