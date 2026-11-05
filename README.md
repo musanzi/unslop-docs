@@ -4,6 +4,8 @@ Unslopy is a document-editing product for clearer, more natural writing. The pla
 
 Google-only sign-in, profile management, private DOCX uploads and original downloads, admin user listing, status management with audit history, CSV export, and account statistics are available. Background writing assessment, editing, validated revised downloads, automatic provider retries, and monthly allowance reservations are available. The [product specification](docs/product-spec.md) describes the intended behavior, and the [ticket index](docs/ticket-drafts/README.md) links the implementation issues.
 
+The app is live. The accepted [workflow revision](docs/document-workflow-design.md) is pending implementation: automatic assessment after upload, a read-only preview and rewrite-strength choice, Unslopify, automatic assessment of the revised result, and download. It also replaces formatting-based rejection with broader Word support. The operational descriptions below describe the current code until those changes land.
+
 The product brand is Unslopy. Repository, package, database, and Compose identifiers remain `unslop-docs`.
 
 ## Stack and structure
@@ -184,7 +186,7 @@ Automatic provider retries reuse the same document and processing attempt, with 
 
 Apply `ProviderRetries1793880500000` before deploying the updated worker. Stop old workers during the deployment: their recovery code treats delayed work as failed. Follow the [automatic retry acceptance guide](docs/provider-retry-acceptance.md) for isolated restart and migration checks.
 
-See the [worker reference](docs/assessment-worker.md) for lifecycle and privacy rules and the [assessment acceptance guide](docs/assessment-acceptance.md) for fake-provider smoke tests and remaining live evidence. Production Compose also defines a separate worker using the API image and its `worker.js` entry point. Full production hardening remains #14.
+See the [worker reference](docs/assessment-worker.md) for lifecycle and privacy rules and the [assessment acceptance guide](docs/assessment-acceptance.md) for fake-provider smoke tests and remaining live evidence. Production Compose also defines a separate worker using the API image and its `worker.js` entry point. Deployment issue #14 is closed following the owner's confirmation that the app is live.
 
 ### Retry a failed document
 

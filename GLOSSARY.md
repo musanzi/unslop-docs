@@ -17,28 +17,37 @@ Unslop-docs helps students edit documents and download the revised documents.
 **Writing assessment**: A report of writing patterns with examples from a document. It does not establish whether AI wrote the document.
 _Avoid_: AI detection rate, AI authorship percentage.
 
+**AI-style score**: An estimate of how strongly a document exhibits AI-like writing patterns. It does not establish whether AI wrote the document.
+_Avoid_: AI authorship percentage, probability of AI authorship.
+
+**Final assessment**: The automatic writing assessment of a revised document, shown alongside its initial assessment. It requires no separate user action or allowance.
+
+**Document preview**: A read-only view of an uploaded document alongside its writing assessment. Users edit the downloaded DOCX outside the app.
+
 **Unslop**: Editing that removes the specified writing patterns while preserving the document's meaning, language, citations, quotations, and factual claims.
+
+**Rewrite strength**: The user's chosen extent of editing, from light edits to thorough rewriting. It does not promise a particular reduction in the AI-style score.
 
 **Monthly allowance**: The maximum number of successful documents charged to a calendar month, measured in UTC. A document belongs to the month when its reservation was created.
 
-**Reservation**: One allowance slot held while a document is processing. Failure or deletion during processing releases the reservation.
+**Reservation**: One document allowance slot held when the user starts Unslopify. Assessment and time spent viewing its result do not hold a slot. Failure or deletion during editing releases the reservation.
 
 **Status change**: An admin's change to a user's FREE, PREMIUM, or GOLD status. The change applies immediately without resetting usage.
 
-**Queued document**: An accepted upload waiting for its writing assessment to start.
+**Queued document**: A document waiting for its writing assessment or a user-requested rewrite to start.
 
-**Processing document**: A document whose writing assessment, editing, or validation is in progress.
+**Processing document**: A document whose initial assessment, editing, final assessment, or validation is in progress.
 
-**Assessed document**: A document with a complete writing assessment. Assessment alone does not mean editing has succeeded.
+**Assessed document**: A document with a complete writing assessment that the user can preview before choosing to start Unslopify. Assessment alone does not mean editing has succeeded.
 
-**Revised document**: The edited DOCX that passes the document preservation checks. Its owner can download it separately from the original and reviews it before use.
+**Revised document**: The edited DOCX whose formatting matches the original as closely as practical. Its owner can download it separately from the original and reviews and adjusts it before use.
 
-**Completed document**: A document with a writing assessment and a validated revised document.
+**Completed document**: A document whose revised DOCX is ready to download, with its initial assessment and either its final assessment or a notice that the final score is unavailable.
 
 **Failed document**: A document whose processing ended without a usable result. Its original remains available.
 
 **Processing deadline**: The latest time an active document may finish processing. Starting processing fixes this time for that attempt.
 
-**Processing attempt**: One run of assessment, editing, and validation for a document, bounded by one processing deadline. Automatic provider retries belong to that same attempt.
+**Processing attempt**: One run of assessment or a user-requested rewrite for a document, bounded by one processing deadline. Automatic provider retries belong to that same attempt.
 
-**Automatic provider retry**: Another call for the same assessment request or editing chunk after a temporary provider failure. Each request permits two retries after its initial call.
+**Automatic provider retry**: Another call for the same initial assessment, final assessment, or editing chunk after a temporary provider failure. Each request permits two retries after its initial call.

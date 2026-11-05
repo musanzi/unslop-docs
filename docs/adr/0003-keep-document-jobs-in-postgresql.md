@@ -1,5 +1,7 @@
 # Keep document jobs in PostgreSQL
 
+The PostgreSQL queue and checkpoint decisions below remain in effect. [ADR 0005](0005-separate-assessment-from-user-requested-editing.md) supersedes automatic editing, joint assessment/revision publication, and reservation before assessment. The original rationale below describes the earlier lifecycle.
+
 Use each document's durable processing state as its queue entry. The API commits the queued state with the upload metadata, so publication cannot succeed without queueing. A separate Redis queue would need an outbox and reconciliation to provide the same guarantee.
 
 Workers claim queued rows with `FOR UPDATE SKIP LOCKED` and assign a unique claim token, a processing deadline, and a renewable lease. Publication checks that token, the processing state, the lease, and the deadline in one database update. Lease expiry ends a provider request of unknown outcome as failed rather than repeating it blindly. Recovery runs before each claim. Queued work remains queued across restarts.
