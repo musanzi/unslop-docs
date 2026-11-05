@@ -275,6 +275,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/documents/{id}/unslopify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start rewriting your assessed document with the chosen strength
+         * @description Reserves one monthly allowance slot in the same transaction that queues rewriting. The final assessment runs automatically after rewriting, and the slot is charged only when the revised download is ready.
+         */
+        post: operations["DocumentsController_unslopify"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/documents/{id}/retry": {
         parameters: {
             query?: never;
@@ -284,7 +304,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Retry your failed document using its stored original */
+        /**
+         * Retry your failed document using its stored original
+         * @description A failed initial assessment is queued again without a reservation. A failed rewrite keeps its assessment and strength and reserves a new slot.
+         */
         post: operations["DocumentsController_retry"];
         delete?: never;
         options?: never;
@@ -302,7 +325,7 @@ export interface paths {
         /** List your documents, newest first */
         get: operations["DocumentsController_list"];
         put?: never;
-        /** Upload a private original DOCX */
+        /** Upload a private original DOCX and queue its initial assessment */
         post: operations["DocumentsController_upload"];
         delete?: never;
         options?: never;
@@ -327,6 +350,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/documents/{id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the private read-only preview of your original
+         * @description Available once the initial assessment is published. Blocks follow the original structure in order.
+         */
+        get: operations["DocumentsController_preview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/documents/{id}": {
         parameters: {
             query?: never;
@@ -334,7 +377,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Read your document status and writing assessment */
+        /** Read your document status, assessments and revision notices */
         get: operations["DocumentsController_detail"];
         put?: never;
         post?: never;
@@ -467,6 +510,19 @@ export interface components {
             /** @example 42 */
             total: number;
         };
+        UnslopifyDocumentDto: {
+            /**
+             * @description Rewrite strength from light edits (1) to thorough rewriting (100). It controls editing extent, not a promised score reduction
+             * @default 50
+             */
+            strength: number;
+        };
+        EditingProgressResponse: {
+            /** @description Editing chunks finished so far */
+            completed: number;
+            /** @description Editing chunks planned for this rewrite */
+            total: number;
+        };
         DocumentResponse: {
             /** Format: uuid */
             id: string;
@@ -475,8 +531,20 @@ export interface components {
             size: number;
             /** @enum {string} */
             status: "stored" | "queued" | "processing" | "assessed" | "completed" | "failed";
-            /** @enum {string|null} */
-            processingStage: "assessing" | "editing" | "validating" | null;
+            /**
+             * @description Processing attempt the status refers to: the automatic initial assessment, or the user-requested rewrite with its final assessment
+             * @enum {string}
+             */
+            phase: "assessment" | "rewrite";
+            /**
+             * @description Active stage while processing; assessing and final-assessment have no measurable total, editing exposes progress
+             * @enum {string|null}
+             */
+            processingStage: "assessing" | "editing" | "validating" | "final-assessment" | null;
+            /** @description Completed and total editing work units while a rewrite is processing */
+            progress: components["schemas"]["EditingProgressResponse"] | null;
+            /** @description Rewrite strength saved with the Unslopify request; null before the first request */
+            strength: number | null;
             failure: string | null;
             /** Format: date-time */
             createdAt: string;
@@ -505,13 +573,65 @@ export interface components {
              */
             resetsAt: string;
         };
+        PreviewInlineResponse: {
+            text: string;
+            bold: boolean;
+            italic: boolean;
+            /** @description Protected element kind rendered as a placeholder, such as image, equation or footnote; null for text */
+            protected: string | null;
+        };
+        PreviewCellResponse: {
+            blocks: components["schemas"]["PreviewBlockResponse"][];
+        };
+        PreviewRowResponse: {
+            cells: components["schemas"]["PreviewCellResponse"][];
+        };
+        PreviewBlockResponse: {
+            /** @enum {string} */
+            kind: "heading" | "paragraph" | "list-item" | "table" | "protected";
+            /** @description Heading level from 1, or list nesting level from 1; null for other blocks */
+            level: number | null;
+            /** @description Plain text of the block; null for tables */
+            text: string | null;
+            /** @description Formatted runs of a heading, paragraph or list item in document order; null for other blocks */
+            inlines: components["schemas"]["PreviewInlineResponse"][] | null;
+            /** @description Rows of a table; null for other blocks */
+            rows: components["schemas"]["PreviewRowResponse"][] | null;
+            /** @description Protected block kind, such as image or equation; null for other blocks */
+            reason: string | null;
+        };
+        DocumentPreviewResponse: {
+            /** @description Read-only structure of the original in document order */
+            blocks: components["schemas"]["PreviewBlockResponse"][];
+        };
         WritingPatternResponse: {
             rule: number;
             name: string;
             examples: string[];
         };
         WritingAssessmentResponse: {
+            /** @description Version of the document-wide scoring rubric; null for assessments recorded before scoring existed */
+            rubric: string | null;
+            /** @description Estimated AI-style score from 0 to 100. It measures writing patterns and does not establish who wrote the document. Null for assessments recorded before scoring existed */
+            score: number | null;
             patterns: components["schemas"]["WritingPatternResponse"][];
+        };
+        KeptPassageResponse: {
+            /** @description Preservation check that kept the original passage */
+            check: string;
+            /** @description Identifier of the kept span */
+            span: string;
+            /** @description Excerpt of the original passage, at most 120 characters */
+            excerpt: string;
+        };
+        UneditedElementResponse: {
+            /** @description Protected element kind, such as image, equation or footnote */
+            reason: string;
+            count: number;
+        };
+        RevisionNoticesResponse: {
+            keptPassages: components["schemas"]["KeptPassageResponse"][];
+            uneditedElements: components["schemas"]["UneditedElementResponse"][];
         };
         DocumentAssessmentResponse: {
             /** Format: uuid */
@@ -521,12 +641,31 @@ export interface components {
             size: number;
             /** @enum {string} */
             status: "stored" | "queued" | "processing" | "assessed" | "completed" | "failed";
-            /** @enum {string|null} */
-            processingStage: "assessing" | "editing" | "validating" | null;
+            /**
+             * @description Processing attempt the status refers to: the automatic initial assessment, or the user-requested rewrite with its final assessment
+             * @enum {string}
+             */
+            phase: "assessment" | "rewrite";
+            /**
+             * @description Active stage while processing; assessing and final-assessment have no measurable total, editing exposes progress
+             * @enum {string|null}
+             */
+            processingStage: "assessing" | "editing" | "validating" | "final-assessment" | null;
+            /** @description Completed and total editing work units while a rewrite is processing */
+            progress: components["schemas"]["EditingProgressResponse"] | null;
+            /** @description Rewrite strength saved with the Unslopify request; null before the first request */
+            strength: number | null;
             failure: string | null;
             /** Format: date-time */
             createdAt: string;
+            /** @description Initial assessment of the original, published when the document is assessed and retained afterwards */
             assessment: components["schemas"]["WritingAssessmentResponse"] | null;
+            /** @description Automatic assessment of the revised document; null until completed or when its score is unavailable */
+            finalAssessment: components["schemas"]["WritingAssessmentResponse"] | null;
+            /** @description True when the revised download is ready but its final assessment could not be completed */
+            finalScoreUnavailable: boolean;
+            /** @description Notices recorded with the revision */
+            revisionNotices: components["schemas"]["RevisionNoticesResponse"] | null;
         };
     };
     responses: never;
@@ -1074,6 +1213,66 @@ export interface operations {
             };
         };
     };
+    DocumentsController_unslopify: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UnslopifyDocumentDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentResponse"];
+                };
+            };
+            /** @description Rewrite strength is not an integer from 1 to 100 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Document does not exist or belongs to another user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Document is not assessed, rewriting is already queued or complete, or the monthly allowance is fully used or reserved */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unslopify could not be confirmed. Refresh history before retrying. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     DocumentsController_retry: {
         parameters: {
             query?: never;
@@ -1175,6 +1374,7 @@ export interface operations {
             };
         };
         responses: {
+            /** @description Original saved and queued for its initial assessment */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -1192,13 +1392,6 @@ export interface operations {
             };
             /** @description Sign-in required */
             401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Monthly allowance fully used or reserved; message includes limit and UTC reset */
-            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1239,6 +1432,48 @@ export interface operations {
             };
             /** @description Sign-in required */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    DocumentsController_preview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentPreviewResponse"];
+                };
+            };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Document does not exist, belongs to another user, or is not assessed yet */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Preview could not be loaded */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -41,7 +41,8 @@ export class DocumentsStore {
   readonly stageLabels = {
     assessing: 'Assessing writing',
     editing: 'Editing your document',
-    validating: 'Checking the revised document'
+    validating: 'Checking the revised document',
+    'final-assessment': 'Assessing the revised document'
   };
 
   progress(document: IDocumentResponse): string {

@@ -25,9 +25,15 @@ const document: IDocumentAssessmentResponse = {
   size: 1234,
   createdAt: '2026-11-05T12:00:00Z',
   status: 'completed',
+  phase: 'rewrite',
   processingStage: null,
+  progress: null,
+  strength: 50,
   failure: null,
-  assessment: { patterns: [] }
+  assessment: { rubric: null, score: null, patterns: [] },
+  finalAssessment: null,
+  finalScoreUnavailable: true,
+  revisionNotices: null
 };
 
 afterEach(() => TestBed.resetTestingModule());

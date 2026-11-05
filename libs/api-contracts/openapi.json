@@ -918,8 +918,66 @@
         ]
       }
     },
+    "/documents/{id}/unslopify": {
+      "post": {
+        "description": "Reserves one monthly allowance slot in the same transaction that queues rewriting. The final assessment runs automatically after rewriting, and the slot is charged only when the revised download is ready.",
+        "operationId": "DocumentsController_unslopify",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnslopifyDocumentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rewrite strength is not an integer from 1 to 100"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "404": {
+            "description": "Document does not exist or belongs to another user"
+          },
+          "409": {
+            "description": "Document is not assessed, rewriting is already queued or complete, or the monthly allowance is fully used or reserved"
+          },
+          "503": {
+            "description": "Unslopify could not be confirmed. Refresh history before retrying."
+          }
+        },
+        "summary": "Start rewriting your assessed document with the chosen strength",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
     "/documents/{id}/retry": {
       "post": {
+        "description": "A failed initial assessment is queued again without a reservation. A failed rewrite keeps its assessment and strength and reserves a new slot.",
         "operationId": "DocumentsController_retry",
         "parameters": [
           {
@@ -986,7 +1044,7 @@
         },
         "responses": {
           "201": {
-            "description": "",
+            "description": "Original saved and queued for its initial assessment",
             "content": {
               "application/json": {
                 "schema": {
@@ -1001,9 +1059,6 @@
           "401": {
             "description": "Sign-in required"
           },
-          "409": {
-            "description": "Monthly allowance fully used or reserved; message includes limit and UTC reset"
-          },
           "413": {
             "description": "Original exceeds 10,000,000 bytes"
           },
@@ -1011,7 +1066,7 @@
             "description": "Upload could not be confirmed; refresh history before retrying"
           }
         },
-        "summary": "Upload a private original DOCX",
+        "summary": "Upload a private original DOCX and queue its initial assessment",
         "tags": [
           "documents"
         ]
@@ -1099,6 +1154,47 @@
         ]
       }
     },
+    "/documents/{id}/preview": {
+      "get": {
+        "description": "Available once the initial assessment is published. Blocks follow the original structure in order.",
+        "operationId": "DocumentsController_preview",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentPreviewResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "404": {
+            "description": "Document does not exist, belongs to another user, or is not assessed yet"
+          },
+          "503": {
+            "description": "Preview could not be loaded"
+          }
+        },
+        "summary": "Read the private read-only preview of your original",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
     "/documents/{id}": {
       "get": {
         "operationId": "DocumentsController_detail",
@@ -1133,7 +1229,7 @@
             "description": "Document could not be loaded"
           }
         },
-        "summary": "Read your document status and writing assessment",
+        "summary": "Read your document status, assessments and revision notices",
         "tags": [
           "documents"
         ]
@@ -1419,6 +1515,37 @@
           "total"
         ]
       },
+      "UnslopifyDocumentDto": {
+        "type": "object",
+        "properties": {
+          "strength": {
+            "type": "number",
+            "default": 50,
+            "minimum": 1,
+            "maximum": 100,
+            "description": "Rewrite strength from light edits (1) to thorough rewriting (100). It controls editing extent, not a promised score reduction"
+          }
+        }
+      },
+      "EditingProgressResponse": {
+        "type": "object",
+        "properties": {
+          "completed": {
+            "type": "number",
+            "description": "Editing chunks finished so far",
+            "minimum": 0
+          },
+          "total": {
+            "type": "number",
+            "description": "Editing chunks planned for this rewrite",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "completed",
+          "total"
+        ]
+      },
       "DocumentResponse": {
         "type": "object",
         "properties": {
@@ -1445,6 +1572,14 @@
               "failed"
             ]
           },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "assessment",
+              "rewrite"
+            ],
+            "description": "Processing attempt the status refers to: the automatic initial assessment, or the user-requested rewrite with its final assessment"
+          },
           "processingStage": {
             "type": [
               "string",
@@ -1454,8 +1589,30 @@
               "assessing",
               "editing",
               "validating",
+              "final-assessment",
               null
+            ],
+            "description": "Active stage while processing; assessing and final-assessment have no measurable total, editing exposes progress"
+          },
+          "progress": {
+            "description": "Completed and total editing work units while a rewrite is processing",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EditingProgressResponse"
+              },
+              {
+                "type": "null"
+              }
             ]
+          },
+          "strength": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 100,
+            "description": "Rewrite strength saved with the Unslopify request; null before the first request"
           },
           "failure": {
             "type": [
@@ -1473,7 +1630,10 @@
           "filename",
           "size",
           "status",
+          "phase",
           "processingStage",
+          "progress",
+          "strength",
           "failure",
           "createdAt"
         ]
@@ -1553,6 +1713,140 @@
           "resetsAt"
         ]
       },
+      "PreviewInlineResponse": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "bold": {
+            "type": "boolean"
+          },
+          "italic": {
+            "type": "boolean"
+          },
+          "protected": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Protected element kind rendered as a placeholder, such as image, equation or footnote; null for text"
+          }
+        },
+        "required": [
+          "text",
+          "bold",
+          "italic",
+          "protected"
+        ]
+      },
+      "PreviewCellResponse": {
+        "type": "object",
+        "properties": {
+          "blocks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PreviewBlockResponse"
+            }
+          }
+        },
+        "required": [
+          "blocks"
+        ]
+      },
+      "PreviewRowResponse": {
+        "type": "object",
+        "properties": {
+          "cells": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PreviewCellResponse"
+            }
+          }
+        },
+        "required": [
+          "cells"
+        ]
+      },
+      "PreviewBlockResponse": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "heading",
+              "paragraph",
+              "list-item",
+              "table",
+              "protected"
+            ]
+          },
+          "level": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Heading level from 1, or list nesting level from 1; null for other blocks"
+          },
+          "text": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Plain text of the block; null for tables"
+          },
+          "inlines": {
+            "description": "Formatted runs of a heading, paragraph or list item in document order; null for other blocks",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/PreviewInlineResponse"
+            }
+          },
+          "rows": {
+            "description": "Rows of a table; null for other blocks",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/PreviewRowResponse"
+            }
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Protected block kind, such as image or equation; null for other blocks"
+          }
+        },
+        "required": [
+          "kind",
+          "level",
+          "text",
+          "inlines",
+          "rows",
+          "reason"
+        ]
+      },
+      "DocumentPreviewResponse": {
+        "type": "object",
+        "properties": {
+          "blocks": {
+            "description": "Read-only structure of the original in document order",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PreviewBlockResponse"
+            }
+          }
+        },
+        "required": [
+          "blocks"
+        ]
+      },
       "WritingPatternResponse": {
         "type": "object",
         "properties": {
@@ -1578,6 +1872,22 @@
       "WritingAssessmentResponse": {
         "type": "object",
         "properties": {
+          "rubric": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Version of the document-wide scoring rubric; null for assessments recorded before scoring existed"
+          },
+          "score": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Estimated AI-style score from 0 to 100. It measures writing patterns and does not establish who wrote the document. Null for assessments recorded before scoring existed"
+          },
           "patterns": {
             "type": "array",
             "items": {
@@ -1586,7 +1896,68 @@
           }
         },
         "required": [
+          "rubric",
+          "score",
           "patterns"
+        ]
+      },
+      "KeptPassageResponse": {
+        "type": "object",
+        "properties": {
+          "check": {
+            "type": "string",
+            "description": "Preservation check that kept the original passage"
+          },
+          "span": {
+            "type": "string",
+            "description": "Identifier of the kept span"
+          },
+          "excerpt": {
+            "type": "string",
+            "description": "Excerpt of the original passage, at most 120 characters"
+          }
+        },
+        "required": [
+          "check",
+          "span",
+          "excerpt"
+        ]
+      },
+      "UneditedElementResponse": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "Protected element kind, such as image, equation or footnote"
+          },
+          "count": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "reason",
+          "count"
+        ]
+      },
+      "RevisionNoticesResponse": {
+        "type": "object",
+        "properties": {
+          "keptPassages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KeptPassageResponse"
+            }
+          },
+          "uneditedElements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UneditedElementResponse"
+            }
+          }
+        },
+        "required": [
+          "keptPassages",
+          "uneditedElements"
         ]
       },
       "DocumentAssessmentResponse": {
@@ -1615,6 +1986,14 @@
               "failed"
             ]
           },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "assessment",
+              "rewrite"
+            ],
+            "description": "Processing attempt the status refers to: the automatic initial assessment, or the user-requested rewrite with its final assessment"
+          },
           "processingStage": {
             "type": [
               "string",
@@ -1624,8 +2003,30 @@
               "assessing",
               "editing",
               "validating",
+              "final-assessment",
               null
+            ],
+            "description": "Active stage while processing; assessing and final-assessment have no measurable total, editing exposes progress"
+          },
+          "progress": {
+            "description": "Completed and total editing work units while a rewrite is processing",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EditingProgressResponse"
+              },
+              {
+                "type": "null"
+              }
             ]
+          },
+          "strength": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 100,
+            "description": "Rewrite strength saved with the Unslopify request; null before the first request"
           },
           "failure": {
             "type": [
@@ -1638,9 +2039,36 @@
             "format": "date-time"
           },
           "assessment": {
+            "description": "Initial assessment of the original, published when the document is assessed and retained afterwards",
             "anyOf": [
               {
                 "$ref": "#/components/schemas/WritingAssessmentResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "finalAssessment": {
+            "description": "Automatic assessment of the revised document; null until completed or when its score is unavailable",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WritingAssessmentResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "finalScoreUnavailable": {
+            "type": "boolean",
+            "description": "True when the revised download is ready but its final assessment could not be completed"
+          },
+          "revisionNotices": {
+            "description": "Notices recorded with the revision",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RevisionNoticesResponse"
               },
               {
                 "type": "null"
@@ -1653,10 +2081,16 @@
           "filename",
           "size",
           "status",
+          "phase",
           "processingStage",
+          "progress",
+          "strength",
           "failure",
           "createdAt",
-          "assessment"
+          "assessment",
+          "finalAssessment",
+          "finalScoreUnavailable",
+          "revisionNotices"
         ]
       }
     }
