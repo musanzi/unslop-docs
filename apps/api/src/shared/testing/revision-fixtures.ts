@@ -31,7 +31,7 @@ export async function revisionFixture(language: 'english' | 'french'): Promise<B
 
 export function faithfulRevisionProvider(patterns = false): DocumentProvider {
   return {
-    assess: async () => ({ patterns: patterns ? [{ rule: 23, examples: ['In order to'] }] : [] }),
+    assess: async () => ({ score: patterns ? 40 : 20, patterns: patterns ? [{ rule: 23, examples: ['In order to'] }] : [] }),
     edit: async (_system, chunk) => ({
       edits: chunk.spans.map(({ id, text }) => ({
         id,

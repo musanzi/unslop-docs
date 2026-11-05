@@ -4,7 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { isUUID } from 'class-validator';
 import { Repository } from 'typeorm';
 import { Document } from '../entities/document.entity';
-import { DocumentAssessmentResponse } from '../dto/document-assessment-response';
+import { DocumentAssessmentResponse, documentAssessmentResponse } from '../dto/document-assessment-response';
 import { documentResponse } from '../dto/document-response';
 
 export class FindDocument {
@@ -30,18 +30,21 @@ export class FindDocumentHandler implements IQueryHandler<FindDocument, Document
           size: true,
           createdAt: true,
           status: true,
+          phase: true,
+          strength: true,
           processingStage: true,
+          editingCompleted: true,
+          editingTotal: true,
           failureCode: true,
-          assessment: true
+          assessment: true,
+          finalAssessment: true,
+          revisionNotices: true
         }
       });
     } catch {
       throw new ServiceUnavailableException('The document could not be loaded. Try again.');
     }
     if (!document) throw new NotFoundException('Document not found.');
-    return {
-      ...documentResponse(document),
-      assessment: ['assessed', 'completed'].includes(document.status) ? document.assessment : null
-    };
+    return documentAssessmentResponse(document, documentResponse(document));
   }
 }

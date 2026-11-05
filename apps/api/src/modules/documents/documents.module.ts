@@ -8,6 +8,8 @@ import { Document } from './entities/document.entity';
 import { DocumentStorage } from './document-storage';
 import { UploadDocumentHandler } from './commands/upload-document.handler';
 import { RetryDocumentHandler } from './commands/retry-document.handler';
+import { UnslopifyDocumentHandler } from './commands/unslopify-document.handler';
+import { FindDocumentPreviewHandler } from './queries/find-document-preview.handler';
 import { FindDocumentsHandler } from './queries/find-documents.handler';
 import { DownloadDocumentHandler } from './queries/download-document.handler';
 
@@ -18,6 +20,8 @@ import { DownloadDocumentHandler } from './queries/download-document.handler';
     { provide: DocumentStorage, useFactory: () => new DocumentStorage() },
     UploadDocumentHandler,
     RetryDocumentHandler,
+    UnslopifyDocumentHandler,
+    FindDocumentPreviewHandler,
     FindAllowanceHandler,
     AllowanceClock,
     MonthlyAllowance,

@@ -1,14 +1,7 @@
-import { MonthlyAllowance } from '../monthly-allowance';
 import { documentFilename } from '../document-filename';
 import { MAX_DOCUMENT_BYTES } from '../document-upload.interceptor';
 import { validateDocx } from '../validate-docx';
-import {
-  BadRequestException,
-  ConflictException,
-  Logger,
-  PayloadTooLargeException,
-  ServiceUnavailableException
-} from '@nestjs/common';
+import { BadRequestException, Logger, PayloadTooLargeException, ServiceUnavailableException } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'node:crypto';
@@ -29,8 +22,7 @@ export class UploadDocumentHandler implements ICommandHandler<UploadDocument, Do
   private readonly logger = new Logger(UploadDocumentHandler.name);
   constructor(
     @InjectRepository(Document) private readonly documents: Repository<Document>,
-    private readonly storage: DocumentStorage,
-    private readonly allowance: MonthlyAllowance
+    private readonly storage: DocumentStorage
   ) {}
 
   async execute({ ownerId, file }: UploadDocument): Promise<DocumentResponse> {
@@ -44,13 +36,13 @@ export class UploadDocumentHandler implements ICommandHandler<UploadDocument, Do
       filename: documentFilename(file.originalname),
       originalKey: `${randomUUID()}.docx`,
       size: file.buffer.length,
-      status: 'queued'
+      status: 'queued',
+      phase: 'assessment'
     });
     let awaitingCommit = false;
     let fileWritten = false;
     try {
       const saved = await this.documents.manager.transaction(async (manager) => {
-        await this.allowance.reserve(manager, ownerId, document.id);
         const saved = await manager.getRepository(Document).save(document);
         await this.storage.write(document.originalKey, file.buffer);
         fileWritten = true;
@@ -58,7 +50,7 @@ export class UploadDocumentHandler implements ICommandHandler<UploadDocument, Do
         return saved;
       });
       return documentResponse(saved);
-    } catch (error) {
+    } catch {
       if (fileWritten && !awaitingCommit) {
         try {
           await this.storage.remove(document.originalKey);
@@ -66,7 +58,6 @@ export class UploadDocumentHandler implements ICommandHandler<UploadDocument, Do
           this.logger.warn('Private upload cleanup failed.');
         }
       }
-      if (error instanceof ConflictException) throw error;
       throw new ServiceUnavailableException('The document could not be saved. Try again.');
     }
   }

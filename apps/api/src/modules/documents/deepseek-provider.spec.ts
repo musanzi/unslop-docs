@@ -56,9 +56,17 @@ describe('DeepSeek worker boundary', () => {
     expect(() => workerSettings({})).toThrow('DEEPSEEK_API_KEY is required');
     expect(() => workerSettings({ DEEPSEEK_API_KEY: 'private-key' })).toThrow('DEEPSEEK_MODEL is required');
     expect(workerSettings({ DEEPSEEK_API_KEY: 'private-key', DEEPSEEK_MODEL: 'selected-model' })).toMatchObject({
+      assessmentTimeoutMs: 300000,
       processingTimeoutMs: 900000,
       providerTimeoutMs: 60000
     });
+    expect(
+      workerSettings({
+        DEEPSEEK_API_KEY: 'private-key',
+        DEEPSEEK_MODEL: 'selected-model',
+        ASSESSMENT_TIMEOUT_MS: '120000'
+      })
+    ).toMatchObject({ assessmentTimeoutMs: 120000 });
   });
   it('uses LangChain against a fake transport, sends document as data and makes no library retries', async () => {
     const requests: { body: string }[] = [];
@@ -142,6 +150,7 @@ describe('DeepSeek worker boundary', () => {
     (value) => {
       const env = { DEEPSEEK_API_KEY: 'fake', DEEPSEEK_MODEL: 'explicit' };
       expect(() => workerSettings({ ...env, PROCESSING_TIMEOUT_MS: value })).toThrow('PROCESSING_TIMEOUT_MS must');
+      expect(() => workerSettings({ ...env, ASSESSMENT_TIMEOUT_MS: value })).toThrow('ASSESSMENT_TIMEOUT_MS must');
       expect(() => workerSettings({ ...env, DEEPSEEK_TIMEOUT_MS: value })).toThrow('DEEPSEEK_TIMEOUT_MS must');
     }
   );

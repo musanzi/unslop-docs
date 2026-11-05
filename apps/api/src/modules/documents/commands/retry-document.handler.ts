@@ -30,12 +30,12 @@ export class RetryDocumentHandler implements ICommandHandler<RetryDocument, Docu
         );
         if (!document) throw new NotFoundException('Document not found.');
         if (document.status !== 'failed') throw new ConflictException('Only failed documents can be retried.');
-        await this.allowance.reserve(manager, ownerId, id);
+        if (document.phase === 'rewrite') await this.allowance.reserve(manager, ownerId, id);
         const [queued]: Document[] = await manager.query(
           `UPDATE document SET status = 'queued', "failureCode" = NULL, "processingStage" = NULL,
             "processingAttemptId" = NULL, "providerRequests" = '{}'::jsonb, "nextRequestAt" = NULL,
             "processingStartedAt" = NULL, "processingDeadline" = NULL, "leaseExpiresAt" = NULL,
-            "claimToken" = NULL, assessment = NULL, "revisedKey" = NULL, "revisedSize" = NULL, "revisionNotices" = NULL
+            "claimToken" = NULL
           WHERE id = $1 RETURNING *`,
           [id]
         );

@@ -1,6 +1,11 @@
 import { validationReasons, ValidationCheck } from './revision-validation';
 export const documentStatuses = ['stored', 'queued', 'processing', 'assessed', 'completed', 'failed'] as const;
 export type DocumentStatus = (typeof documentStatuses)[number];
+export const documentPhases = ['assessment', 'rewrite'] as const;
+export type DocumentPhase = (typeof documentPhases)[number];
+export const processingStages = ['assessing', 'editing', 'validating', 'final-assessment'] as const;
+export type ProcessingStage = (typeof processingStages)[number];
+export const defaultRewriteStrength = 50;
 export type ProcessingFailure = 'provider' | 'deadline' | 'interrupted' | ValidationCheck;
 
 export const failureMessages: Record<ProcessingFailure, string> = {

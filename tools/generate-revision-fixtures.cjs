@@ -6,7 +6,7 @@ const { resolve, join } = require('node:path');
 const { revisionFixture, faithfulRevisionProvider } = require('../apps/api/src/shared/testing/revision-fixtures');
 const { docxFixtureCases } = require('../apps/api/src/shared/testing/docx-fixture-catalog');
 const { readerFixture, textParagraph } = require('../apps/api/src/shared/testing/docx-reader-fixture');
-const { createDocumentWorkflow } = require('../apps/api/src/modules/documents/document-workflow');
+const { createRewriteWorkflow } = require('../apps/api/src/modules/documents/document-workflow');
 const { readDocx } = require('../apps/api/src/modules/documents/validate-docx');
 const { loadAssessmentSkill } = require('../apps/api/src/modules/documents/deepseek-provider');
 
@@ -14,7 +14,7 @@ async function main() {
   const destination = resolve(process.argv[2] || '/tmp/unslopy-revision-smoke');
   await mkdir(destination, { recursive: true });
   const skill = await loadAssessmentSkill();
-  const workflow = createDocumentWorkflow(faithfulRevisionProvider(), skill);
+  const workflow = createRewriteWorkflow(faithfulRevisionProvider(), skill, 50);
   const breakingProvider = faithfulRevisionProvider();
   breakingProvider.edit = async (_system, chunk) => ({
     edits: chunk.spans.map(({ id, text }, index) => ({
@@ -37,7 +37,7 @@ async function main() {
         textParagraph('In order to compare the results, Smith (2024) reports that the river is stable.') +
           textParagraph('In order to continue, the students kept their notes for the next study.')
       ),
-      createDocumentWorkflow(breakingProvider, skill)
+      createRewriteWorkflow(breakingProvider, skill, 50)
     ],
     [
       'injection',

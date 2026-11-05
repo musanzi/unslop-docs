@@ -1,10 +1,10 @@
 import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryColumn } from 'typeorm';
-import type { ProcessingStage } from '../document-workflow';
 import type { WritingAssessment } from '../assessment-workflow';
-import type { DocumentStatus, ProcessingFailure } from '../document-processing';
+import type { DocumentPhase, DocumentStatus, ProcessingFailure, ProcessingStage } from '../document-processing';
 import { User } from '../../users/entities';
 import type { ProviderRequestCheckpoint } from '../../processing/document-jobs';
 import type { RevisionNotices } from '../revision-notices';
+import type { DocumentPreview } from '../document-preview';
 
 @Entity()
 @Index('IDX_document_owner_history', ['ownerId', 'createdAt', 'id'])
@@ -43,6 +43,18 @@ export class Document {
   @Column({ type: 'varchar', default: 'stored' })
   status: DocumentStatus;
 
+  @Column({ type: 'varchar', default: 'assessment' })
+  phase: DocumentPhase;
+
+  @Column({ type: 'integer', nullable: true })
+  strength: number | null;
+
+  @Column({ type: 'integer', nullable: true })
+  editingCompleted: number | null;
+
+  @Column({ type: 'integer', nullable: true })
+  editingTotal: number | null;
+
   @Column({ type: 'uuid', nullable: true, select: false })
   claimToken: string | null;
 
@@ -66,6 +78,12 @@ export class Document {
 
   @Column({ type: 'jsonb', nullable: true, select: false })
   assessment: WritingAssessment | null;
+
+  @Column({ type: 'jsonb', nullable: true, select: false })
+  finalAssessment: WritingAssessment | null;
+
+  @Column({ type: 'jsonb', nullable: true, select: false })
+  preview: DocumentPreview | null;
 
   @Column({ type: 'varchar', nullable: true })
   failureCode: ProcessingFailure | null;

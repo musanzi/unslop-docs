@@ -13,14 +13,17 @@ import { DocumentRevision1793880400000 } from '../database/migrations/1793880400
 import { ProviderRetries1793880500000 } from '../database/migrations/1793880500000-ProviderRetries';
 import { MonthlyAllowance1793880600000 } from '../database/migrations/1793880600000-MonthlyAllowance';
 import { RevisionNotices1793880800000 } from '../database/migrations/1793880800000-RevisionNotices';
+import { AssessThenUnslopify1793880900000 } from '../database/migrations/1793880900000-AssessThenUnslopify';
 import { MonthlyAllowance } from './monthly-allowance';
 import { UploadDocumentHandler } from './commands/upload-document.handler';
 import { Document } from './entities/document.entity';
-import { docxFixture } from '@api/shared/testing/docx-fixture';
+import { assessmentDocxFixture } from '@api/shared/testing/assessment-fixtures';
 import { DocumentJobs } from '../processing/document-jobs';
 import { RetryDocumentHandler } from './commands/retry-document.handler';
+import { UnslopifyDocument, UnslopifyDocumentHandler } from './commands/unslopify-document.handler';
 import { DataSource } from 'typeorm';
 import { FindDocumentHandler } from './queries/find-document.handler';
+import { assessmentRubric } from './assessment-workflow';
 
 async function allowanceHarness(database: PGlite, allowance: MonthlyAllowance) {
   const files = new Map<string, Buffer>();
@@ -49,6 +52,7 @@ async function allowanceHarness(database: PGlite, allowance: MonthlyAllowance) {
     }
   };
   const storage = {
+    read: async (key) => files.get(key),
     write: async (key, bytes) => {
       files.set(key, bytes);
     },
@@ -60,6 +64,7 @@ async function allowanceHarness(database: PGlite, allowance: MonthlyAllowance) {
     providers: [
       UploadDocumentHandler,
       RetryDocumentHandler,
+      UnslopifyDocumentHandler,
       FindDocumentHandler,
       { provide: DataSource, useValue: repository.manager },
       { provide: getRepositoryToken(Document), useValue: repository },
@@ -73,14 +78,16 @@ async function allowanceHarness(database: PGlite, allowance: MonthlyAllowance) {
     storage,
     upload: module.get(UploadDocumentHandler),
     retry: module.get(RetryDocumentHandler),
+    unslopify: module.get(UnslopifyDocumentHandler),
     find: module.get(FindDocumentHandler),
     jobs: new DocumentJobs({ query })
   };
 }
 
 const noNotices = { keptPassages: [], uneditedElements: [] };
+const timeouts = { processingTimeoutMs: 900000, providerTimeoutMs: 60000 };
 
-describe('Monthly allowance at upload and worker boundaries', () => {
+describe('Monthly allowance at Unslopify and worker boundaries', () => {
   const database = new PGlite();
   let now = new Date('2026-11-05T12:00:00Z');
   const allowance = new MonthlyAllowance({ now: () => now });
@@ -96,6 +103,7 @@ describe('Monthly allowance at upload and worker boundaries', () => {
     await new ProviderRetries1793880500000().up({ query });
     await new MonthlyAllowance1793880600000().up({ query });
     await new RevisionNotices1793880800000().up({ query });
+    await new AssessThenUnslopify1793880900000().up({ query });
   });
   beforeEach(async () => {
     await database.exec('TRUNCATE document, allowance_reservation, "user" CASCADE');
@@ -104,237 +112,280 @@ describe('Monthly allowance at upload and worker boundaries', () => {
     harness.files.clear();
   });
   afterAll(() => database.close());
-  const upload = async () => harness.upload.execute({ ownerId: owner, file: file(await docxFixture()) });
-  const workerFor = (provider: DocumentProvider) =>
-    new AssessmentWorker(
-      harness.jobs,
-      {
-        ...harness.storage,
-        read: async (key) => harness.files.get(key)
-      },
-      provider,
-      'rules',
-      { processingTimeoutMs: 900000, providerTimeoutMs: 60000 }
-    );
+  const workerFor = (provider: DocumentProvider = faithfulRevisionProvider()) =>
+    new AssessmentWorker(harness.jobs, harness.storage, provider, 'rules', timeouts);
+  const upload = async () => harness.upload.execute({ ownerId: owner, file: file(await assessmentDocxFixture()) });
+  const assessed = async () => (await assessedDocuments(1))[0];
+  const assessedDocuments = async (count: number) => {
+    const documents: Awaited<ReturnType<typeof upload>>[] = [];
+    for (let index = 0; index < count; index++) documents.push(await upload());
+    for (let index = 0; index < count; index++) expect(await workerFor().runOnce()).toBe(true);
+    return documents;
+  };
+  const unslopify = (id: string, strength?: number, ownerId = owner) =>
+    harness.unslopify.execute({ ownerId, id, strength: strength ?? 50 });
+  const detail = (id: string) => harness.find.execute({ ownerId: owner, id });
+  const read = () => allowance.read({ query }, owner);
+  const row = async (id: string) => (await query('SELECT * FROM document WHERE id = $1', [id]))[0] as Document;
 
-  it('requeues a failed document using its stored original and a new allowance reservation', async () => {
+  it('queues only the initial assessment at upload and holds no slot while the preview waits', async () => {
     const document = await upload();
-    const original = await harness.jobs.claim(900000);
-    await harness.jobs.fail(original, 'provider');
-    const files = new Map(harness.files);
-    expect(await harness.retry.execute({ ownerId: owner, id: document.id })).toMatchObject({
-      id: document.id,
-      status: 'queued',
-      failure: null,
-      processingStage: null
-    });
-    expect(await allowance.read({ query }, owner)).toMatchObject({ used: 0, reserved: 1, remaining: 2 });
-    const retried = await harness.jobs.claim(900000);
-    expect(retried).toMatchObject({ id: document.id, originalKey: original.originalKey, size: original.size });
-    expect(retried.processingAttemptId).not.toBe(original.processingAttemptId);
-    expect(harness.files).toEqual(files);
-    expect(await harness.jobs.claim(900000)).toBeNull();
-  });
-
-  it('clears the previous attempt before queueing and fences out its late results', async () => {
-    const document = await upload();
-    const old = await harness.jobs.claim(900000);
-    const request = await harness.jobs.startRequest(old, 'assess:v1', 'old-input');
-    await harness.jobs.finishRequest(old, 'assess:v1', { ...request, state: 'retry' }, 1000);
-    await harness.jobs.fail(old, 'provider');
-    await harness.retry.execute({ ownerId: owner, id: document.id });
-    const [queued] = await query('SELECT * FROM document WHERE id = $1', [document.id]);
-    expect(queued).toMatchObject({
-      status: 'queued',
-      processingAttemptId: null,
-      providerRequests: {},
-      nextRequestAt: null,
-      processingStartedAt: null,
-      processingDeadline: null,
-      leaseExpiresAt: null,
-      claimToken: null,
-      assessment: null,
-      revisedKey: null,
-      revisedSize: null,
-      processingStage: null,
-      failureCode: null
-    });
-    const fresh = await harness.jobs.claim(900000);
-    expect(await harness.jobs.startRequest(fresh, 'assess:v1', 'new-input')).toMatchObject({ attempts: 1 });
-    expect(await harness.jobs.fail(old, 'provider')).toBe(false);
-    expect(await harness.jobs.complete(old, { patterns: [] }, { key: 'stale.docx', size: 42 }, noNotices)).toBe(false);
-    expect(await allowance.read({ query }, owner)).toMatchObject({ used: 0, reserved: 1 });
-  });
-
-  it('fails twice with full automatic retry budgets, then charges exactly once in the user retry month', async () => {
-    now = new Date('2027-01-31T23:59:59.999Z');
-    const document = await upload();
+    expect(document).toMatchObject({ status: 'queued', phase: 'assessment', strength: null, progress: null });
+    expect(await read()).toMatchObject({ used: 0, reserved: 0, remaining: 3 });
     const provider = faithfulRevisionProvider();
-    const assess = provider.assess;
-    let calls = 0;
-    provider.assess = async (...args) => {
-      if (++calls < 9) throw Object.assign(new Error('Temporary provider failure'), { status: 503 });
-      return assess(...args);
-    };
-    const worker = workerFor(provider);
-    for (let attempt = 0; attempt < 3; attempt++) {
-      for (let call = 0; call < 3; call++) {
-        await query(`UPDATE document SET "nextRequestAt" = now() - interval '1 second' WHERE id = $1`, [document.id]);
-        expect(await worker.runOnce()).toBe(true);
-      }
-      expect(calls).toBe((attempt + 1) * 3);
-      expect(await allowance.read({ query }, owner)).toMatchObject({ used: attempt === 2 ? 1 : 0, reserved: 0 });
-      expect(await harness.find.execute({ ownerId: owner, id: document.id })).toMatchObject({
-        status: attempt === 2 ? 'completed' : 'failed'
-      });
-      if (attempt < 2) {
-        now = new Date('2027-02-01T00:00:00Z');
-        await harness.retry.execute({ ownerId: owner, id: document.id });
-      }
-    }
-    expect(await worker.runOnce()).toBe(false);
-    expect(await allowance.read({ query }, owner)).toMatchObject({ month: '2027-02', used: 1, reserved: 0 });
-    now = new Date('2027-01-31T23:59:59.999Z');
-    expect(await allowance.read({ query }, owner)).toMatchObject({ month: '2027-01', used: 0, reserved: 0 });
-    expect(harness.files.size).toBe(2);
+    provider.edit = vi.fn(provider.edit);
+    expect(await workerFor(provider).runOnce()).toBe(true);
+    expect(provider.edit).not.toHaveBeenCalled();
+    expect(await detail(document.id)).toMatchObject({
+      status: 'assessed',
+      phase: 'assessment',
+      assessment: { rubric: assessmentRubric, score: 20, patterns: [] },
+      finalAssessment: null
+    });
+    expect(await read()).toMatchObject({ used: 0, reserved: 0, remaining: 3 });
+    expect(await harness.jobs.claim(timeouts)).toBeNull();
+    expect(harness.files.size).toBe(1);
   });
 
-  it('leaves an exhausted owner document failed without dispatching provider work', async () => {
-    const document = await upload();
-    await harness.jobs.fail(await harness.jobs.claim(900000), 'provider');
-    for (let index = 0; index < 3; index++) {
-      await upload();
-      await harness.jobs.complete(
-        await harness.jobs.claim(900000),
-        { patterns: [] },
-        { key: `result-${index}.docx`, size: 42 },
-        noNotices
-      );
+  it('reserves one slot when Unslopify queues rewriting and leaves an out-of-allowance preview untouched', async () => {
+    const documents = await assessedDocuments(4);
+    for (const [index, document] of documents.slice(0, 3).entries()) {
+      expect(await unslopify(document.id, 10 + index)).toMatchObject({
+        id: document.id,
+        status: 'queued',
+        phase: 'rewrite',
+        strength: 10 + index
+      });
     }
-    await expect(harness.retry.execute({ ownerId: owner, id: document.id })).rejects.toMatchObject({
+    expect(await read()).toMatchObject({ used: 0, reserved: 3, remaining: 0 });
+    await expect(unslopify(documents[3].id)).rejects.toMatchObject({
       status: 409,
       message: expect.stringMatching(/FREE allowance of 3.*2026-12-01.*UTC/)
     });
-    expect(await harness.find.execute({ ownerId: owner, id: document.id })).toMatchObject({ status: 'failed' });
-    expect(await allowance.read({ query }, owner)).toMatchObject({ used: 3, reserved: 0 });
-    const provider = faithfulRevisionProvider();
-    provider.assess = vi.fn(provider.assess);
-    const worker = workerFor(provider);
-    expect(await worker.runOnce()).toBe(false);
-    expect(provider.assess).not.toHaveBeenCalled();
+    expect(await detail(documents[3].id)).toMatchObject({
+      status: 'assessed',
+      strength: null,
+      assessment: { score: 20 }
+    });
+    for (let index = 0; index < 3; index++) expect((await harness.jobs.claim(timeouts))?.phase).toBe('rewrite');
+    expect(await harness.jobs.claim(timeouts)).toBeNull();
+    expect(harness.files.size).toBe(4);
   });
 
-  it('accepts one concurrent retry and rejects non-failed work without a second reservation', async () => {
+  it('defaults the rewrite strength to 50 and rejects values outside 1 to 100 without reserving', async () => {
+    const document = await assessed();
+    for (const strength of [0, 101, 50.5, Number.NaN])
+      await expect(unslopify(document.id, strength)).rejects.toMatchObject({ status: 400 });
+    expect(await read()).toMatchObject({ reserved: 0 });
+    expect(await harness.unslopify.execute(new UnslopifyDocument(owner, document.id))).toMatchObject({ strength: 50 });
+    expect(await read()).toMatchObject({ reserved: 1 });
+  });
+
+  it('accepts one of two concurrent Unslopify clicks and refuses later clicks without a second reservation', async () => {
+    const document = await assessed();
+    const results = await Promise.allSettled([unslopify(document.id, 60), unslopify(document.id, 70)]);
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.find((result) => result.status === 'rejected')).toMatchObject({
+      reason: { status: 409, message: 'Rewriting is already queued for this document.' }
+    });
+    expect(await read()).toMatchObject({ used: 0, reserved: 1 });
+    const claim = await harness.jobs.claim(timeouts);
+    await expect(unslopify(document.id)).rejects.toMatchObject({ status: 409 });
+    await harness.jobs.saveRevision(claim, { key: 'completed.docx', size: 42 }, noNotices);
+    await harness.jobs.complete(claim, null);
+    await expect(unslopify(document.id)).rejects.toMatchObject({
+      status: 409,
+      message: 'This document already has a revised version.'
+    });
+    expect(await read()).toMatchObject({ used: 1, reserved: 0 });
+    expect(await harness.jobs.claim(timeouts)).toBeNull();
+  });
+
+  it('refuses Unslopify for queued, processing and failed assessments and for other owners', async () => {
     const document = await upload();
-    await harness.jobs.fail(await harness.jobs.claim(900000), 'provider');
+    await expect(unslopify(document.id)).rejects.toMatchObject({
+      status: 409,
+      message: 'Only assessed documents can be rewritten.'
+    });
+    const claim = await harness.jobs.claim(timeouts);
+    await expect(unslopify(document.id)).rejects.toMatchObject({ status: 409 });
+    await harness.jobs.fail(claim, 'provider');
+    await expect(unslopify(document.id)).rejects.toMatchObject({
+      status: 409,
+      message: 'Only assessed documents can be rewritten.'
+    });
+    const waiting = await assessed();
+    const other = randomUUID();
+    await query('INSERT INTO "user" (id) VALUES ($1)', [other]);
+    await expect(unslopify(waiting.id, 50, other)).rejects.toMatchObject({
+      status: 404,
+      message: 'Document not found.'
+    });
+    expect(await read()).toMatchObject({ used: 0, reserved: 0 });
+    expect(await allowance.read({ query }, other)).toMatchObject({ used: 0, reserved: 0 });
+    expect(await detail(waiting.id)).toMatchObject({ status: 'assessed' });
+  });
+
+  it('accepts exactly one of two Unslopify requests racing for the last slot', async () => {
+    const [first, second, ...queued] = await assessedDocuments(4);
+    for (const document of queued) await unslopify(document.id);
+    const results = await Promise.allSettled([unslopify(first.id), unslopify(second.id)]);
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.find((result) => result.status === 'rejected')).toMatchObject({ reason: { status: 409 } });
+    expect(await read()).toMatchObject({ used: 0, reserved: 3, remaining: 0 });
+    const statuses = await Promise.all([detail(first.id), detail(second.id)]);
+    expect(statuses.map((item) => item.status).sort()).toEqual(['assessed', 'queued']);
+  });
+
+  it('charges the reservation month once when the revised download is ready', async () => {
+    now = new Date('2027-01-31T23:59:59.999Z');
+    const document = await assessed();
+    await unslopify(document.id);
+    expect(await read()).toMatchObject({ month: '2027-01', used: 0, reserved: 1 });
+    now = new Date('2027-02-01T00:00:00Z');
+    expect(await read()).toMatchObject({ month: '2027-02', used: 0, reserved: 0, remaining: 3 });
+    expect(await workerFor().runOnce()).toBe(true);
+    expect(await detail(document.id)).toMatchObject({
+      status: 'completed',
+      assessment: { score: 20 },
+      finalAssessment: { score: 20 },
+      finalScoreUnavailable: false
+    });
+    expect(await read()).toMatchObject({ month: '2027-02', used: 0, reserved: 0 });
+    now = new Date('2027-01-31T23:59:59.999Z');
+    expect(await read()).toMatchObject({ month: '2027-01', used: 1, reserved: 0, remaining: 2 });
+    expect(harness.files.size).toBe(2);
+    await query('DELETE FROM document WHERE id = $1', [document.id]);
+    expect(await read()).toMatchObject({ used: 1, reserved: 0 });
+  });
+
+  it('retries a failed initial assessment without reserving a slot', async () => {
+    const document = await upload();
+    const provider = faithfulRevisionProvider();
+    provider.assess = async () => {
+      throw Object.assign(new Error('private'), { status: 400 });
+    };
+    await workerFor(provider).runOnce();
+    expect(await detail(document.id)).toMatchObject({ status: 'failed', phase: 'assessment', assessment: null });
+    expect(await harness.retry.execute({ ownerId: owner, id: document.id })).toMatchObject({
+      status: 'queued',
+      phase: 'assessment',
+      failure: null
+    });
+    expect(await read()).toMatchObject({ used: 0, reserved: 0, remaining: 3 });
+    expect(await workerFor().runOnce()).toBe(true);
+    expect(await detail(document.id)).toMatchObject({ status: 'assessed', assessment: { score: 20 } });
+    expect(await read()).toMatchObject({ used: 0, reserved: 0, remaining: 3 });
+  });
+
+  it('retries a failed rewrite with its assessment and strength and a new reservation', async () => {
+    const [document, ...others] = await assessedDocuments(4);
+    await unslopify(document.id, 70);
+    const provider = faithfulRevisionProvider();
+    provider.edit = async () => ({ edits: [] });
+    await workerFor(provider).runOnce();
+    expect(await detail(document.id)).toMatchObject({
+      status: 'failed',
+      phase: 'rewrite',
+      strength: 70,
+      assessment: { score: 20 },
+      failure: expect.stringContaining('original is still available')
+    });
+    expect(await read()).toMatchObject({ used: 0, reserved: 0, remaining: 3 });
+    const old = await row(document.id);
+    expect(await harness.retry.execute({ ownerId: owner, id: document.id })).toMatchObject({
+      status: 'queued',
+      phase: 'rewrite',
+      strength: 70,
+      failure: null
+    });
+    expect(await read()).toMatchObject({ used: 0, reserved: 1, remaining: 2 });
+    expect(await row(document.id)).toMatchObject({
+      assessment: old.assessment,
+      preview: old.preview,
+      strength: 70,
+      processingAttemptId: null,
+      providerRequests: {},
+      failureCode: null
+    });
+    const claim = await harness.jobs.claim(timeouts);
+    expect(claim).toMatchObject({ phase: 'rewrite', strength: 70 });
+    expect(await harness.jobs.fail(claim, 'provider')).toBe(true);
+    for (const other of others) await unslopify(other.id);
+    await expect(harness.retry.execute({ ownerId: owner, id: document.id })).rejects.toMatchObject({
+      status: 409,
+      message: expect.stringMatching(/FREE allowance of 3/)
+    });
+    expect(await detail(document.id)).toMatchObject({ status: 'failed', strength: 70, assessment: { score: 20 } });
+    expect(await read()).toMatchObject({ used: 0, reserved: 3, remaining: 0 });
+  });
+
+  it('accepts one concurrent retry of a failed rewrite and rejects non-failed work without a second reservation', async () => {
+    const document = await assessed();
+    await unslopify(document.id);
+    await harness.jobs.fail(await harness.jobs.claim(timeouts), 'provider');
     const results = await Promise.allSettled([
       harness.retry.execute({ ownerId: owner, id: document.id }),
       harness.retry.execute({ ownerId: owner, id: document.id })
     ]);
     expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
     expect(results.find((result) => result.status === 'rejected')).toMatchObject({ reason: { status: 409 } });
-    expect(await allowance.read({ query }, owner)).toMatchObject({ used: 0, reserved: 1 });
-    const claim = await harness.jobs.claim(900000);
+    expect(await read()).toMatchObject({ used: 0, reserved: 1 });
+    await harness.jobs.claim(timeouts);
     await expect(harness.retry.execute({ ownerId: owner, id: document.id })).rejects.toMatchObject({ status: 409 });
-    await harness.jobs.complete(claim, { patterns: [] }, { key: 'completed.docx', size: 42 }, noNotices);
-    await expect(harness.retry.execute({ ownerId: owner, id: document.id })).rejects.toMatchObject({ status: 409 });
-    expect(await allowance.read({ query }, owner)).toMatchObject({ used: 1, reserved: 0 });
-    expect(await harness.jobs.claim(900000)).toBeNull();
+    expect(await read()).toMatchObject({ used: 0, reserved: 1 });
   });
 
   it('does not reserve or queue a failed document for a different owner', async () => {
-    const document = await upload();
-    await harness.jobs.fail(await harness.jobs.claim(900000), 'provider');
+    const document = await assessed();
+    await unslopify(document.id);
+    await harness.jobs.fail(await harness.jobs.claim(timeouts), 'provider');
     const other = randomUUID();
     await query('INSERT INTO "user" (id) VALUES ($1)', [other]);
     await expect(harness.retry.execute({ ownerId: other, id: document.id })).rejects.toMatchObject({
       status: 404,
       message: 'Document not found.'
     });
-    expect(await allowance.read({ query }, owner)).toMatchObject({ used: 0, reserved: 0 });
+    expect(await read()).toMatchObject({ used: 0, reserved: 0 });
     expect(await allowance.read({ query }, other)).toMatchObject({ used: 0, reserved: 0 });
-    expect(await harness.find.execute({ ownerId: owner, id: document.id })).toMatchObject({ status: 'failed' });
-    expect(await harness.jobs.claim(900000)).toBeNull();
+    expect(await detail(document.id)).toMatchObject({ status: 'failed' });
+    expect(await harness.jobs.claim(timeouts)).toBeNull();
   });
 
-  it('rolls the retry reservation back if queueing cannot commit', async () => {
-    const document = await upload();
-    await harness.jobs.fail(await harness.jobs.claim(900000), 'provider');
-    await query(`CREATE FUNCTION reject_fixture_retry() RETURNS trigger LANGUAGE plpgsql AS $$
+  it.each(['unslopify', 'retry'] as const)(
+    'rolls the %s reservation back if queueing cannot commit',
+    async (action) => {
+      const document = await assessed();
+      if (action === 'retry') {
+        await unslopify(document.id);
+        await harness.jobs.fail(await harness.jobs.claim(timeouts), 'provider');
+      }
+      await query(`CREATE FUNCTION reject_fixture_queue() RETURNS trigger LANGUAGE plpgsql AS $$
       BEGIN RAISE EXCEPTION 'Fixture queue write failed'; END $$`);
-    await query(`CREATE TRIGGER reject_fixture_retry BEFORE UPDATE ON document
-      FOR EACH ROW WHEN (NEW.status = 'queued') EXECUTE FUNCTION reject_fixture_retry()`);
-    try {
-      await expect(harness.retry.execute({ ownerId: owner, id: document.id })).rejects.toMatchObject({ status: 503 });
-      expect(await allowance.read({ query }, owner)).toMatchObject({ used: 0, reserved: 0 });
-      expect(await harness.find.execute({ ownerId: owner, id: document.id })).toMatchObject({ status: 'failed' });
-      expect(await harness.jobs.claim(900000)).toBeNull();
-    } finally {
-      await query('DROP TRIGGER reject_fixture_retry ON document');
-      await query('DROP FUNCTION reject_fixture_retry()');
+      await query(`CREATE TRIGGER reject_fixture_queue BEFORE UPDATE ON document
+      FOR EACH ROW WHEN (NEW.status = 'queued') EXECUTE FUNCTION reject_fixture_queue()`);
+      const act = () =>
+        action === 'retry' ? harness.retry.execute({ ownerId: owner, id: document.id }) : unslopify(document.id);
+      try {
+        await expect(act()).rejects.toMatchObject({ status: 503 });
+        expect(await read()).toMatchObject({ used: 0, reserved: 0 });
+        expect(await detail(document.id)).toMatchObject({ status: action === 'retry' ? 'failed' : 'assessed' });
+        expect(await harness.jobs.claim(timeouts)).toBeNull();
+      } finally {
+        await query('DROP TRIGGER reject_fixture_queue ON document');
+        await query('DROP FUNCTION reject_fixture_queue()');
+      }
+      expect(await act()).toMatchObject({ status: 'queued', phase: 'rewrite' });
+      expect(await read()).toMatchObject({ used: 0, reserved: 1 });
     }
-    expect(await harness.retry.execute({ ownerId: owner, id: document.id })).toMatchObject({ status: 'queued' });
-  });
-
-  it('reserves each valid upload and rejects the fourth FREE document without saving a file or runnable job', async () => {
-    for (let index = 0; index < 3; index++) await upload();
-    await expect(upload()).rejects.toMatchObject({ status: 409, message: expect.stringContaining('2026-12-01') });
-    expect(await allowance.read({ query }, owner)).toEqual({
-      status: 'FREE',
-      limit: 3,
-      used: 0,
-      reserved: 3,
-      remaining: 0,
-      month: '2026-11',
-      resetsAt: '2026-12-01T00:00:00.000Z'
-    });
-    expect(harness.files.size).toBe(3);
-    for (let index = 0; index < 3; index++) expect(await harness.jobs.claim(900000)).not.toBeNull();
-    expect(await harness.jobs.claim(900000)).toBeNull();
-  });
-  it('does not dispatch an unreserved job to the provider', async () => {
-    await query(
-      `INSERT INTO document (id, "ownerId", "originalKey", size, status)
-      VALUES ($1, $2, 'unreserved.docx', 42, 'queued')`,
-      [randomUUID(), owner]
-    );
-    const provider = faithfulRevisionProvider();
-    provider.assess = vi.fn(provider.assess);
-    const worker = new AssessmentWorker(
-      harness.jobs,
-      {
-        read: async () => docxFixture(),
-        write: async () => {},
-        remove: async () => {}
-      },
-      provider,
-      'rules',
-      { processingTimeoutMs: 900000, providerTimeoutMs: 60000 }
-    );
-    expect(await worker.runOnce()).toBe(false);
-    expect(provider.assess).not.toHaveBeenCalled();
-  });
-
-  it('charges a validated completion once and retains usage after the document is deleted', async () => {
-    const document = await upload();
-    const claim = await harness.jobs.claim(900000);
-    expect(await allowance.read({ query }, owner)).toMatchObject({ used: 0, reserved: 1 });
-    expect(await harness.jobs.complete(claim, { patterns: [] }, { key: 'revised.docx', size: 42 }, noNotices)).toBe(
-      true
-    );
-    expect(await harness.jobs.complete(claim, { patterns: [] }, { key: 'other.docx', size: 42 }, noNotices)).toBe(
-      false
-    );
-    expect(await allowance.read({ query }, owner)).toMatchObject({ used: 1, reserved: 0, remaining: 2 });
-    await query('DELETE FROM document WHERE id = $1', [document.id]);
-    expect(await allowance.read({ query }, owner)).toMatchObject({ used: 1, reserved: 0, remaining: 2 });
-  });
+  );
 
   it.each(['failure', 'recovery', 'deletion'])(
-    'releases the slot once after %s so another upload can start',
+    'releases the rewrite slot once after %s so another rewrite can start',
     async (ending) => {
-      for (let index = 0; index < 3; index++) await upload();
-      const claim = await harness.jobs.claim(900000);
+      const [waiting, ...queued] = await assessedDocuments(4);
+      for (const document of queued) await unslopify(document.id);
+      const claim = await harness.jobs.claim(timeouts);
       if (ending === 'failure') {
         expect(await harness.jobs.fail(claim, 'provider')).toBe(true);
         expect(await harness.jobs.fail(claim, 'provider')).toBe(false);
@@ -345,9 +396,9 @@ describe('Monthly allowance at upload and worker boundaries', () => {
       } else {
         await query('DELETE FROM document WHERE id = $1', [claim.id]);
       }
-      expect(await allowance.read({ query }, owner)).toMatchObject({ used: 0, reserved: 2, remaining: 1 });
-      await upload();
-      expect(await allowance.read({ query }, owner)).toMatchObject({ used: 0, reserved: 3, remaining: 0 });
+      expect(await read()).toMatchObject({ used: 0, reserved: 2, remaining: 1 });
+      await unslopify(waiting.id);
+      expect(await read()).toMatchObject({ used: 0, reserved: 3, remaining: 0 });
     }
   );
 
@@ -356,23 +407,18 @@ describe('Monthly allowance at upload and worker boundaries', () => {
     ['2026-12-31T23:59:59.999Z', '2027-01-01T00:00:00.000Z', '2027-02-01T00:00:00.000Z']
   ])('keeps the reservation month across midnight at %s', async (last, first, reset) => {
     now = new Date(last);
-    for (let index = 0; index < 3; index++) await upload();
-    const claim = await harness.jobs.claim(900000);
-    expect(await allowance.read({ query }, owner)).toMatchObject({ reserved: 3, remaining: 0, resetsAt: first });
+    const [waiting, ...queued] = await assessedDocuments(4);
+    for (const document of queued) await unslopify(document.id);
+    const claim = await harness.jobs.claim(timeouts);
+    expect(await read()).toMatchObject({ reserved: 3, remaining: 0, resetsAt: first });
     now = new Date(first);
-    expect(await allowance.read({ query }, owner)).toMatchObject({
-      used: 0,
-      reserved: 0,
-      remaining: 3,
-      resetsAt: reset
-    });
-    await upload();
-    expect(await harness.jobs.complete(claim, { patterns: [] }, { key: 'next-month.docx', size: 42 }, noNotices)).toBe(
-      true
-    );
-    expect(await allowance.read({ query }, owner)).toMatchObject({ used: 0, reserved: 1, remaining: 2 });
+    expect(await read()).toMatchObject({ used: 0, reserved: 0, remaining: 3, resetsAt: reset });
+    await unslopify(waiting.id);
+    await harness.jobs.saveRevision(claim, { key: 'next-month.docx', size: 42 }, noNotices);
+    expect(await harness.jobs.complete(claim, null)).toBe(true);
+    expect(await read()).toMatchObject({ used: 0, reserved: 1, remaining: 2 });
     now = new Date(last);
-    expect(await allowance.read({ query }, owner)).toMatchObject({ used: 1, reserved: 2, remaining: 0 });
+    expect(await read()).toMatchObject({ used: 1, reserved: 2, remaining: 0 });
   });
 
   it.each([
@@ -381,121 +427,96 @@ describe('Monthly allowance at upload and worker boundaries', () => {
   ])(
     'applies %s immediately without resetting usage and honors reservations after downgrade',
     async (status, limit) => {
-      for (let index = 0; index < 3; index++) await upload();
-      await expect(upload()).rejects.toMatchObject({ status: 409 });
+      const documents = await assessedDocuments(Number(limit) + 1);
+      const queue = () => unslopify(documents.shift().id);
+      for (let index = 0; index < 3; index++) await queue();
+      await expect(unslopify(documents[0].id)).rejects.toMatchObject({ status: 409 });
       await query('UPDATE "user" SET status = $2 WHERE id = $1', [owner, status]);
-      expect(await allowance.read({ query }, owner)).toMatchObject({ limit, used: 0, reserved: 3 });
-      for (let index = 3; index < Number(limit); index++) await upload();
-      await expect(upload()).rejects.toMatchObject({ status: 409 });
+      expect(await read()).toMatchObject({ limit, used: 0, reserved: 3 });
+      for (let index = 3; index < Number(limit); index++) await queue();
+      await expect(unslopify(documents[0].id)).rejects.toMatchObject({ status: 409 });
       await query(`UPDATE "user" SET status = 'FREE' WHERE id = $1`, [owner]);
-      await expect(upload()).rejects.toMatchObject({ status: 409 });
-      const claim = await harness.jobs.claim(900000);
-      expect(
-        await harness.jobs.complete(claim, { patterns: [] }, { key: 'downgraded.docx', size: 42 }, noNotices)
-      ).toBe(true);
-      expect(await allowance.read({ query }, owner)).toMatchObject({
-        limit: 3,
-        used: 1,
-        reserved: Number(limit) - 1,
-        remaining: 0
-      });
+      await expect(unslopify(documents[0].id)).rejects.toMatchObject({ status: 409 });
+      const claim = await harness.jobs.claim(timeouts);
+      await harness.jobs.saveRevision(claim, { key: 'downgraded.docx', size: 42 }, noNotices);
+      expect(await harness.jobs.complete(claim, null)).toBe(true);
+      expect(await read()).toMatchObject({ limit: 3, used: 1, reserved: Number(limit) - 1, remaining: 0 });
     }
   );
 
-  it('validates uploads before reserving and rolls a storage failure back', async () => {
+  it('validates uploads before saving and rolls a storage failure back without any reservation', async () => {
     await expect(harness.upload.execute({ ownerId: owner, file: file(Buffer.from('invalid')) })).rejects.toMatchObject({
       status: 400
     });
-    expect(await allowance.read({ query }, owner)).toMatchObject({ reserved: 0, remaining: 3 });
-    expect(await harness.jobs.claim(900000)).toBeNull();
+    expect(await harness.jobs.claim(timeouts)).toBeNull();
     vi.spyOn(harness.storage, 'write').mockRejectedValueOnce(new Error('Storage unavailable'));
     await expect(upload()).rejects.toMatchObject({ status: 503 });
-    expect(await allowance.read({ query }, owner)).toMatchObject({ reserved: 0, remaining: 3 });
-    expect(await harness.jobs.claim(900000)).toBeNull();
+    expect(await read()).toMatchObject({ reserved: 0, remaining: 3 });
+    expect(await harness.jobs.claim(timeouts)).toBeNull();
   });
 
-  it('keeps the same reservation through a provider retry and charges only after validated revision publication', async () => {
-    const uploaded = await upload();
+  it('keeps the same reservation through provider retries and charges only after the revision is published', async () => {
+    const document = await assessed();
+    await unslopify(document.id);
     const provider = faithfulRevisionProvider();
-    const assess = provider.assess;
-    let calls = 0;
-    provider.assess = async (...args) => {
-      expect(await allowance.read({ query }, owner)).toMatchObject({ used: 0, reserved: 1 });
-      if (++calls === 1) throw Object.assign(new Error('Temporary provider failure'), { status: 503 });
-      return assess(...args);
-    };
     const edit = provider.edit;
+    let calls = 0;
     provider.edit = async (...args) => {
-      expect(await allowance.read({ query }, owner)).toMatchObject({ used: 0, reserved: 1 });
+      expect(await read()).toMatchObject({ used: 0, reserved: 1 });
+      if (++calls === 1) throw Object.assign(new Error('Temporary provider failure'), { status: 503 });
       return edit(...args);
+    };
+    const assess = provider.assess;
+    provider.assess = async (...args) => {
+      expect(await read()).toMatchObject({ used: 0, reserved: 1 });
+      return assess(...args);
     };
     const worker = workerFor(provider);
     await worker.runOnce();
-    expect(await allowance.read({ query }, owner)).toMatchObject({ used: 0, reserved: 1 });
-    await query(`UPDATE document SET "nextRequestAt" = now() - interval '1 second' WHERE id = $1`, [uploaded.id]);
+    expect(await read()).toMatchObject({ used: 0, reserved: 1 });
+    await query(`UPDATE document SET "nextRequestAt" = now() - interval '1 second' WHERE id = $1`, [document.id]);
     await worker.runOnce();
     expect(calls).toBe(2);
-    expect(await allowance.read({ query }, owner)).toMatchObject({ used: 1, reserved: 0 });
+    expect(await read()).toMatchObject({ used: 1, reserved: 0 });
   });
 
-  it('releases the reservation when the fake provider returns an invalid revision', async () => {
-    await upload();
+  it('charges once when the final assessment fails and the revision is published without a score', async () => {
+    const document = await assessed();
+    await unslopify(document.id);
     const provider = faithfulRevisionProvider();
-    provider.edit = async () => ({ edits: [] });
+    provider.assess = async () => {
+      throw Object.assign(new Error('private'), { status: 400 });
+    };
     await workerFor(provider).runOnce();
-    expect(await allowance.read({ query }, owner)).toMatchObject({ used: 0, reserved: 0, remaining: 3 });
-    expect(harness.files.size).toBe(1);
+    expect(await detail(document.id)).toMatchObject({
+      status: 'completed',
+      assessment: { score: 20 },
+      finalAssessment: null,
+      finalScoreUnavailable: true
+    });
+    expect(await read()).toMatchObject({ used: 1, reserved: 0 });
+    await expect(harness.retry.execute({ ownerId: owner, id: document.id })).rejects.toMatchObject({ status: 409 });
+    expect(await read()).toMatchObject({ used: 1, reserved: 0 });
   });
 
-  it('upgrades legacy queued and processing work without dispatching it or inventing historical charges', async () => {
-    await new MonthlyAllowance1793880600000().down({ query });
-    const completed = randomUUID();
-    await query(
-      `INSERT INTO document (id, "ownerId", "originalKey", size, status, assessment, "revisedKey", "revisedSize")
-      VALUES ($1, $2, 'legacy-original.docx', 42, 'completed', '{"patterns":[]}', 'legacy-revised.docx', 42)`,
-      [completed, owner]
-    );
-    await query(
-      `INSERT INTO document (id, "ownerId", "originalKey", size, status)
-      VALUES ($1, $2, 'legacy-queued.docx', 42, 'queued')`,
-      [randomUUID(), owner]
-    );
-    await query(
-      `INSERT INTO document (id, "ownerId", "originalKey", size, status, "claimToken", "processingDeadline", "leaseExpiresAt")
-      VALUES ($1, $2, 'legacy-active.docx', 42, 'processing', $3, now() + interval '10 minutes', now() + interval '30 seconds')`,
-      [randomUUID(), owner, randomUUID()]
-    );
-    await new MonthlyAllowance1793880600000().up({ query });
-    expect(await harness.jobs.claim(900000)).toBeNull();
-    expect(await harness.jobs.isPublished(completed, 'legacy-revised.docx')).toBe(true);
-    expect(await allowance.read({ query }, owner)).toMatchObject({ used: 0, reserved: 0, remaining: 3 });
-    await upload();
-    await new MonthlyAllowance1793880600000().down({ query });
-    await new MonthlyAllowance1793880600000().up({ query });
-    expect(await harness.jobs.claim(900000)).toBeNull();
-    expect(await harness.jobs.isPublished(completed, 'legacy-revised.docx')).toBe(true);
-  });
   it('rolls publication back if the database cannot persist its charge', async () => {
-    await upload();
-    const claim = await harness.jobs.claim(900000);
+    await unslopify((await assessed()).id);
+    const claim = await harness.jobs.claim(timeouts);
+    await harness.jobs.saveRevision(claim, { key: 'atomic.docx', size: 42 }, noNotices);
     await query(`CREATE FUNCTION reject_fixture_charge() RETURNS trigger LANGUAGE plpgsql AS $$
       BEGIN RAISE EXCEPTION 'Fixture accounting write failed'; END $$`);
     await query(`CREATE TRIGGER reject_fixture_charge BEFORE UPDATE ON allowance_reservation
       FOR EACH ROW WHEN (NEW.state = 'charged') EXECUTE FUNCTION reject_fixture_charge()`);
     try {
-      await expect(
-        harness.jobs.complete(claim, { patterns: [] }, { key: 'atomic.docx', size: 42 }, noNotices)
-      ).rejects.toThrow('Fixture accounting write failed');
+      await expect(harness.jobs.complete(claim, null)).rejects.toThrow('Fixture accounting write failed');
       expect(await harness.jobs.isPublished(claim.id, 'atomic.docx')).toBe(false);
-      expect(await allowance.read({ query }, owner)).toMatchObject({ used: 0, reserved: 1 });
+      expect(await read()).toMatchObject({ used: 0, reserved: 1 });
     } finally {
       await query('DROP TRIGGER reject_fixture_charge ON allowance_reservation');
       await query('DROP FUNCTION reject_fixture_charge()');
     }
-    expect(await harness.jobs.complete(claim, { patterns: [] }, { key: 'atomic.docx', size: 42 }, noNotices)).toBe(
-      true
-    );
-    expect(await allowance.read({ query }, owner)).toMatchObject({ used: 1, reserved: 0 });
+    expect(await harness.jobs.complete(claim, null)).toBe(true);
+    expect(await read()).toMatchObject({ used: 1, reserved: 0 });
   });
 });
 

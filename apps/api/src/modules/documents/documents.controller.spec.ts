@@ -33,6 +33,9 @@ import { UploadDocumentHandler } from './commands/upload-document.handler';
 import { RetryDocumentHandler } from './commands/retry-document.handler';
 import { FindDocumentsHandler } from './queries/find-documents.handler';
 import { DownloadDocumentHandler } from './queries/download-document.handler';
+import { UnslopifyDocumentHandler } from './commands/unslopify-document.handler';
+import { FindDocumentPreviewHandler } from './queries/find-document-preview.handler';
+import { assessmentRubric } from './assessment-workflow';
 import { DocumentStorage } from './document-storage';
 import { readerFixture, textParagraph } from '@api/shared/testing/docx-reader-fixture';
 import { languageSamples } from '@api/shared/testing/docx-language-fixtures';
@@ -51,6 +54,7 @@ describe('Private documents HTTP', () => {
     if (sql.startsWith('UPDATE document')) {
       const record = records.find((record) => record.id === values[0]);
       Object.assign(record, { status: 'queued', failureCode: null });
+      if (sql.includes("phase = 'rewrite'")) Object.assign(record, { phase: 'rewrite', strength: values[1] });
       return [record];
     }
     if (sql.includes('GROUP BY'))
@@ -58,7 +62,9 @@ describe('Private documents HTTP', () => {
         {
           status: 'GOLD',
           used: records.filter((r) => r.ownerId === values[0] && r.status === 'completed').length,
-          reserved: records.filter((r) => r.ownerId === values[0] && ['queued', 'processing'].includes(r.status)).length
+          reserved: records.filter(
+            (r) => r.ownerId === values[0] && r.phase === 'rewrite' && ['queued', 'processing'].includes(r.status)
+          ).length
         }
       ];
     return [];
@@ -140,6 +146,8 @@ describe('Private documents HTTP', () => {
         RolesGuard,
         UploadDocumentHandler,
         RetryDocumentHandler,
+        UnslopifyDocumentHandler,
+        FindDocumentPreviewHandler,
         MonthlyAllowance,
         AllowanceClock,
         FindDocumentsHandler,
@@ -204,6 +212,115 @@ describe('Private documents HTTP', () => {
   async function download(id: string, identity = 'owner') {
     return fetch(`${base}/documents/${id}/original`, { headers: identity ? { 'test-identity': identity } : {} });
   }
+  const assessment = {
+    rubric: assessmentRubric,
+    score: 40,
+    patterns: [{ rule: 23, name: 'Filler phrases', examples: ['In order to'] }]
+  };
+  const preview = {
+    blocks: [{ kind: 'paragraph', level: null, text: 'Private student text.', inlines: [], rows: null, reason: null }]
+  };
+  async function uploadAssessed(identity = 'owner') {
+    const { data } = await (await upload(await docxFixture(), 'essay.docx', identity)).json();
+    Object.assign(
+      records.find((record) => record.id === data.id),
+      { status: 'assessed', assessment, preview }
+    );
+    return data as { id: string };
+  }
+  function unslopify(id: string, body?: unknown, identity = 'owner') {
+    return fetch(`${base}/documents/${id}/unslopify`, {
+      method: 'POST',
+      headers: {
+        ...(identity ? { 'test-identity': identity } : {}),
+        ...(body === undefined ? {} : { 'content-type': 'application/json' })
+      },
+      body: body === undefined ? undefined : JSON.stringify(body)
+    });
+  }
+  function previewOf(id: string, identity = 'owner') {
+    return fetch(`${base}/documents/${id}/preview`, { headers: identity ? { 'test-identity': identity } : {} });
+  }
+
+  it('unslopifies an owned assessed document with a validated strength and refuses duplicates and strangers', async () => {
+    const { id } = await uploadAssessed();
+    expect((await unslopify(id, { strength: 80 }, '')).status).toBe(401);
+    const missing = await unslopify(randomUUID(), { strength: 80 });
+    expect(missing.status).toBe(404);
+    const missingBody = await missing.json();
+    for (const [target, identity] of [
+      [id, 'other'],
+      [id, 'admin'],
+      ['invalid', 'owner']
+    ]) {
+      const denied = await unslopify(target, { strength: 80 }, identity);
+      expect(denied.status).toBe(404);
+      expect(await denied.json()).toEqual(missingBody);
+    }
+    for (const strength of [0, 101, 50.5, 'strong', null]) {
+      const invalid = await unslopify(id, { strength });
+      expect(invalid.status).toBe(400);
+    }
+    expect(
+      await (await fetch(`${base}/documents/${id}`, { headers: { 'test-identity': 'owner' } })).json()
+    ).toMatchObject({
+      data: { status: 'assessed', strength: null }
+    });
+    const response = await unslopify(id, { strength: 80 });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(await response.json()).toMatchObject({
+      data: {
+        id,
+        status: 'queued',
+        phase: 'rewrite',
+        strength: 80,
+        processingStage: null,
+        progress: null,
+        failure: null
+      }
+    });
+    const duplicate = await unslopify(id, { strength: 80 });
+    expect(duplicate.status).toBe(409);
+    expect(await duplicate.json()).toMatchObject({ message: 'Rewriting is already queued for this document.' });
+    const { id: second } = await uploadAssessed();
+    expect(await (await unslopify(second)).json()).toMatchObject({ data: { status: 'queued', strength: 50 } });
+    expect(
+      await (await fetch(`${base}/documents/allowance`, { headers: { 'test-identity': 'owner' } })).json()
+    ).toMatchObject({ data: { reserved: 2, remaining: 33 } });
+    for (const status of ['stored', 'queued', 'processing', 'failed'] as const) {
+      Object.assign(records[1], { status, phase: 'assessment', assessment: null });
+      const rejected = await unslopify(second, { strength: 10 });
+      expect(rejected.status).toBe(409);
+      expect(await rejected.json()).toMatchObject({ message: 'Only assessed documents can be rewritten.' });
+    }
+    Object.assign(records[1], { status: 'completed', phase: 'rewrite', assessment });
+    expect(await (await unslopify(second)).json()).toMatchObject({
+      message: 'This document already has a revised version.'
+    });
+  });
+
+  it('serves the private read-only preview to the owner once the document is assessed', async () => {
+    const { data } = await (await upload(await docxFixture())).json();
+    const before = await previewOf(data.id);
+    expect(before.status).toBe(404);
+    const missingBody = await before.json();
+    Object.assign(records[0], { status: 'assessed', assessment, preview });
+    const response = await previewOf(data.id);
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(await response.json()).toMatchObject({ data: preview });
+    for (const identity of ['other', 'admin']) {
+      const denied = await previewOf(data.id, identity);
+      expect(denied.status).toBe(404);
+      expect(await denied.json()).toEqual(missingBody);
+    }
+    expect(await (await previewOf('invalid')).json()).toEqual(missingBody);
+    expect(await (await previewOf(randomUUID())).json()).toEqual(missingBody);
+    expect((await previewOf(data.id, '')).status).toBe(401);
+    Object.assign(records[0], { status: 'failed', phase: 'rewrite', failureCode: 'provider', strength: 50 });
+    expect((await previewOf(data.id)).status).toBe(200);
+  });
 
   it('retries an owned failed document privately and refuses signed-out, foreign and non-failed documents', async () => {
     const { data } = await (await upload(await docxFixture())).json();
@@ -241,6 +358,9 @@ describe('Private documents HTTP', () => {
 
   it('returns only the signed-in owner allowance with private caching', async () => {
     await upload(await docxFixture());
+    const unreserved = await fetch(`${base}/documents/allowance`, { headers: { 'test-identity': 'owner' } });
+    expect(await unreserved.json()).toMatchObject({ data: { used: 0, reserved: 0, remaining: 35 } });
+    await unslopify((await uploadAssessed()).id);
     const response = await fetch(`${base}/documents/allowance?ownerId=other`, {
       headers: { 'test-identity': 'owner' }
     });
@@ -258,18 +378,25 @@ describe('Private documents HTTP', () => {
     expect((await fetch(`${base}/documents/allowance`)).status).toBe(401);
   });
 
-  it('returns the allowance limit and reset on HTTP 409 without adding a file or history entry', async () => {
-    const bytes = await docxFixture();
-    for (let index = 0; index < 35; index++) expect((await upload(bytes)).status).toBe(201);
+  it('returns the allowance limit and reset on HTTP 409 and leaves the preview waiting', async () => {
+    const documents: { id: string }[] = [];
+    for (let index = 0; index < 36; index++) documents.push(await uploadAssessed());
+    for (const { id } of documents.slice(0, 35)) expect((await unslopify(id)).status).toBe(200);
     const before = await readdir(join(root, 'private'));
-    const blocked = await upload(bytes);
+    const blocked = await unslopify(documents[35].id);
     expect(blocked.status).toBe(409);
     expect(blocked.headers.get('cache-control')).toBe('private, no-store');
     expect(await blocked.json()).toMatchObject({
       message: expect.stringMatching(/GOLD allowance of 35.*resets on .*UTC/)
     });
     expect(await readdir(join(root, 'private'))).toEqual(before);
-    expect(await (await list()).json()).toMatchObject({ data: { total: 35 } });
+    expect(await (await list()).json()).toMatchObject({ data: { total: 36 } });
+    expect(
+      await (await fetch(`${base}/documents/${documents[35].id}`, { headers: { 'test-identity': 'owner' } })).json()
+    ).toMatchObject({
+      data: { status: 'assessed', phase: 'assessment', strength: null, assessment }
+    });
+    expect((await previewOf(documents[35].id)).status).toBe(200);
   });
 
   it('uploads a DOCX, lists its metadata and downloads the exact original privately', async () => {
@@ -283,7 +410,10 @@ describe('Private documents HTTP', () => {
       size: bytes.length,
       createdAt: expect.any(String),
       status: 'queued',
+      phase: 'assessment',
       processingStage: null,
+      progress: null,
+      strength: null,
       failure: null
     });
     expect(await (await list()).json()).toMatchObject({ data: { items: [document], total: 1, page: 1, pageSize: 20 } });
@@ -305,18 +435,55 @@ describe('Private documents HTTP', () => {
       data: { status: 'queued', assessment: null, failure: null }
     });
     records[0].status = 'assessed';
-    records[0].assessment = { patterns: [{ rule: 23, name: 'Filler phrases', examples: ['In order to'] }] };
+    records[0].assessment = assessment;
     const response = await get(document.id, 'owner');
     expect(response.headers.get('cache-control')).toBe('private, no-store');
-    expect(await response.json()).toMatchObject({ data: { status: 'assessed', assessment: records[0].assessment } });
+    expect(await response.json()).toMatchObject({
+      data: {
+        status: 'assessed',
+        assessment,
+        finalAssessment: null,
+        finalScoreUnavailable: false,
+        revisionNotices: null
+      }
+    });
+    Object.assign(records[0], {
+      status: 'processing',
+      phase: 'rewrite',
+      strength: 70,
+      processingStage: 'editing',
+      editingCompleted: 2,
+      editingTotal: 5
+    });
+    expect(await (await get(document.id, 'owner')).json()).toMatchObject({
+      data: { status: 'processing', processingStage: 'editing', progress: { completed: 2, total: 5 }, strength: 70 }
+    });
+    Object.assign(records[0], {
+      status: 'completed',
+      processingStage: null,
+      editingCompleted: null,
+      editingTotal: null,
+      finalAssessment: null,
+      revisionNotices: { keptPassages: [], uneditedElements: [{ reason: 'image', count: 1 }] }
+    });
+    expect(await (await get(document.id, 'owner')).json()).toMatchObject({
+      data: {
+        status: 'completed',
+        progress: null,
+        assessment,
+        finalAssessment: null,
+        finalScoreUnavailable: true,
+        revisionNotices: { keptPassages: [], uneditedElements: [{ reason: 'image', count: 1 }] }
+      }
+    });
+    Object.assign(records[0], { status: 'assessed', phase: 'assessment', strength: null, revisionNotices: null });
     const missing = await (await get(randomUUID(), 'owner')).json();
     for (const identity of ['other', 'admin']) {
       const denied = await get(document.id, identity);
       expect(denied.status).toBe(404);
       expect(await denied.json()).toEqual(missing);
     }
-    records[0].status = 'failed';
-    records[0].failureCode = 'deadline';
+    Object.assign(records[0], { status: 'failed', failureCode: 'deadline', assessment: null });
     expect(await (await get(document.id, 'owner')).json()).toMatchObject({
       data: {
         status: 'failed',
@@ -591,9 +758,12 @@ describe('Private documents HTTP', () => {
     await app.get(DocumentStorage).write(key, revised);
     Object.assign(records[0], {
       status: 'completed',
+      phase: 'rewrite',
+      strength: 50,
       revisedKey: key,
       revisedSize: revised.length,
-      assessment: { patterns: [] }
+      assessment,
+      finalAssessment: { ...assessment, score: 10, patterns: [] }
     });
     const response = await get(data.id);
     expect(response.status).toBe(200);
@@ -611,13 +781,20 @@ describe('Private documents HTTP', () => {
     expect((await get(data.id, '')).status).toBe(401);
     for (const path of [`/uploads/${key}`, `/private-documents/${key}`])
       expect((await fetch(`${base}${path}`)).status).toBe(404);
-    records[0].status = 'failed';
-    records[0].failureCode = 'citation';
+    Object.assign(records[0], { status: 'failed', failureCode: 'citation', revisedKey: null, revisedSize: null });
     expect((await get(data.id)).status).toBe(404);
     expect(Buffer.from(await (await download(data.id)).arrayBuffer())).toEqual(original);
     const detail = await fetch(`${base}/documents/${data.id}`, { headers: { 'test-identity': 'owner' } });
     expect(await detail.json()).toMatchObject({
-      data: { status: 'failed', assessment: null, failure: expect.stringContaining('citation') }
+      data: {
+        status: 'failed',
+        phase: 'rewrite',
+        strength: 50,
+        assessment,
+        finalAssessment: null,
+        finalScoreUnavailable: false,
+        failure: expect.stringContaining('citation')
+      }
     });
     expect(JSON.stringify(await (await list()).json())).not.toContain(key);
   });

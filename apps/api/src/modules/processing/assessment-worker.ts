@@ -1,16 +1,39 @@
 import { Logger } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
-import { createDocumentWorkflow, DocumentProvider } from '../documents/document-workflow';
+import { createRewriteWorkflow, DocumentProvider } from '../documents/document-workflow';
 import { DocumentStorage } from '../documents/document-storage';
 import { ProcessingFailure } from '../documents/document-processing';
 import { RevisionValidationError } from '../documents/revision-validation';
 import { readDocx } from '../documents/validate-docx';
-import { DocumentJobs } from './document-jobs';
+import { DocumentJobs, JobClaim } from './document-jobs';
 import { classifyProviderFailure, ProviderFailure } from '../documents/provider-failure';
-import { validateAssessment } from '../documents/assessment-workflow';
+import { createAssessmentWorkflow, validateAssessment, WritingAssessment } from '../documents/assessment-workflow';
 import { validateChunkResult } from '../documents/revise-docx';
+import { documentPreview } from '../documents/document-preview';
 
 class RetryScheduled extends Error {}
+
+export const initialAssessmentOperation = 'assess:v2';
+export const finalAssessmentOperation = 'final-assess:v2';
+
+export interface WorkerSettings {
+  assessmentTimeoutMs?: number;
+  processingTimeoutMs: number;
+  providerTimeoutMs: number;
+}
+
+interface ClaimRun {
+  claim: JobClaim;
+  signal: AbortSignal;
+  active: () => Promise<void>;
+  request: (
+    operation: string,
+    input: unknown,
+    call: (signal: AbortSignal) => Promise<unknown>,
+    validate: (raw: unknown) => unknown
+  ) => Promise<unknown>;
+  fail: (error: unknown) => Promise<void>;
+}
 
 export class AssessmentWorker {
   private readonly logger = new Logger(AssessmentWorker.name);
@@ -20,13 +43,13 @@ export class AssessmentWorker {
     private readonly storage: Pick<DocumentStorage, 'read' | 'write' | 'remove'>,
     private readonly provider: DocumentProvider,
     private readonly skill: string,
-    private readonly settings: { processingTimeoutMs: number; providerTimeoutMs: number }
+    private readonly settings: WorkerSettings
   ) {}
 
   async runOnce(shutdown?: AbortSignal): Promise<boolean> {
     await this.jobs.recover();
     if (shutdown?.aborted) return false;
-    const claim = await this.jobs.claim(this.settings.processingTimeoutMs);
+    const claim = await this.jobs.claim(this.settings);
     if (!claim) return false;
     const controller = new AbortController();
     let failure: ProcessingFailure = 'provider';
@@ -89,12 +112,7 @@ export class AssessmentWorker {
         requestController.signal.removeEventListener('abort', rejectStopped);
       }
     };
-    const request = async (
-      operation: string,
-      input: unknown,
-      call: (signal: AbortSignal) => Promise<unknown>,
-      validate: (raw: unknown) => unknown
-    ): Promise<unknown> => {
+    const request: ClaimRun['request'] = async (operation, input, call, validate) => {
       await active();
       const inputHash = createHash('sha256').update(JSON.stringify(input)).digest('hex');
       const prior = claim.providerRequests[operation];
@@ -142,68 +160,128 @@ export class AssessmentWorker {
         throw new Error('Inactive claim');
       return outcome;
     };
-    const revisedKey = `${randomUUID()}.docx`;
-    let written = false;
-    let published = false;
-    let publicationAttempted = false;
+    const fail = async (error: unknown) => {
+      if (error instanceof RetryScheduled) return;
+      if (error instanceof RevisionValidationError) failure = error.check;
+      this.logger.warn(`Document processing failed: ${failure}.`);
+      await this.jobs.fail(claim, failure);
+    };
+    const run: ClaimRun = { claim, signal: controller.signal, active, request, fail };
     try {
-      const source = await readDocx(await this.storage.read(claim.originalKey, claim.size));
-      await active();
-      const workflow = createDocumentWorkflow(
-        {
-          assess: (system, text) =>
-            request(
-              'assess:v1',
-              { system, text },
-              (signal) => this.provider.assess(system, text, signal),
-              (raw) => validateAssessment(raw, text)
-            ),
-          edit: (system, chunk) =>
-            request(
-              `edit:${chunk.id}`,
-              { system, chunk },
-              (signal) => this.provider.edit(system, chunk, signal),
-              (raw) => ({ edits: validateChunkResult(chunk, raw) })
-            )
-        },
-        this.skill,
-        async (stage) => {
-          await active();
-          if (!(await this.jobs.stage(claim, stage))) throw new Error('Inactive claim');
-        }
-      );
-      const result = await workflow.invoke({ source }, { signal: controller.signal });
-      await active();
-      await this.storage.write(revisedKey, result.revised);
-      written = true;
-      await active();
-      publicationAttempted = true;
-      published = await this.jobs.complete(
-        claim,
-        result.assessment,
-        { key: revisedKey, size: result.revised.length },
-        result.notices
-      );
-      if (!published) await this.jobs.recover();
-    } catch (error) {
-      if (!(error instanceof RetryScheduled)) {
-        if (error instanceof RevisionValidationError) failure = error.check;
-        this.logger.warn(`Document processing failed: ${failure}.`);
-        await this.jobs.fail(claim, failure);
-      }
+      if (claim.phase === 'assessment') await this.assess(run);
+      else await this.rewrite(run);
     } finally {
       clearTimeout(timeout);
       clearInterval(heartbeat);
       shutdown?.removeEventListener('abort', interrupt);
-      if (written && !published) {
+    }
+    return true;
+  }
+
+  private assessText(run: ClaimRun, operation: string, text: string): Promise<WritingAssessment> {
+    const workflow = createAssessmentWorkflow(
+      {
+        assess: (system, assessed) =>
+          run.request(
+            operation,
+            { system, text: assessed },
+            (signal) => this.provider.assess(system, assessed, signal),
+            (raw) => validateAssessment(raw, assessed)
+          )
+      },
+      this.skill
+    );
+    return workflow.invoke({ text }, { signal: run.signal }).then((result) => result.assessment);
+  }
+
+  private async assess(run: ClaimRun): Promise<void> {
+    const { claim, active } = run;
+    try {
+      const source = await readDocx(await this.storage.read(claim.originalKey, claim.size));
+      await active();
+      const assessment = await this.assessText(run, initialAssessmentOperation, source.text);
+      await active();
+      if (!(await this.jobs.publishAssessment(claim, assessment, documentPreview(source)))) await this.jobs.recover();
+    } catch (error) {
+      await run.fail(error);
+    }
+  }
+
+  private async rewrite(run: ClaimRun): Promise<void> {
+    const { claim, active } = run;
+    const revisedKey = `${randomUUID()}.docx`;
+    let written = false;
+    let saveAttempted = false;
+    let saved = claim.revisedKey !== null;
+    try {
+      let revised: Buffer;
+      if (claim.revisedKey !== null) {
+        revised = await this.storage.read(claim.revisedKey, claim.revisedSize);
+      } else {
+        const source = await readDocx(await this.storage.read(claim.originalKey, claim.size));
+        await active();
+        const workflow = createRewriteWorkflow(
+          {
+            edit: (system, chunk) =>
+              run.request(
+                `edit:${chunk.id}`,
+                { system, chunk },
+                (signal) => this.provider.edit(system, chunk, signal),
+                (raw) => ({ edits: validateChunkResult(chunk, raw) })
+              )
+          },
+          this.skill,
+          claim.strength,
+          {
+            stage: async (stage) => {
+              await active();
+              if (!(await this.jobs.stage(claim, stage))) throw new Error('Inactive claim');
+            },
+            progress: async (completed, total) => {
+              await active();
+              if (!(await this.jobs.progress(claim, completed, total))) throw new Error('Inactive claim');
+            }
+          }
+        );
+        const result = await workflow.invoke({ source }, { signal: run.signal });
+        await active();
+        await this.storage.write(revisedKey, result.revised);
+        written = true;
+        await active();
+        saveAttempted = true;
+        saved = await this.jobs.saveRevision(claim, { key: revisedKey, size: result.revised.length }, result.notices);
+        if (!saved) {
+          await this.jobs.recover();
+          return;
+        }
+        revised = result.revised;
+      }
+      let finalAssessment: WritingAssessment | null = null;
+      try {
+        const revisedSource = await readDocx(revised);
+        finalAssessment = await this.assessText(run, finalAssessmentOperation, revisedSource.text);
+      } catch (error) {
+        if (error instanceof RetryScheduled) throw error;
+        this.logger.warn('Final assessment unavailable; publishing the validated revision without a final score.');
+      }
+      if (!(await this.jobs.complete(claim, finalAssessment))) await this.jobs.recover();
+    } catch (error) {
+      if (error instanceof RetryScheduled) return;
+      if (saved) {
+        const published = await this.jobs.complete(claim, null).catch(() => false);
+        if (!published) await this.jobs.recover();
+        return;
+      }
+      await run.fail(error);
+    } finally {
+      if (written && !saved) {
         try {
-          if (!publicationAttempted || !(await this.jobs.isPublished(claim.id, revisedKey)))
+          if (!saveAttempted || !(await this.jobs.ownsRevision(claim.id, revisedKey)))
             await this.storage.remove(revisedKey);
         } catch {
           this.logger.warn('Private revised document cleanup could not be confirmed.');
         }
       }
     }
-    return true;
   }
 }

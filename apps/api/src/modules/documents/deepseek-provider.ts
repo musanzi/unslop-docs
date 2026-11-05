@@ -23,6 +23,7 @@ export function workerSettings(env: NodeJS.ProcessEnv) {
   return {
     apiKey: required('DEEPSEEK_API_KEY'),
     model: required('DEEPSEEK_MODEL'),
+    assessmentTimeoutMs: duration('ASSESSMENT_TIMEOUT_MS', 5 * 60 * 1000),
     processingTimeoutMs: duration('PROCESSING_TIMEOUT_MS', 15 * 60 * 1000),
     providerTimeoutMs: duration('DEEPSEEK_TIMEOUT_MS', 60 * 1000)
   };

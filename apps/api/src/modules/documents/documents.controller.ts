@@ -3,6 +3,7 @@ import { AllowanceResponse } from './dto/allowance-response';
 import { FindDocument } from './queries/find-document.handler';
 import { DocumentAssessmentResponse } from './dto/document-assessment-response';
 import {
+  Body,
   Controller,
   Get,
   Header,
@@ -34,6 +35,10 @@ import { AbstractController } from '@api/shared/abstracts';
 import { CurrentUser } from '../auth/decorators';
 import { UploadDocument } from './commands/upload-document.handler';
 import { RetryDocument } from './commands/retry-document.handler';
+import { UnslopifyDocument } from './commands/unslopify-document.handler';
+import { UnslopifyDocumentDto } from './dto/unslopify-document.dto';
+import { FindDocumentPreview } from './queries/find-document-preview.handler';
+import { DocumentPreviewResponse } from './dto/document-preview-response';
 import { FindDocuments } from './queries/find-documents.handler';
 import { DownloadDocument } from './queries/download-document.handler';
 import { DocumentPage, DocumentResponse } from './dto/document-response';
@@ -43,10 +48,38 @@ import { ListDocumentsDto } from './dto/list-documents.dto';
 @ApiUnauthorizedResponse({ description: 'Sign-in required' })
 @Controller('documents')
 export class DocumentsController extends AbstractController {
+  @Post(':id/unslopify')
+  @HttpCode(200)
+  @Header('Cache-Control', 'private, no-store')
+  @ApiOperation({
+    summary: 'Start rewriting your assessed document with the chosen strength',
+    description:
+      'Reserves one monthly allowance slot in the same transaction that queues rewriting. The final assessment runs automatically after rewriting, and the slot is charged only when the revised download is ready.'
+  })
+  @ApiOkResponse({ type: DocumentResponse })
+  @ApiBadRequestResponse({ description: 'Rewrite strength is not an integer from 1 to 100' })
+  @ApiNotFoundResponse({ description: 'Document does not exist or belongs to another user' })
+  @ApiConflictResponse({
+    description:
+      'Document is not assessed, rewriting is already queued or complete, or the monthly allowance is fully used or reserved'
+  })
+  @ApiServiceUnavailableResponse({ description: 'Unslopify could not be confirmed. Refresh history before retrying.' })
+  unslopify(
+    @CurrentUser('id') ownerId: string,
+    @Param('id') id: string,
+    @Body() body: UnslopifyDocumentDto
+  ): Promise<DocumentResponse> {
+    return this.commandHandler.execute(new UnslopifyDocument(ownerId, id, body.strength));
+  }
+
   @Post(':id/retry')
   @HttpCode(200)
   @Header('Cache-Control', 'private, no-store')
-  @ApiOperation({ summary: 'Retry your failed document using its stored original' })
+  @ApiOperation({
+    summary: 'Retry your failed document using its stored original',
+    description:
+      'A failed initial assessment is queued again without a reservation. A failed rewrite keeps its assessment and strength and reserves a new slot.'
+  })
   @ApiOkResponse({ type: DocumentResponse })
   @ApiNotFoundResponse({ description: 'Document does not exist or belongs to another user' })
   @ApiConflictResponse({ description: 'Document is not failed, or monthly allowance is fully used or reserved' })
@@ -58,15 +91,12 @@ export class DocumentsController extends AbstractController {
   @Post()
   @Header('Cache-Control', 'private, no-store')
   @UseInterceptors(DocumentUploadInterceptor)
-  @ApiOperation({ summary: 'Upload a private original DOCX' })
+  @ApiOperation({ summary: 'Upload a private original DOCX and queue its initial assessment' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: { type: 'object', required: ['file'], properties: { file: { type: 'string', format: 'binary' } } }
   })
-  @ApiCreatedResponse({ type: DocumentResponse })
-  @ApiConflictResponse({
-    description: 'Monthly allowance fully used or reserved; message includes limit and UTC reset'
-  })
+  @ApiCreatedResponse({ type: DocumentResponse, description: 'Original saved and queued for its initial assessment' })
   @ApiBadRequestResponse({ description: 'Missing, invalid or unsafe DOCX content' })
   @ApiPayloadTooLargeResponse({ description: 'Original exceeds 10,000,000 bytes' })
   @ApiServiceUnavailableResponse({ description: 'Upload could not be confirmed; refresh history before retrying' })
@@ -91,9 +121,22 @@ export class DocumentsController extends AbstractController {
     return this.queryHandler.execute(new FindAllowance(ownerId));
   }
 
+  @Get(':id/preview')
+  @Header('Cache-Control', 'private, no-store')
+  @ApiOperation({
+    summary: 'Read the private read-only preview of your original',
+    description: 'Available once the initial assessment is published. Blocks follow the original structure in order.'
+  })
+  @ApiOkResponse({ type: DocumentPreviewResponse })
+  @ApiNotFoundResponse({ description: 'Document does not exist, belongs to another user, or is not assessed yet' })
+  @ApiServiceUnavailableResponse({ description: 'Preview could not be loaded' })
+  preview(@CurrentUser('id') ownerId: string, @Param('id') id: string): Promise<DocumentPreviewResponse> {
+    return this.queryHandler.execute(new FindDocumentPreview(ownerId, id));
+  }
+
   @Get(':id')
   @Header('Cache-Control', 'private, no-store')
-  @ApiOperation({ summary: 'Read your document status and writing assessment' })
+  @ApiOperation({ summary: 'Read your document status, assessments and revision notices' })
   @ApiOkResponse({ type: DocumentAssessmentResponse })
   @ApiNotFoundResponse({ description: 'Document does not exist or belongs to another user' })
   @ApiServiceUnavailableResponse({ description: 'Document could not be loaded' })

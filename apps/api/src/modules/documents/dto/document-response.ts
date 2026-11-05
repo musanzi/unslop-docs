@@ -1,7 +1,22 @@
-import { ProcessingStage } from '../document-workflow';
 import { ApiProperty } from '@nestjs/swagger';
-import { documentStatuses, DocumentStatus, failureMessages } from '../document-processing';
+import {
+  documentPhases,
+  DocumentPhase,
+  documentStatuses,
+  DocumentStatus,
+  failureMessages,
+  processingStages,
+  ProcessingStage
+} from '../document-processing';
 import { Document } from '../entities/document.entity';
+
+export class EditingProgressResponse {
+  @ApiProperty({ description: 'Editing chunks finished so far', minimum: 0 })
+  completed: number;
+
+  @ApiProperty({ description: 'Editing chunks planned for this rewrite', minimum: 0 })
+  total: number;
+}
 
 export class DocumentResponse {
   @ApiProperty({ format: 'uuid' })
@@ -16,8 +31,36 @@ export class DocumentResponse {
   @ApiProperty({ enum: documentStatuses })
   status: DocumentStatus;
 
-  @ApiProperty({ enum: ['assessing', 'editing', 'validating'], nullable: true })
+  @ApiProperty({
+    enum: documentPhases,
+    description:
+      'Processing attempt the status refers to: the automatic initial assessment, or the user-requested rewrite with its final assessment'
+  })
+  phase: DocumentPhase;
+
+  @ApiProperty({
+    enum: processingStages,
+    nullable: true,
+    description:
+      'Active stage while processing; assessing and final-assessment have no measurable total, editing exposes progress'
+  })
   processingStage: ProcessingStage | null;
+
+  @ApiProperty({
+    type: EditingProgressResponse,
+    nullable: true,
+    description: 'Completed and total editing work units while a rewrite is processing'
+  })
+  progress: EditingProgressResponse | null;
+
+  @ApiProperty({
+    type: Number,
+    nullable: true,
+    minimum: 1,
+    maximum: 100,
+    description: 'Rewrite strength saved with the Unslopify request; null before the first request'
+  })
+  strength: number | null;
 
   @ApiProperty({ type: String, nullable: true })
   failure: string | null;
@@ -41,13 +84,22 @@ export class DocumentPage {
 }
 
 export function documentResponse(document: Document): DocumentResponse {
+  const processing = document.status === 'processing';
   return {
     id: document.id,
     filename: document.filename,
     size: document.size,
     createdAt: document.createdAt,
     status: document.status,
-    processingStage: document.status === 'processing' ? (document.processingStage ?? 'assessing') : null,
+    phase: document.phase,
+    processingStage: processing
+      ? (document.processingStage ?? (document.phase === 'assessment' ? 'assessing' : 'editing'))
+      : null,
+    progress:
+      processing && document.editingTotal !== null && document.editingTotal !== undefined
+        ? { completed: document.editingCompleted ?? 0, total: document.editingTotal }
+        : null,
+    strength: document.strength ?? null,
     failure: document.status === 'failed' ? failureMessages[document.failureCode] : null
   };
 }

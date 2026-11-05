@@ -16,6 +16,7 @@ export function fakeAssessmentProvider(outcome: 'patterns' | 'none' | 'failure',
       if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
       if (outcome === 'failure') throw new Error('Synthetic provider failure');
       return {
+        score: outcome === 'none' ? 0 : 40,
         patterns: outcome === 'none' ? [] : [{ rule: 23, examples: ['In order to', 'unknown quotation'] }]
       };
     }
