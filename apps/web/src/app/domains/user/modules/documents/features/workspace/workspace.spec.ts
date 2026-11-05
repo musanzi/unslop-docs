@@ -958,3 +958,385 @@ describe('Document preview', () => {
     http.verify();
   });
 });
+
+describe('Workspace flow', () => {
+  function element<T extends Element = Element>(root: ParentNode, selector: string): T {
+    const found = root.querySelector<T>(selector);
+    if (!found) throw new Error(`Missing workspace element: ${selector}`);
+    return found;
+  }
+  const allowance: IAllowanceResponse = {
+    status: 'FREE',
+    limit: 3,
+    used: 0,
+    reserved: 0,
+    remaining: 3,
+    month: '2026-11',
+    resetsAt: '2026-12-01T00:00:00Z'
+  };
+  const assessed: IDocumentAssessmentResponse = {
+    ...document,
+    status: 'assessed',
+    phase: 'assessment',
+    strength: null,
+    assessment: { rubric: 'ai-style-v1', score: 62, patterns: [] },
+    finalScoreUnavailable: false
+  };
+  const editing: IDocumentAssessmentResponse = {
+    ...assessed,
+    status: 'processing',
+    phase: 'rewrite',
+    processingStage: 'editing',
+    progress: { completed: 3, total: 8 },
+    strength: 80
+  };
+  const completed: IDocumentAssessmentResponse = {
+    ...assessed,
+    status: 'completed',
+    phase: 'rewrite',
+    strength: 80,
+    finalAssessment: { rubric: 'ai-style-v1', score: 31, patterns: [] },
+    revisionNotices: {
+      keptPassages: [{ check: 'citation', span: 'p-4', excerpt: 'Smith (2020) argues that rivers remember.' }],
+      uneditedElements: [
+        { reason: 'image', count: 2 },
+        { reason: 'equation', count: 1 }
+      ]
+    }
+  };
+  const blocks: IPreviewBlockResponse[] = [
+    { kind: 'heading', level: 1, text: 'Chapter 3', inlines: null, rows: null, reason: null },
+    {
+      kind: 'paragraph',
+      level: null,
+      text: 'Rivers remember.',
+      inlines: [{ text: 'Rivers remember.', bold: false, italic: false, protected: null }],
+      rows: null,
+      reason: null
+    }
+  ];
+
+  async function mount(items: IDocumentAssessmentResponse[]) {
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([]),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        {
+          provide: AuthStore,
+          useValue: {
+            user: signal(testUser),
+            isAdmin: () => false,
+            signOut: vi.fn(),
+            isSigningOut: signal(false),
+            signOutError: signal('')
+          }
+        },
+        { provide: Media, useValue: { match: () => signal(false) } }
+      ]
+    });
+    overrideTemplates();
+    const fixture = TestBed.createComponent(Workspace);
+    await fixture.whenStable();
+    const http = TestBed.inject(HttpTestingController);
+    http
+      .expectOne((request) => request.url === '/documents')
+      .flush({ items, page: 1, pageSize: 20, total: items.length });
+    http.expectOne('/documents/allowance').flush(allowance);
+    await fixture.whenStable();
+    const page = fixture.nativeElement as HTMLElement;
+    const store = fixture.debugElement.injector.get(DocumentsStore);
+    const main = element(page, 'main');
+    const history = element(page, 'nav[aria-label="Document history"]');
+    const live = element(main, 'p.sr-only[role="status"]');
+    return { fixture, http, page, store, main, history, live };
+  }
+
+  async function open(context: Awaited<ReturnType<typeof mount>>, detail: IDocumentAssessmentResponse) {
+    element<HTMLButtonElement>(context.history, 'button').click();
+    context.http.expectOne(`/documents/${detail.id}`).flush(detail);
+    if (detail.assessment) flushPreview(context.http, blocks);
+    await context.fixture.whenStable();
+  }
+
+  async function poll(context: Awaited<ReturnType<typeof mount>>, detail: IDocumentAssessmentResponse) {
+    context.store.loadSelected(true);
+    context.http.expectOne(`/documents/${detail.id}`).flush(detail);
+    await context.fixture.whenStable();
+  }
+
+  it('waits at the preview with the score, a Balanced slider at 50 and no busy indicator', async () => {
+    const context = await mount([assessed]);
+    await open(context, assessed);
+    const { main, history, http } = context;
+    expect(element(main, '#phase-heading').textContent).toContain('Ready to edit');
+    expect(history.textContent).toContain('Ready to edit');
+    expect(main.querySelector('[role="progressbar"]')).toBeNull();
+    expect(main.innerHTML).not.toContain('animate-pulse');
+    expect(main.textContent).toContain('62');
+    expect(main.textContent).toContain('It measures writing patterns and does not prove AI authorship.');
+    expect(main.textContent).not.toMatch(/AI vocabulary|Filler phrases|patterns found/);
+    const slider = element<HTMLInputElement>(main, 'input[type="range"]');
+    expect(slider.min).toBe('1');
+    expect(slider.max).toBe('100');
+    expect(slider.value).toBe('50');
+    expect(slider.getAttribute('aria-valuetext')).toBe('50, Balanced');
+    expect(element(main, 'label[for="rewrite-strength"]').textContent).toContain('Rewrite strength');
+    expect(main.textContent).not.toMatch(/%\s*reduction|reduce.*by \d+%/i);
+    const unslopify = [...main.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Unslopify');
+    expect(unslopify?.disabled).toBe(false);
+    const preview = element(main, '[role="region"][aria-labelledby="preview-heading"]');
+    expect(preview.getAttribute('tabindex')).toBe('0');
+    expect(preview.querySelector('h3')?.textContent).toContain('Chapter 3');
+    expect(preview.textContent).toContain('Rivers remember.');
+    expect(preview.querySelector('img, a, iframe, script')).toBeNull();
+    http.verify();
+  });
+
+  it('sends the chosen strength once for a double click and queues editing while keeping the preview', async () => {
+    const context = await mount([assessed]);
+    await open(context, assessed);
+    const { main, history, http, fixture } = context;
+    const slider = element<HTMLInputElement>(main, 'input[type="range"]');
+    slider.value = '80';
+    slider.dispatchEvent(new Event('input'));
+    await fixture.whenStable();
+    expect(slider.getAttribute('aria-valuetext')).toBe('80, Thorough');
+    expect(main.textContent).toContain('Thorough');
+    const unslopify = [...main.querySelectorAll('button')].find(
+      (button) => button.textContent?.trim() === 'Unslopify'
+    )!;
+    unslopify.click();
+    unslopify.click();
+    await fixture.whenStable();
+    expect(unslopify.disabled).toBe(true);
+    expect(unslopify.textContent).toContain('Starting');
+    const request = http.expectOne(`/documents/${document.id}/unslopify`);
+    expect(request.request.body).toEqual({ strength: 80 });
+    request.flush({ ...assessed, status: 'queued', phase: 'rewrite', strength: 80 });
+    http.expectOne('/documents/allowance').flush({ ...allowance, reserved: 1, remaining: 2 });
+    await fixture.whenStable();
+    expect(element(main, '#phase-heading').textContent).toContain('Queued for editing');
+    expect(history.textContent).toContain('Queued for editing');
+    expect(main.querySelector('input[type="range"]')).toBeNull();
+    expect(main.textContent).toContain('Thorough');
+    expect(main.textContent).toContain('80 of 100');
+    expect(main.querySelector('[role="region"][aria-labelledby="preview-heading"]')?.textContent).toContain(
+      'Chapter 3'
+    );
+    expect(context.live.textContent).toBe('river.docx: Queued for editing.');
+    http.verify();
+  });
+
+  it('keeps the preview and shows an allowance refusal beside Unslopify', async () => {
+    const context = await mount([assessed]);
+    await open(context, assessed);
+    const { main, http, fixture } = context;
+    const unslopify = [...main.querySelectorAll('button')].find(
+      (button) => button.textContent?.trim() === 'Unslopify'
+    )!;
+    unslopify.click();
+    const message =
+      'Your FREE allowance of 3 documents is fully used or reserved. It resets on 2026-12-01T00:00:00.000Z (UTC).';
+    http.expectOne(`/documents/${document.id}/unslopify`).flush({ message }, { status: 409, statusText: 'Conflict' });
+    http.expectOne('/documents/allowance').flush({ ...allowance, used: 3, remaining: 0 });
+    http.expectOne(`/documents/${document.id}`).flush(assessed);
+    await fixture.whenStable();
+    expect(element(main, '#unslopify-error[role="alert"]').textContent).toContain(message);
+    expect(unslopify.getAttribute('aria-describedby')).toBe('unslopify-error');
+    expect(unslopify.disabled).toBe(false);
+    expect(main.querySelector('[role="region"][aria-labelledby="preview-heading"]')?.textContent).toContain(
+      'Chapter 3'
+    );
+    expect(main.textContent).toContain('62');
+    http.verify();
+  });
+
+  it('shows editing progress from the API, then named indeterminate checks without a premature 100%', async () => {
+    const context = await mount([editing]);
+    await open(context, editing);
+    const { main, history, http } = context;
+    expect(element(main, '#phase-heading').textContent).toContain('Editing your document');
+    expect(history.textContent).toContain('Editing your document');
+    const bar = element(main, '[role="progressbar"]');
+    expect(bar.getAttribute('aria-valuenow')).toBe('3');
+    expect(bar.getAttribute('aria-valuemax')).toBe('8');
+    expect(main.textContent).toContain('3 of 8 sections edited');
+    expect(main.querySelector('input[type="range"]')).toBeNull();
+    await poll(context, { ...editing, progress: { completed: 8, total: 8 }, processingStage: 'validating' });
+    const checking = element(main, '[role="progressbar"]');
+    expect(checking.getAttribute('aria-valuenow')).toBeNull();
+    expect(checking.getAttribute('aria-valuetext')).toBe('Checking the revised document');
+    expect(main.textContent).not.toContain('100%');
+    await poll(context, { ...editing, progress: null, processingStage: 'final-assessment' });
+    expect(element(main, '#phase-heading').textContent).toContain('Assessing the revised document');
+    expect(element(main, '[role="progressbar"]').getAttribute('aria-valuetext')).toBe('Assessing the revised document');
+    expect(history.textContent).toContain('Assessing the revised document');
+    expect(context.live.textContent).toBe('river.docx: Checking the revised document.');
+    expect(main.querySelector('.workspace-celebrate')).toBeNull();
+    http.verify();
+  });
+
+  it('celebrates a watched completion once with before and after scores, downloads and notices', async () => {
+    const context = await mount([editing]);
+    await open(context, editing);
+    const { main, history, http, fixture, store } = context;
+    await poll(context, completed);
+    const phase = element(main, 'section[aria-labelledby="phase-heading"]');
+    expect(phase.classList.contains('workspace-celebrate')).toBe(true);
+    expect(element(main, '#phase-heading').textContent).toContain('Download ready');
+    expect(history.textContent).toContain('Download ready');
+    expect(context.live.textContent).toBe('river.docx: Download ready.');
+    expect(main.querySelector('[role="progressbar"]')).toBeNull();
+    const scores = element(main, 'section[aria-labelledby="score-heading"]');
+    expect(scores.textContent).toMatch(/Before\s*62/);
+    expect(scores.textContent).toMatch(/After\s*31/);
+    expect(scores.textContent).toContain('Down 31 points');
+    const buttons = [...main.querySelectorAll('button')].map((button) => button.textContent?.trim());
+    expect(buttons).toContain('Download revised DOCX');
+    expect(buttons).toContain('Download original');
+    expect(main.textContent).toContain('Review the revised document before submitting it.');
+    expect(main.textContent).not.toContain('do not prove unchanged meaning');
+    expect(main.textContent).toContain('Left unedited: 2 images, 1 equation.');
+    expect(main.textContent).toContain('1 passage kept unchanged');
+    expect(main.textContent).toContain('Smith (2020) argues that rivers remember.');
+    store.select(null);
+    await fixture.whenStable();
+    element<HTMLButtonElement>(history, 'button').click();
+    http.expectOne(`/documents/${document.id}`).flush(completed);
+    flushPreview(http, blocks);
+    await fixture.whenStable();
+    expect(main.querySelector('.workspace-celebrate')).toBeNull();
+    expect(element(main, '#phase-heading').textContent).toContain('Download ready');
+    http.verify();
+  });
+
+  it('allows download when the score rose or the final score is unavailable, without a success claim', async () => {
+    const context = await mount([completed]);
+    await open(context, { ...completed, finalAssessment: { rubric: 'ai-style-v1', score: 66, patterns: [] } });
+    const { main, http } = context;
+    expect(main.querySelector('.workspace-celebrate')).toBeNull();
+    expect(main.textContent).toContain('Up 4 points');
+    expect(
+      element<HTMLButtonElement>(main, 'button[aria-describedby="final-score-note"], button:not([disabled])')
+    ).not.toBeNull();
+    await poll(context, { ...completed, finalAssessment: null, finalScoreUnavailable: true });
+    expect(main.textContent).toContain('Final score unavailable');
+    const revised = [...main.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Download revised DOCX')
+    )!;
+    expect(revised.disabled).toBe(false);
+    expect(revised.getAttribute('aria-describedby')).toBe('final-score-note');
+    expect(element(main, '#final-score-note').textContent).toContain('final score is unavailable');
+    expect(main.textContent).not.toMatch(/Down \d+ points/);
+    http.verify();
+  });
+
+  it('offers Retry editing after a failed rewrite and keeps the initial score, strength and preview', async () => {
+    const failed: IDocumentAssessmentResponse = {
+      ...assessed,
+      status: 'failed',
+      phase: 'rewrite',
+      strength: 70,
+      failure: 'DeepSeek did not answer in time. Your original and its assessment are still available.'
+    };
+    const context = await mount([failed]);
+    await open(context, failed);
+    const { main, history, http, fixture } = context;
+    expect(element(main, '#phase-heading').textContent).toContain('Failed');
+    expect(main.textContent).toContain('Editing failed.');
+    expect(main.textContent).toContain('DeepSeek did not answer in time');
+    expect(main.textContent).toContain('62');
+    expect(main.textContent).toContain('Thorough');
+    expect(main.textContent).toContain('70 of 100');
+    expect(main.querySelector('[role="region"][aria-labelledby="preview-heading"]')).not.toBeNull();
+    const phase = element(main, 'section[aria-labelledby="phase-heading"]');
+    expect(phase.innerHTML).not.toMatch(/animate-pulse|animate-spin|animate-progress|workspace-celebrate/);
+    expect(main.querySelector('input[type="range"]')).toBeNull();
+    const retry = [...main.querySelectorAll('button')].find(
+      (button) => button.textContent?.trim() === 'Retry editing'
+    )!;
+    retry.click();
+    await fixture.whenStable();
+    const queued = { ...failed, status: 'queued', failure: null };
+    http.expectOne(`/documents/${document.id}/retry`).flush(queued);
+    http.expectOne(`/documents/${document.id}`).flush(queued);
+    flushPreview(http, blocks);
+    http.expectOne('/documents/allowance').flush({ ...allowance, reserved: 1, remaining: 2 });
+    http
+      .expectOne((request) => request.url === '/documents')
+      .flush({ items: [queued], page: 1, pageSize: 20, total: 1 });
+    await fixture.whenStable();
+    expect(element(main, '#phase-heading').textContent).toContain('Queued for editing');
+    expect(history.textContent).toContain('Queued for editing');
+    http.verify();
+  });
+
+  it('offers Retry assessment after a failed assessment without a score', async () => {
+    const failed: IDocumentAssessmentResponse = {
+      ...assessed,
+      status: 'failed',
+      phase: 'assessment',
+      assessment: null,
+      failure: 'Processing failed. Your original is still available.'
+    };
+    const context = await mount([failed]);
+    await open(context, failed);
+    const { main, http } = context;
+    expect(main.textContent).toContain('Assessment failed.');
+    expect(main.textContent).toContain('No score until the assessment succeeds.');
+    expect(
+      [...main.querySelectorAll('button')].some((button) => button.textContent?.trim() === 'Retry assessment')
+    ).toBe(true);
+    expect(main.querySelector('[aria-labelledby="preview-heading"]')).toBeNull();
+    http.verify();
+  });
+
+  it('shows upload progress from transferred bytes and hands over to the queued assessment', async () => {
+    const context = await mount([]);
+    const { page, main, history, http, fixture } = context;
+    const input = element<HTMLInputElement>(page, 'input[type="file"]');
+    Object.defineProperty(input, 'files', { value: [new File(['fixture'], 'river.docx')], configurable: true });
+    input.dispatchEvent(new Event('change'));
+    await fixture.whenStable();
+    const request = http.expectOne('/documents');
+    request.event({ type: HttpEventType.UploadProgress, loaded: 250, total: 1000 });
+    await fixture.whenStable();
+    const bar = element(page, '[role="progressbar"][aria-label="Upload"]');
+    expect(bar.getAttribute('aria-valuenow')).toBe('25');
+    expect(page.textContent).toContain('Uploading… 25%');
+    request.event({ type: HttpEventType.UploadProgress, loaded: 600 });
+    await fixture.whenStable();
+    expect(element(page, '[role="progressbar"][aria-label="Upload"]').getAttribute('aria-valuenow')).toBeNull();
+    expect(page.textContent).toContain('Uploading your original…');
+    const queued: IDocumentAssessmentResponse = { ...assessed, status: 'queued', assessment: null };
+    request.flush(queued);
+    await fixture.whenStable();
+    http.expectOne(`/documents/${document.id}`).flush(queued);
+    http
+      .expectOne((request) => request.url === '/documents')
+      .flush({ items: [queued], page: 1, pageSize: 20, total: 1 });
+    http.expectOne('/documents/allowance').flush(allowance);
+    await fixture.whenStable();
+    expect(page.querySelector('[role="progressbar"]')).toBeNull();
+    expect(element(main, 'h1').textContent).toContain('river.docx');
+    expect(element(main, '#phase-heading').textContent).toContain('Queued for assessment');
+    expect(history.textContent).toContain('Queued for assessment');
+    expect(page.textContent).toContain('Original uploaded. Assessment starts automatically.');
+    expect(page.textContent).not.toMatch(/upload complete|processing complete/i);
+    http.verify();
+  });
+
+  it('keeps the delete action inside a compact history row, reachable by keyboard', async () => {
+    const context = await mount([assessed]);
+    const { history, http } = context;
+    const remove = element<HTMLButtonElement>(history, 'button[aria-label="Delete river.docx"]');
+    const row = remove.parentElement!;
+    expect(row.querySelector('button[aria-current], button:first-child')?.textContent).toContain('river.docx');
+    expect(row.textContent).toContain('Ready to edit');
+    expect(remove.tabIndex).toBe(0);
+    expect(remove.className).toContain('focus-visible:opacity-100');
+    expect(row.className).toContain('group');
+    http.verify();
+  });
+});
