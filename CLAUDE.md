@@ -30,6 +30,8 @@ This pnpm and Nx monorepo is the starter for unslop-docs, a document-editing app
 
 Use two-space indentation, single quotes, and semicolons. Prettier uses a 120-character print width and omits trailing commas. Follow ESLint and Angular template accessibility rules.
 
+Use Tailwind utilities for component styling. Put shared tokens, fonts, Material overrides, and essential custom styles in `apps/web/src/styles/` and import them globally. Do not use component CSS or SCSS files or inline `styles` metadata.
+
 Don't write comments in code. Give classes, methods, and functions clear names instead.
 
 Use kebab-case filenames, PascalCase classes, and camelCase members. Follow neighboring modules and filenames, such as `create-stand.handler.ts`. Use kebab-case for Angular component selectors and camelCase for directive selectors.

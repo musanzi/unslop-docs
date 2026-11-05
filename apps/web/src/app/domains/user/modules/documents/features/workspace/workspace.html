@@ -1,54 +1,75 @@
-<a href="#workspace-content" class="skip-link">Skip to document</a>
-<mat-sidenav-container class="workspace">
+<a href="#workspace-content" class="fixed left-2 top-2 z-10 -translate-y-[200%] bg-canvas p-3 focus:translate-y-0"
+  >Skip to document</a
+>
+<mat-sidenav-container class="h-dvh bg-panel text-inherit">
   <mat-sidenav
     #history
     id="document-history"
-    class="history"
+    class="w-[min(17rem,85vw)] rounded-none bg-canvas text-inherit"
     [mode]="isMobile() ? 'over' : 'side'"
     [opened]="!isMobile()"
     [disableClose]="!isMobile()"
     [autoFocus]="isMobile()"
     aria-label="Your documents">
-    <div class="history-content">
-      <div class="history-header">
-        <a routerLink="/" class="wordmark">Unslopy</a>
+    <div class="flex size-full flex-col px-3 py-4">
+      <div class="mb-4 flex min-h-12 items-center justify-between gap-2 px-2">
+        <a routerLink="/" class="font-document text-[1.25rem] font-normal tracking-[-0.025em]">Unslopy</a>
         @if (isMobile()) {
-          <button class="icon-button" type="button" (click)="history.close()" aria-label="Close documents">
+          <button
+            class="inline-flex size-11 items-center justify-center gap-2 rounded-lg border-0 p-2 enabled:hover:bg-hover"
+            type="button"
+            (click)="history.close()"
+            aria-label="Close documents">
             <mat-icon svgIcon="x" />
           </button>
         }
       </div>
-      <button class="new-document" type="button" (click)="select(null)" [disabled]="store.uploading()">
+      <button
+        class="inline-flex min-h-11 items-center justify-start gap-2 rounded-lg border border-divider px-3.5 py-[0.6rem] enabled:hover:bg-hover"
+        type="button"
+        (click)="select(null)"
+        [disabled]="store.uploading()">
         <mat-icon svgIcon="plus" /> New document
       </button>
-      <nav class="document-list" aria-label="Document history" [attr.aria-busy]="store.loading()">
+      <nav
+        class="min-h-0 flex-1 overflow-y-auto pt-6 [&>p]:px-3"
+        aria-label="Document history"
+        [attr.aria-busy]="store.loading()">
         @for (document of store.items(); track document.id) {
           <button
-            class="document-entry"
+            class="mb-1 flex min-h-11 w-full flex-col items-stretch gap-0.5 rounded-lg border-0 px-3.5 py-[0.6rem] text-left enabled:hover:bg-hover"
             type="button"
-            [class.selected]="store.selected()?.id === document.id"
+            [class.bg-hover]="store.selected()?.id === document.id"
             [attr.aria-current]="store.selected()?.id === document.id ? 'true' : null"
             (click)="select(document)">
-            <span class="filename">{{ document.filename }}</span>
-            <time [attr.datetime]="document.createdAt">{{ document.createdAt | date: 'MMM d, y' }}</time>
+            <span class="truncate">{{ document.filename }}</span>
+            <time class="text-[0.75rem] text-muted" [attr.datetime]="document.createdAt">{{
+              document.createdAt | date: 'MMM d, y'
+            }}</time>
           </button>
         }
         @if (store.loading() && !store.items().length) {
-          <p class="muted" role="status">Loading documents…</p>
+          <p class="text-muted" role="status">Loading documents…</p>
         } @else if (!store.loading() && !store.listError() && !store.items().length) {
-          <p class="muted">Your uploads appear here.</p>
+          <p class="text-muted">Your uploads appear here.</p>
         }
         @if (store.listError()) {
-          <p class="error" role="alert">{{ store.listError() }}</p>
-          <button class="text-button" type="button" (click)="store.load()" [disabled]="store.loading()">
+          <p class="mt-3 text-[0.875rem] text-danger [overflow-wrap:anywhere]" role="alert">{{ store.listError() }}</p>
+          <button
+            class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border-0 px-3.5 py-[0.6rem] enabled:hover:bg-hover"
+            type="button"
+            (click)="store.load()"
+            [disabled]="store.loading()">
             Try again
           </button>
         }
       </nav>
       @if (store.pageCount() > 1) {
-        <nav class="pagination" aria-label="Document pages">
+        <nav
+          class="flex items-center justify-between pt-2 text-[0.8125rem] text-muted tabular-nums"
+          aria-label="Document pages">
           <button
-            class="icon-button"
+            class="inline-flex size-11 items-center justify-center gap-2 rounded-lg border-0 p-2 enabled:hover:bg-hover"
             type="button"
             aria-label="Newer documents"
             (click)="store.load(store.page() - 1)"
@@ -57,7 +78,7 @@
           </button>
           <span>{{ store.page() }} / {{ store.pageCount() }}</span>
           <button
-            class="icon-button"
+            class="inline-flex size-11 items-center justify-center gap-2 rounded-lg border-0 p-2 enabled:hover:bg-hover"
             type="button"
             aria-label="Older documents"
             (click)="store.load(store.page() + 1)"
@@ -66,20 +87,25 @@
           </button>
         </nav>
       }
-      <footer class="account">
-        <a routerLink="/user/profile">My profile</a>
+      <footer class="mt-3 flex flex-col items-stretch border-t border-divider pt-3 text-[0.8125rem]">
+        <a class="flex min-h-11 items-center px-3 py-2" routerLink="/user/profile">My profile</a>
         @if (auth.isAdmin()) {
-          <a routerLink="/admin">Administration</a>
+          <a class="flex min-h-11 items-center px-3 py-2" routerLink="/admin">Administration</a>
         }
-        <button class="text-button" type="button" (click)="auth.signOut()">Sign out</button>
+        <button
+          class="inline-flex min-h-11 items-center justify-start gap-2 rounded-lg border-0 px-3 py-2 enabled:hover:bg-hover"
+          type="button"
+          (click)="auth.signOut()">
+          Sign out
+        </button>
       </footer>
     </div>
   </mat-sidenav>
-  <mat-sidenav-content class="workspace-main">
-    <header class="workspace-header">
+  <mat-sidenav-content class="flex flex-col text-inherit">
+    <header class="flex min-h-12 shrink-0 items-center gap-2 px-3 py-2 text-[0.875rem] text-muted md:px-6 md:py-3">
       @if (isMobile()) {
         <button
-          class="icon-button"
+          class="inline-flex size-11 items-center justify-center gap-2 rounded-lg border-0 p-2 enabled:hover:bg-hover"
           type="button"
           (click)="history.open()"
           aria-controls="document-history"
@@ -90,31 +116,50 @@
       }
       <span>Documents</span>
     </header>
-    <main id="workspace-content" tabindex="-1">
-      <div class="document-content">
+    <main
+      id="workspace-content"
+      tabindex="-1"
+      class="flex flex-1 items-start justify-center px-5 py-12 md:items-center md:px-6 md:pb-24 md:pt-8">
+      <div class="w-full max-w-xl">
         @if (store.selected(); as document) {
-          <h1>{{ document.filename }}</h1>
-          <p class="muted document-meta">
+          <h1
+            class="mb-6 text-balance text-[1.5rem] font-medium leading-[1.3] tracking-[-0.025em] text-ink [overflow-wrap:anywhere] md:text-[1.75rem]">
+            {{ document.filename }}
+          </h1>
+          <p class="-mt-3 mb-6 text-[0.875rem] text-muted">
             Original · {{ document.createdAt | date: 'mediumDate' }} ·
             {{ document.size / 1000000 | number: '1.0-2' }} MB
           </p>
-          <button class="primary-button" type="button" (click)="download(document)" [disabled]="store.downloading()">
+          <button
+            class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border-0 bg-ink px-3.5 py-[0.6rem] text-canvas enabled:hover:bg-paper-hover"
+            type="button"
+            (click)="download(document)"
+            [disabled]="store.downloading()">
             <mat-icon svgIcon="download" />
             {{ store.downloading() ? 'Downloading…' : 'Download original' }}
           </button>
           @if (store.downloadError()) {
-            <p class="error" role="alert">{{ store.downloadError() }}</p>
+            <p class="mt-3 text-[0.875rem] text-danger [overflow-wrap:anywhere]" role="alert">
+              {{ store.downloadError() }}
+            </p>
           }
         } @else {
-          <h1>Upload your document.</h1>
+          <h1
+            class="mb-6 text-balance text-[1.5rem] font-medium leading-[1.3] tracking-[-0.025em] text-ink [overflow-wrap:anywhere] md:text-[1.75rem]">
+            Upload your document.
+          </h1>
         }
-        <div class="upload-area" [class.with-document]="store.selected()">
-          <p id="document-privacy" class="privacy">
+        <div
+          class="border-divider"
+          [class.mt-12]="store.selected()"
+          [class.border-t]="store.selected()"
+          [class.pt-6]="store.selected()">
+          <p id="document-privacy" class="mb-5 max-w-xl text-[0.875rem] leading-[1.6] text-muted">
             Assessment and editing are in development and will send text to DeepSeek. For now, uploads save a private
             original.
           </p>
           <button
-            class="upload-button"
+            class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-divider px-3.5 py-[0.6rem] enabled:hover:bg-hover"
             type="button"
             (click)="fileInput.click()"
             [disabled]="store.uploading()"
@@ -132,11 +177,15 @@
             [disabled]="store.uploading()"
             hidden
             aria-label="Choose a DOCX file" />
-          <p id="upload-limit" class="muted upload-limit">Up to 10 MB · 10,000 words · English or French</p>
+          <p id="upload-limit" class="ml-3.5 inline-block text-[0.8125rem] text-muted">
+            Up to 10 MB · 10,000 words · English or French
+          </p>
           @if (store.uploadError()) {
-            <p id="upload-error" class="error" role="alert">{{ store.uploadError() }}</p>
+            <p id="upload-error" class="mt-3 text-[0.875rem] text-danger [overflow-wrap:anywhere]" role="alert">
+              {{ store.uploadError() }}
+            </p>
           }
-          <p class="status" role="status">
+          <p class="mt-3 min-h-[1.5em] text-[0.875rem] text-muted" role="status">
             {{ store.uploading() ? 'Uploading your original…' : store.announcement() }}
           </p>
         </div>

@@ -76,7 +76,7 @@ To verify the UI on the owner's stack, apply the migration, change a user's stat
 
 ### Upload and download documents
 
-Google sign-in opens `/user/documents`. Choose **Upload DOCX** after reading the DeepSeek privacy notice. The workspace lists your originals, newest first, with 20 entries per page. On phones, **Open documents** opens the history drawer. Choose an entry, then **Download original**. This slice stores originals only. Assessment, editing, allowances, and deletion belong to later issues. Uploads already enforce the processing eligibility rules below.
+`/` redirects to `/auth/sign-in`. Signed-in users continue to `/user/documents`, including when they visit sign-in directly. Google sign-in opens `/user/documents`. Choose **Upload DOCX** after reading the DeepSeek privacy notice. The workspace lists your originals, newest first, with 20 entries per page. On phones, **Open documents** opens the history drawer. Choose an entry, then **Download original**. This slice stores originals only. Assessment, editing, allowances, and deletion belong to later issues. Uploads already enforce the processing eligibility rules below.
 
 The `PrivateDocuments1793880200000` migration adds document ownership, display filename, byte size, upload time, and a generated original storage key. No document relation is added to user responses or CSV exports. Admin access does not grant access to another user's documents. The original has its own download endpoint and remains separate from future revised files.
 
@@ -210,6 +210,10 @@ Test observable business decisions, transformations, errors, and consequential s
 Check that rejected operations do not write data, publish events, or delete files.
 Add regression tests for bug fixes. Skip construction-only tests and straightforward forwarding.
 There is no numeric coverage threshold.
+
+## Web routing tests
+
+Run `pnpm test:web` to check root and fallback navigation, authentication guards, and Google callback error parameters. These tests use Angular's router with isolated page fixtures. `pnpm typecheck` also checks web test types.
 
 ## Maintenance and deployment
 

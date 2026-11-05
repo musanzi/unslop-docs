@@ -73,7 +73,7 @@
     "lint": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "eslint \"apps/web/src/**/*.{ts,html}\""
+        "command": "eslint \"apps/web/src/**/*.{ts,html}\" \"apps/web/vitest.config.mts\" \"apps/web/test-setup.ts\""
       }
     },
     "start": {
@@ -88,7 +88,19 @@
       "options": {
         "command": "ngc --noEmit -p apps/web/tsconfig.app.json"
       },
-      "dependsOn": ["^generate"]
+      "dependsOn": ["^generate", "typecheck-spec"]
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vitest run --config apps/web/vitest.config.mts"
+      }
+    },
+    "typecheck-spec": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc --noEmit -p apps/web/tsconfig.spec.json"
+      }
     }
   },
   "implicitDependencies": ["api-contracts"]

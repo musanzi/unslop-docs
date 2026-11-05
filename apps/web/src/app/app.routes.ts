@@ -19,6 +19,8 @@ export const routes: Route[] = [
   },
   {
     path: '',
-    loadChildren: () => import('./domains/website/routes')
-  }
+    pathMatch: 'full',
+    redirectTo: '/auth/sign-in'
+  },
+  { path: '**', redirectTo: '/auth/sign-in' }
 ];

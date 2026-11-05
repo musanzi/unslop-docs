@@ -7,6 +7,7 @@ const routes: Routes = [
     path: '',
     component: AuthLayout,
     children: [
+      { path: '', pathMatch: 'full', redirectTo: 'sign-in' },
       {
         path: 'sign-in',
         title: 'Sign In',
