@@ -2,7 +2,7 @@
 
 Unslopy is a web app that makes DOCX files in English or French read more naturally. A user uploads a document, a background worker assesses it with DeepSeek and publishes an estimated AI-style score with a read-only preview, the user chooses a rewrite strength and clicks **Unslopify**, and the worker rewrites the document, assesses the result, and offers a revised DOCX. The score reports writing patterns. It does not prove AI authorship.
 
-The app is live. This README describes the current code. Of the accepted [workflow revision](docs/document-workflow-design.md), the document support from issue #15 and the API lifecycle from issue #16 are implemented: ordinary content controls and tracked changes are accepted, passages that fail a content check keep their original text with a notice, formatting differences alone never block a download, uploads are assessed before any editing, Unslopify reserves one monthly slot and charges it only when the revised download is ready, and the revised document receives its own assessment. Deletion of idle documents from issue #11 is implemented: the owner deletes a stored, assessed, failed, or completed document together with every file kept for it. The workspace changes from issue #13 and deletion of queued or processing documents from issue #12 are not implemented yet.
+The app is live. This README describes the current code. Of the accepted [workflow revision](docs/document-workflow-design.md), the document support from issue #15 and the API lifecycle from issue #16 are implemented: ordinary content controls and tracked changes are accepted, passages that fail a content check keep their original text with a notice, formatting differences alone never block a download, uploads are assessed before any editing, Unslopify reserves one monthly slot and charges it only when the revised download is ready, and the revised document receives its own assessment. Deletion from issues #11 and #12 is implemented: the owner deletes a document in any state together with every file kept for it. Deleting a queued or processing document stops it: no later result is saved, an active rewrite reservation is released once, and the worker sends nothing further to DeepSeek for it. Text already sent to DeepSeek in a request still in flight may be processed there to completion; the worker aborts that request within its next heartbeat and discards any answer. Only the workspace changes from issue #13 are not implemented yet.
 
 The product name is Unslopy. Repository, package, database, and Compose identifiers use `unslop-docs`.
 
@@ -88,7 +88,7 @@ To run a command in Docker instead, prefix it with `docker compose -f compose.de
 | `pnpm db:up` / `pnpm db:down` | Apply migrations or revert the latest migration |
 | `pnpm generate:api`           | Regenerate the API contracts                    |
 
-The API tests need no running services and no `.env` file.
+The API tests need no running services and no `.env` file. `bash tools/check-allowance-postgres.sh [api-container]` copies `tools/check-allowance-postgres.cjs` into the running API container and runs the allowance and deletion races against a disposable PostgreSQL database, including deletion contending with publication of a revised document.
 
 After you change the API, run `pnpm generate:api` and commit the OpenAPI document and the generated types. Import these types from `@unslop-docs/api-contracts`, and do not edit the generated files.
 
