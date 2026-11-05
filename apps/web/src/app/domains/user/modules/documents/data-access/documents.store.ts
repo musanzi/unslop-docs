@@ -12,6 +12,21 @@ import type {
 import { AuthStore } from '@web/domains/auth/shared/data-access';
 import { firstValueFrom } from 'rxjs';
 
+export type DocumentPhaseKey =
+  | 'stored'
+  | 'queued'
+  | 'assessing'
+  | 'ready-to-edit'
+  | 'editing'
+  | 'checking-result'
+  | 'download-ready'
+  | 'failed';
+
+export interface DocumentPhase {
+  key: DocumentPhaseKey;
+  label: string;
+}
+
 @Injectable()
 export class DocumentsStore {
   private readonly http = inject(HttpClient);
@@ -34,8 +49,8 @@ export class DocumentsStore {
     stored: 'Original saved',
     queued: 'Queued',
     processing: 'Processing',
-    assessed: 'Assessed',
-    completed: 'Completed',
+    assessed: 'Ready to edit',
+    completed: 'Download ready',
     failed: 'Failed'
   };
   readonly stageLabels = {
@@ -45,8 +60,42 @@ export class DocumentsStore {
     'final-assessment': 'Assessing the revised document'
   };
 
+  phase(document: IDocumentResponse): DocumentPhase {
+    const rewrite = document.phase === 'rewrite';
+    switch (document.status) {
+      case 'queued':
+        return { key: 'queued', label: rewrite ? 'Queued for editing' : 'Queued for assessment' };
+      case 'processing': {
+        const stage = document.processingStage;
+        const label = stage ? this.stageLabels[stage] : this.statusLabels.processing;
+        if (stage === 'editing') return { key: 'editing', label };
+        if (stage === 'validating' || stage === 'final-assessment') return { key: 'checking-result', label };
+        return { key: 'assessing', label };
+      }
+      case 'assessed':
+        return { key: 'ready-to-edit', label: this.statusLabels.assessed };
+      case 'completed':
+        return { key: 'download-ready', label: this.statusLabels.completed };
+      case 'failed':
+        return { key: 'failed', label: this.statusLabels.failed };
+      default:
+        return { key: 'stored', label: this.statusLabels.stored };
+    }
+  }
+
   progress(document: IDocumentResponse): string {
-    return document.processingStage ? this.stageLabels[document.processingStage] : this.statusLabels[document.status];
+    return this.phase(document).label;
+  }
+
+  private observe(documents: IDocumentResponse[]): void {
+    for (const document of documents) {
+      const phase = this.phase(document);
+      const previous = this.observedPhases.get(document.id);
+      this.observedPhases.set(document.id, phase.key);
+      if (previous === undefined || previous === phase.key || this.selected()?.id !== document.id) continue;
+      this.phaseAnnouncement.set(`${document.filename}: ${phase.label}.`);
+      if (phase.key === 'download-ready') this.celebrating.set(document.id);
+    }
   }
 
   readonly items = signal<IDocumentResponse[]>([]);
@@ -64,6 +113,9 @@ export class DocumentsStore {
   readonly uploadError = signal('');
   readonly downloadError = signal('');
   readonly announcement = signal('');
+  readonly phaseAnnouncement = signal('');
+  readonly celebrating = signal<string | null>(null);
+  private readonly observedPhases = new Map<string, DocumentPhaseKey>();
   readonly pageCount = computed(() => Math.max(1, Math.ceil(this.total() / 20)));
 
   start(): void {
@@ -90,6 +142,7 @@ export class DocumentsStore {
         next: (result) => {
           if (request !== this.request) return;
           this.listPending = false;
+          this.observe(result.items);
           this.items.set(result.items);
           this.total.set(result.total);
           this.page.set(result.page);
@@ -125,6 +178,9 @@ export class DocumentsStore {
 
   select(document: IDocumentResponse | null): void {
     this.selected.set(document);
+    this.celebrating.set(null);
+    this.phaseAnnouncement.set('');
+    if (document) this.observe([document]);
     this.uploadError.set('');
     this.downloadError.set('');
     this.announcement.set('');
@@ -148,6 +204,7 @@ export class DocumentsStore {
         next: (detail) => {
           if (request !== this.detailRequest) return;
           this.detailPending = false;
+          this.observe([detail]);
           this.detail.set(detail);
           this.selected.set(detail);
           this.items.update((items) => items.map((item) => (item.id === detail.id ? detail : item)));
@@ -211,6 +268,7 @@ export class DocumentsStore {
       .subscribe({
         next: (queued) => {
           this.retrying.set(null);
+          this.observe([queued]);
           this.items.update((items) => items.map((item) => (item.id === queued.id ? queued : item)));
           if (this.selected()?.id === queued.id) this.select(queued);
           this.announcement.set('Retry queued. Assessment and editing will start again.');

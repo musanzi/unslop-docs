@@ -641,3 +641,113 @@ describe('Workspace allowance HTTP state', () => {
     http.verify();
   });
 });
+
+describe('Document phases', () => {
+  function setup() {
+    TestBed.configureTestingModule({
+      providers: [
+        DocumentsStore,
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: AuthStore, useValue: { setUser: vi.fn() } }
+      ]
+    });
+    return TestBed.inject(DocumentsStore);
+  }
+
+  it.each([
+    [{ status: 'queued', phase: 'assessment' }, 'queued', 'Queued for assessment'],
+    [{ status: 'processing', phase: 'assessment', processingStage: 'assessing' }, 'assessing', 'Assessing writing'],
+    [{ status: 'processing', phase: 'assessment' }, 'assessing', 'Processing'],
+    [{ status: 'assessed', phase: 'assessment' }, 'ready-to-edit', 'Ready to edit'],
+    [{ status: 'queued', phase: 'rewrite' }, 'queued', 'Queued for editing'],
+    [{ status: 'processing', phase: 'rewrite', processingStage: 'editing' }, 'editing', 'Editing your document'],
+    [
+      { status: 'processing', phase: 'rewrite', processingStage: 'validating' },
+      'checking-result',
+      'Checking the revised document'
+    ],
+    [
+      { status: 'processing', phase: 'rewrite', processingStage: 'final-assessment' },
+      'checking-result',
+      'Assessing the revised document'
+    ],
+    [{ status: 'completed', phase: 'rewrite' }, 'download-ready', 'Download ready'],
+    [{ status: 'failed', phase: 'assessment' }, 'failed', 'Failed'],
+    [{ status: 'stored', phase: 'assessment' }, 'stored', 'Original saved']
+  ] as const)('names the phase of %o', (fields, key, label) => {
+    const store = setup();
+    const phase = store.phase({ ...document, processingStage: null, ...fields });
+    expect(phase.key).toBe(key);
+    expect(phase.label).toBe(label);
+    expect(store.progress({ ...document, processingStage: null, ...fields })).toBe(label);
+  });
+});
+
+describe('Phase changes while watching', () => {
+  function setup() {
+    TestBed.configureTestingModule({
+      providers: [
+        DocumentsStore,
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: AuthStore, useValue: { setUser: vi.fn() } }
+      ]
+    });
+    return { store: TestBed.inject(DocumentsStore), http: TestBed.inject(HttpTestingController) };
+  }
+  const queued: IDocumentAssessmentResponse = { ...document, status: 'queued', phase: 'assessment', assessment: null };
+
+  it('announces each phase change once and celebrates only a completion it watched', () => {
+    const { store, http } = setup();
+    store.select(queued);
+    http.expectOne(`/documents/${document.id}`).flush(queued);
+    expect(store.phaseAnnouncement()).toBe('');
+    store.loadSelected(true);
+    http.expectOne(`/documents/${document.id}`).flush({ ...queued, status: 'processing', processingStage: 'assessing' });
+    expect(store.phaseAnnouncement()).toBe('river.docx: Assessing writing.');
+    store.loadSelected(true);
+    http.expectOne(`/documents/${document.id}`).flush({ ...queued, status: 'processing', processingStage: 'assessing' });
+    expect(store.phaseAnnouncement()).toBe('river.docx: Assessing writing.');
+    expect(store.celebrating()).toBeNull();
+    store.loadSelected(true);
+    http.expectOne(`/documents/${document.id}`).flush({ ...document, status: 'completed' });
+    expect(store.phaseAnnouncement()).toBe('river.docx: Download ready.');
+    expect(store.celebrating()).toBe(document.id);
+    store.select(null);
+    store.select(document);
+    http.expectOne(`/documents/${document.id}`).flush(document);
+    expect(store.celebrating()).toBeNull();
+    http.verify();
+  });
+
+  it('does not celebrate a document that was already complete when loaded or opened', () => {
+    const { store, http } = setup();
+    store.load(1);
+    http.expectOne((request) => request.url === '/documents').flush({ items: [document], page: 1, pageSize: 20, total: 1 });
+    http.expectOne('/documents/allowance').flush({});
+    store.select(document);
+    http.expectOne(`/documents/${document.id}`).flush(document);
+    expect(store.celebrating()).toBeNull();
+    expect(store.phaseAnnouncement()).toBe('');
+    http.verify();
+  });
+
+  it('observes a completion through history polling while the document is selected', () => {
+    const { store, http } = setup();
+    const editing = { ...document, status: 'processing', phase: 'rewrite', processingStage: 'editing' } as const;
+    store.load(1);
+    http.expectOne((request) => request.url === '/documents').flush({ items: [editing], page: 1, pageSize: 20, total: 1 });
+    http.expectOne('/documents/allowance').flush({});
+    store.select(editing);
+    http.expectOne(`/documents/${document.id}`).flush(editing);
+    store.load(1, true);
+    http.expectOne((request) => request.url === '/documents').flush({ items: [document], page: 1, pageSize: 20, total: 1 });
+    http.expectOne('/documents/allowance').flush({});
+    expect(store.celebrating()).toBe(document.id);
+    expect(store.phaseAnnouncement()).toBe('river.docx: Download ready.');
+    http.verify();
+  });
+});
