@@ -48,6 +48,10 @@ services:
           path: ./libs/api-contracts/src
           target: /app/libs/api-contracts/src
           initial_sync: true
+        - action: sync
+          path: ./apps/web/public
+          target: /app/apps/web/public
+          initial_sync: true
   mailpit:
     image: axllent/mailpit:latest
     restart: unless-stopped
