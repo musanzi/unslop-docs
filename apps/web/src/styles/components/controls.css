@@ -1,5 +1,5 @@
 @utility ui-button {
-  @apply inline-flex min-h-11 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-lg border border-transparent px-4 py-2.5 font-sans text-[0.875rem] font-medium leading-5 no-underline transition-colors motion-reduce:transition-none;
+  @apply inline-flex min-h-11 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-lg border border-divider bg-transparent px-4 py-2.5 font-sans text-[0.875rem] font-medium leading-5 text-ink no-underline transition-colors hover:bg-hover motion-reduce:transition-none;
   &:focus-visible {
     @apply outline-2 outline-offset-2 outline-ink;
   }
@@ -12,10 +12,13 @@
   }
 }
 @utility ui-primary {
-  @apply bg-ink text-canvas hover:bg-white active:bg-paper-pressed;
+  @apply border-ink text-ink hover:bg-hover active:bg-hover;
+}
+@utility ui-text-action {
+  @apply ui-button min-w-0 shrink justify-start border-0 px-0 text-left underline decoration-muted/60 underline-offset-4 hover:bg-transparent hover:decoration-ink;
 }
 @utility ui-secondary {
-  @apply border-divider bg-panel text-ink hover:bg-hover;
+  @apply border-divider text-ink hover:bg-hover;
 }
 @utility ui-ghost {
   @apply text-muted hover:bg-hover hover:text-ink;
@@ -24,10 +27,17 @@
   @apply size-11 p-0;
 }
 @utility ui-destructive {
-  @apply border-danger/30 bg-danger/10 text-danger hover:bg-danger/20;
+  @apply border-danger text-danger hover:bg-danger/10;
 }
 @utility ui-logout {
-  @apply text-muted hover:bg-danger/10 hover:text-danger;
+  @apply text-muted hover:border-danger hover:bg-danger/10 hover:text-danger;
+}
+@utility ui-sidebar-item {
+  @apply ui-button min-w-0 justify-start gap-3 border-0 px-3 text-muted hover:text-ink;
+  &[aria-current='page'],
+  &[aria-current='true'] {
+    @apply bg-hover text-ink;
+  }
 }
 @utility ui-field {
   @apply min-h-11 w-full rounded-lg border border-divider bg-canvas px-3 py-2.5 font-sans text-[1rem] leading-6 text-ink placeholder:text-muted;

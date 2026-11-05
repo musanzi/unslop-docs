@@ -41,6 +41,16 @@
   --mat-menu-item-icon-color: var(--color-muted);
   --mat-menu-item-label-text-font: var(--font-sans);
   --mat-menu-container-shape: 0.75rem;
+  --mat-select-panel-background-color: var(--color-panel);
+  --mat-select-focused-arrow-color: var(--color-ink);
+  --mat-option-label-text-color: var(--color-ink);
+  --mat-option-selected-state-label-text-color: var(--color-ink);
+  --mat-option-selected-state-layer-color: var(--color-hover);
+  --mat-option-hover-state-layer-color: var(--color-hover);
+  --mat-option-focus-state-layer-color: var(--color-hover);
+  --mat-pseudo-checkbox-minimal-selected-checkmark-color: var(--color-ink);
+  --mat-form-field-outlined-focus-label-text-color: var(--color-ink);
+  --mat-form-field-outlined-focus-outline-color: var(--color-ink);
   --mat-sidenav-container-background-color: var(--color-panel);
   --mat-sidenav-sidenav-background-color: var(--color-canvas);
   --mat-sidenav-content-background-color: var(--color-panel);

@@ -7,7 +7,7 @@
   >
   <nav class="flex flex-1 flex-col gap-1" aria-label="Administration">
     <a
-      class="ui-button ui-ghost justify-start"
+      class="ui-sidebar-item"
       routerLink="/admin"
       routerLinkActive="bg-hover text-ink"
       [routerLinkActiveOptions]="{ exact: true }"
@@ -15,15 +15,13 @@
       ><mat-icon svgIcon="layout-dashboard" />Overview</a
     >
     <a
-      class="ui-button ui-ghost justify-start"
+      class="ui-sidebar-item"
       routerLink="/admin/users"
       routerLinkActive="bg-hover text-ink"
       ariaCurrentWhenActive="page"
       ><mat-icon svgIcon="users" />Users</a
     >
-    <a class="ui-button ui-ghost mt-5 justify-start" routerLink="/user/documents"
-      ><mat-icon svgIcon="files" />My documents</a
-    >
+    <a class="ui-sidebar-item mt-5" routerLink="/user/documents"><mat-icon svgIcon="files" />My documents</a>
   </nav>
   <user />
 </div>

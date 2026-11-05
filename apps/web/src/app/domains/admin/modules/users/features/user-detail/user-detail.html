@@ -1,5 +1,5 @@
 <section class="max-w-3xl">
-  <a class="ui-button ui-ghost -ml-4 mb-6" routerLink="/admin/users"><mat-icon svgIcon="arrow-left" />All users</a>
+  <a class="ui-button ui-ghost mb-6" routerLink="/admin/users"><mat-icon svgIcon="arrow-left" />All users</a>
   @if (store.user.isLoading()) {
     <p class="py-12 text-muted" role="status">Loading user details...</p>
   } @else if (store.error()) {
@@ -17,19 +17,14 @@
     <section class="border-y border-divider py-7" aria-labelledby="user-status-heading">
       <h2 id="user-status-heading" class="text-[1rem] font-medium">Account status</h2>
       <form class="mt-5 flex flex-wrap items-end gap-3" (submit)="store.save(); $event.preventDefault()">
-        <div class="flex min-w-48 flex-col gap-2">
-          <label for="user-status" class="text-[0.875rem] text-muted">Status</label
-          ><select
-            id="user-status"
-            name="status"
-            class="ui-field"
-            [(ngModel)]="store.status"
-            [disabled]="store.saving()">
-            <option value="FREE">FREE</option>
-            <option value="PREMIUM">PREMIUM</option>
-            <option value="GOLD">GOLD</option>
-          </select>
-        </div>
+        <mat-form-field class="min-w-48" appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Status</mat-label>
+          <mat-select id="user-status" name="status" [(ngModel)]="store.status" [disabled]="store.saving()">
+            <mat-option value="FREE">FREE</mat-option>
+            <mat-option value="PREMIUM">PREMIUM</mat-option>
+            <mat-option value="GOLD">GOLD</mat-option>
+          </mat-select>
+        </mat-form-field>
         <button
           class="ui-button ui-primary"
           type="submit"

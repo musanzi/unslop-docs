@@ -1,6 +1,6 @@
 <div class="flex flex-col gap-1 border-t border-divider pt-3">
   <button
-    class="ui-button ui-ghost w-full justify-start px-2 text-left"
+    class="ui-sidebar-item w-full text-left"
     type="button"
     (click)="profile.open()"
     [disabled]="auth.isSigningOut()"
@@ -10,7 +10,9 @@
       ><span class="block truncate text-ink">{{ auth.user()?.name }}</span
       ><span class="block truncate text-[0.75rem] font-normal text-muted">{{ auth.user()?.email }}</span>
       @if (subscription(); as plan) {
-        <span class="ui-badge mt-1.5 items-center gap-1.5" [attr.aria-label]="plan.name + ' subscription'">
+        <span
+          class="mt-1.5 inline-flex items-center gap-1.5 text-[0.75rem] font-normal text-muted"
+          [attr.aria-label]="plan.name + ' subscription'">
           <mat-icon [svgIcon]="plan.icon" />{{ plan.name }}
         </span>
       }
@@ -18,7 +20,7 @@
     <mat-icon svgIcon="settings-2" />
   </button>
   <button
-    class="ui-button ui-logout w-full justify-start px-2"
+    class="ui-sidebar-item ui-logout w-full"
     type="button"
     [disabled]="auth.isSigningOut()"
     (click)="auth.signOut()">
