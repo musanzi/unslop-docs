@@ -4,6 +4,7 @@
 @import 'tailwindcss' important;
 @import './tailwind/theme.css';
 @import './tailwind/utilities.css';
+@import './tailwind/animations.css';
 
 /* -------------------------------------------------------------------------- */
 /* Angular CDK                                                                */
@@ -31,5 +32,6 @@
 @import './components/kbd.css';
 @import './components/material.css';
 @import './components/workspace-material.css';
+@import './components/workspace-animations.css';
 
 @import './components/controls.css';

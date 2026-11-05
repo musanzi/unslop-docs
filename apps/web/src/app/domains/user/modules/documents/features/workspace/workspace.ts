@@ -1,4 +1,4 @@
-import { DatePipe, DecimalPipe, DOCUMENT } from '@angular/common';
+import { DatePipe, DecimalPipe, DOCUMENT, NgTemplateOutlet } from '@angular/common';
 import {
   afterNextRender,
   ChangeDetectionStrategy,
@@ -18,12 +18,37 @@ import { AuthStore } from '@web/domains/auth/shared/data-access';
 import { User } from '@web/shared/ui/user/user';
 import { subscriptionContactUrl, subscriptionPlans } from '@web/shared/data/subscription-plans';
 import { firstValueFrom } from 'rxjs';
-import { DocumentsStore } from '../../data-access/documents.store';
+import { DocumentsStore, strengthLabel, type DocumentPhaseKey } from '../../data-access/documents.store';
 import { DeleteDocumentDialog } from '../../data-access/delete-document-dialog';
+import { DocumentPreview } from '../document-preview/document-preview';
+
+const phaseIcons: Record<DocumentPhaseKey, string> = {
+  stored: 'file-text',
+  queued: 'hourglass',
+  assessing: 'scan-text',
+  'ready-to-edit': 'file-check',
+  editing: 'wand-sparkles',
+  'checking-result': 'scan-text',
+  'download-ready': 'circle-check',
+  failed: 'circle-alert'
+};
+
+const activePhases: DocumentPhaseKey[] = ['queued', 'assessing', 'editing', 'checking-result'];
 
 @Component({
   selector: 'document-workspace',
-  imports: [DatePipe, DecimalPipe, MatIcon, MatSidenav, MatSidenavContainer, MatSidenavContent, RouterLink, User],
+  imports: [
+    DatePipe,
+    DecimalPipe,
+    DocumentPreview,
+    MatIcon,
+    MatSidenav,
+    MatSidenavContainer,
+    MatSidenavContent,
+    NgTemplateOutlet,
+    RouterLink,
+    User
+  ],
   providers: [DocumentsStore],
   templateUrl: './workspace.html',
   host: {
@@ -48,6 +73,74 @@ export class Workspace {
   }));
   protected readonly contactUrl = subscriptionContactUrl();
   protected readonly isMobile = inject(Media).match('(max-width: 767px)');
+  protected readonly phase = computed(() => {
+    const document = this.store.selected();
+    return document ? this.store.phase(document) : null;
+  });
+  protected readonly phaseIcon = computed(() => phaseIcons[this.phase()?.key ?? 'stored']);
+  protected readonly active = computed(() => activePhases.includes(this.phase()?.key ?? 'stored'));
+  protected readonly celebrating = computed(() => {
+    const document = this.store.selected();
+    return !!document && this.store.celebrating() === document.id;
+  });
+  protected readonly editing = computed(() => {
+    const document = this.store.selected();
+    return document?.processingStage === 'editing' ? document.progress : null;
+  });
+  protected readonly phaseDetail = computed(() => {
+    const document = this.store.selected();
+    const phase = this.phase();
+    if (!document || !phase) return '';
+    switch (phase.key) {
+      case 'queued':
+        return document.phase === 'rewrite'
+          ? 'Editing starts automatically. You can leave and come back.'
+          : 'Assessment starts automatically. You can leave and come back.';
+      case 'assessing':
+        return 'Reading the original for AI-style writing patterns.';
+      case 'ready-to-edit':
+        return 'Choose a rewrite strength, then start Unslopify.';
+      case 'editing': {
+        const progress = this.editing();
+        return progress ? `${progress.completed} of ${progress.total} sections edited.` : 'Rewriting each section.';
+      }
+      case 'checking-result':
+        return document.processingStage === 'validating'
+          ? 'Comparing the revision with the original.'
+          : 'Scoring the revised document.';
+      case 'download-ready':
+        return 'Your revised DOCX is ready.';
+      case 'failed':
+        return document.phase === 'rewrite' ? 'Editing failed.' : 'Assessment failed.';
+      default:
+        return 'This original was saved before writing assessments were available.';
+    }
+  });
+  protected readonly retryLabel = computed(() =>
+    this.store.selected()?.phase === 'rewrite' ? 'Retry editing' : 'Retry assessment'
+  );
+  protected readonly score = computed(() => this.store.detail()?.assessment?.score ?? null);
+  protected readonly finalScore = computed(() => this.store.detail()?.finalAssessment?.score ?? null);
+  protected readonly scoreChange = computed(() => {
+    const before = this.score();
+    const after = this.finalScore();
+    if (before === null || after === null) return null;
+    const delta = after - before;
+    if (delta === 0) return { tone: 'same', text: 'Unchanged' } as const;
+    const points = Math.abs(delta) === 1 ? '1 point' : `${Math.abs(delta)} points`;
+    return delta < 0
+      ? ({ tone: 'down', text: `Down ${points}` } as const)
+      : ({ tone: 'up', text: `Up ${points}` } as const);
+  });
+  protected readonly savedStrength = computed(() => {
+    const strength = this.store.selected()?.strength;
+    return strength === null || strength === undefined ? null : { value: strength, label: strengthLabel(strength) };
+  });
+  protected readonly keptPassages = computed(() => this.store.detail()?.revisionNotices?.keptPassages ?? []);
+  protected readonly uneditedSummary = computed(() => {
+    const elements = this.store.detail()?.revisionNotices?.uneditedElements ?? [];
+    return elements.map((element) => `${element.count} ${element.reason}${element.count === 1 ? '' : 's'}`).join(', ');
+  });
   private readonly sidenav = viewChild(MatSidenav);
   private readonly newDocument = viewChild<ElementRef<HTMLButtonElement>>('newDocument');
   private readonly deleteDialog = inject(DeleteDocumentDialog);
@@ -76,6 +169,12 @@ export class Workspace {
     const file = input.files?.[0];
     input.value = '';
     if (file) this.store.upload(file);
+  }
+
+  protected setStrength(event: Event): void {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement)) return;
+    this.store.strength.set(Math.min(100, Math.max(1, Number(input.value) || 50)));
   }
 
   protected async download(document: IDocumentResponse, version: 'original' | 'revised' = 'original'): Promise<void> {

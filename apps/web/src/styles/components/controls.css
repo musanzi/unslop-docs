@@ -72,3 +72,43 @@
     @apply bg-hover/40;
   }
 }
+@utility ui-range {
+  @apply h-11 w-full cursor-pointer appearance-none bg-transparent;
+  --rewrite-strength: 50%;
+  &::-webkit-slider-runnable-track {
+    @apply h-1.5 rounded-full;
+    background: linear-gradient(
+      to right,
+      var(--color-ink) var(--rewrite-strength),
+      var(--color-hover) var(--rewrite-strength)
+    );
+  }
+  &::-webkit-slider-thumb {
+    @apply -mt-[0.4375rem] size-5 appearance-none rounded-full border-2 border-canvas bg-ink shadow-[0_1px_4px_rgb(0_0_0/0.6)] transition-transform motion-reduce:transition-none;
+  }
+  &::-moz-range-track {
+    @apply h-1.5 rounded-full bg-hover;
+  }
+  &::-moz-range-progress {
+    @apply h-1.5 rounded-full bg-ink;
+  }
+  &::-moz-range-thumb {
+    @apply size-5 rounded-full border-2 border-canvas bg-ink;
+  }
+  &:hover::-webkit-slider-thumb,
+  &:focus-visible::-webkit-slider-thumb {
+    @apply scale-110;
+  }
+  &:focus-visible {
+    @apply outline-none;
+  }
+  &:focus-visible::-webkit-slider-thumb {
+    @apply outline-2 outline-offset-2 outline-ink;
+  }
+  &:focus-visible::-moz-range-thumb {
+    @apply outline-2 outline-offset-2 outline-ink;
+  }
+  &:disabled {
+    @apply cursor-default opacity-50;
+  }
+}

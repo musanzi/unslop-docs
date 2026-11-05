@@ -6,7 +6,8 @@ import type { IPreviewBlockResponse } from '@unslop-docs/api-contracts';
 import { DocumentPreview } from './document-preview';
 
 // Vitest uses JIT without Angular's signal-input metadata transform.
-Input({ alias: 'blocks', isSignal: true })(DocumentPreview.prototype, 'blocks');
+const blocksInput = { alias: 'blocks', isSignal: true };
+Input(blocksInput)(DocumentPreview.prototype, 'blocks');
 
 const text = (value: string, extra: Partial<IPreviewBlockResponse> = {}): IPreviewBlockResponse => ({
   kind: 'paragraph',

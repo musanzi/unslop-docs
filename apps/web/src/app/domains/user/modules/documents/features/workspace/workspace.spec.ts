@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { Input, signal } from '@angular/core';
+import { Input, Provider, signal } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { HttpEventType, provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
@@ -21,10 +21,42 @@ import { User } from '@web/shared/ui/user/user';
 import { testUser } from '@web/shared/testing/user-fixture';
 import { MatDialog } from '@angular/material/dialog';
 import DeleteDocument from '../delete-document/delete-document';
+import { DocumentPreview } from '../document-preview/document-preview';
 
 // Vitest uses JIT without Angular's signal-input metadata transform.
 const subscriptionInput = { alias: 'subscriptionStatus', isSignal: true };
 Input(subscriptionInput)(User.prototype, 'subscriptionStatus');
+const blocksInput = { alias: 'blocks', isSignal: true };
+Input(blocksInput)(DocumentPreview.prototype, 'blocks');
+
+function overrideTemplates(workspaceProviders?: Provider[]) {
+  const shared = `${import.meta.dirname}/../../../../../../shared/ui`;
+  TestBed.overrideComponent(User, {
+    set: { template: readFileSync(`${shared}/user/user.html`, 'utf8'), templateUrl: undefined }
+  });
+  TestBed.overrideComponent(DocumentPreview, {
+    set: {
+      template: readFileSync(`${import.meta.dirname}/../document-preview/document-preview.html`, 'utf8'),
+      templateUrl: undefined
+    }
+  });
+  TestBed.overrideComponent(DeleteDocument, {
+    set: {
+      template: readFileSync(`${import.meta.dirname}/../delete-document/delete-document.html`, 'utf8'),
+      templateUrl: undefined
+    }
+  });
+  TestBed.overrideComponent(Workspace, {
+    set: {
+      template: readFileSync(`${import.meta.dirname}/workspace.html`, 'utf8'),
+      templateUrl: undefined,
+      ...(workspaceProviders ? { providers: workspaceProviders } : {})
+    }
+  });
+  vi.spyOn(TestBed.inject(MatIconRegistry), 'getNamedSvgIcon').mockImplementation(() =>
+    of(globalThis.document.createElementNS('http://www.w3.org/2000/svg', 'svg'))
+  );
+}
 
 const document: IDocumentAssessmentResponse = {
   id: '00000000-0000-4000-8000-000000000001',
@@ -90,21 +122,7 @@ describe('Retry from document history', () => {
         { provide: Media, useValue: { match: () => signal(false) } }
       ]
     });
-    TestBed.overrideComponent(User, {
-      set: {
-        template: readFileSync(`${import.meta.dirname}/../../../../../../shared/ui/user/user.html`, 'utf8'),
-        templateUrl: undefined
-      }
-    });
-    TestBed.overrideComponent(Workspace, {
-      set: {
-        template: readFileSync(`${import.meta.dirname}/workspace.html`, 'utf8'),
-        templateUrl: undefined
-      }
-    });
-    vi.spyOn(TestBed.inject(MatIconRegistry), 'getNamedSvgIcon').mockImplementation(() =>
-      of(globalThis.document.createElementNS('http://www.w3.org/2000/svg', 'svg'))
-    );
+    overrideTemplates();
     const fixture = TestBed.createComponent(Workspace);
     await fixture.whenStable();
     const http = TestBed.inject(HttpTestingController);
@@ -248,27 +266,7 @@ describe('Delete from document history', () => {
         { provide: Media, useValue: { match: () => signal(false) } }
       ]
     });
-    TestBed.overrideComponent(User, {
-      set: {
-        template: readFileSync(`${import.meta.dirname}/../../../../../../shared/ui/user/user.html`, 'utf8'),
-        templateUrl: undefined
-      }
-    });
-    TestBed.overrideComponent(Workspace, {
-      set: {
-        template: readFileSync(`${import.meta.dirname}/workspace.html`, 'utf8'),
-        templateUrl: undefined
-      }
-    });
-    TestBed.overrideComponent(DeleteDocument, {
-      set: {
-        template: readFileSync(`${import.meta.dirname}/../delete-document/delete-document.html`, 'utf8'),
-        templateUrl: undefined
-      }
-    });
-    vi.spyOn(TestBed.inject(MatIconRegistry), 'getNamedSvgIcon').mockImplementation(() =>
-      of(globalThis.document.createElementNS('http://www.w3.org/2000/svg', 'svg'))
-    );
+    overrideTemplates();
     const fixture = TestBed.createComponent(Workspace);
     await fixture.whenStable();
     const http = TestBed.inject(HttpTestingController);
@@ -325,7 +323,8 @@ describe('Delete from document history', () => {
     expect(page.querySelector('button[aria-label="Delete river.docx"]')).toBeNull();
     expect(element(page, 'nav[aria-label="Document history"]').textContent).not.toContain('river.docx');
     expect(page.querySelector('main h1')?.textContent).toContain('Welcome');
-    expect(page.querySelector('[role="status"]')?.textContent ?? page.textContent).toContain('river.docx deleted.');
+    const statuses = [...page.querySelectorAll('[role="status"]')].map((status) => status.textContent).join(' ');
+    expect(statuses).toContain('river.docx deleted.');
     expect(globalThis.document.activeElement?.textContent).toContain('New document');
     expect(element<HTMLButtonElement>(page, 'button[aria-label="Delete lake.docx"]').disabled).toBe(false);
     http.verify();
@@ -405,7 +404,20 @@ describe('Document workspace results', () => {
       deleteError: signal(null),
       downloading: signal(false),
       announcement: signal(''),
-      progress: (item: IDocumentAssessmentResponse) => (item.status === 'completed' ? 'Completed' : 'Failed')
+      phaseAnnouncement: signal(''),
+      celebrating: signal(null),
+      uploadProgress: signal(null),
+      strength: signal(50),
+      strengthLabel: signal('Balanced'),
+      unslopifying: signal(null),
+      unslopifyError: signal(null),
+      preview: signal(null),
+      previewError: signal(''),
+      previewLoading: signal(false),
+      phase: (item: IDocumentAssessmentResponse) =>
+        item.status === 'completed'
+          ? { key: 'download-ready', label: 'Download ready' }
+          : { key: 'failed', label: 'Failed' }
     };
     TestBed.configureTestingModule({
       providers: [
@@ -424,22 +436,7 @@ describe('Document workspace results', () => {
         { provide: Media, useValue: { match: () => signal(false) } }
       ]
     });
-    TestBed.overrideComponent(User, {
-      set: {
-        template: readFileSync(`${import.meta.dirname}/../../../../../../shared/ui/user/user.html`, 'utf8'),
-        templateUrl: undefined
-      }
-    });
-    TestBed.overrideComponent(Workspace, {
-      set: {
-        template: readFileSync(`${import.meta.dirname}/workspace.html`, 'utf8'),
-        templateUrl: undefined,
-        providers: [{ provide: DocumentsStore, useValue: store }]
-      }
-    });
-    vi.spyOn(TestBed.inject(MatIconRegistry), 'getNamedSvgIcon').mockImplementation(() => {
-      return of(globalThis.document.createElementNS('http://www.w3.org/2000/svg', 'svg'));
-    });
+    overrideTemplates([{ provide: DocumentsStore, useValue: store }]);
     const fixture = TestBed.createComponent(Workspace);
     await fixture.whenStable();
     return fixture.nativeElement as HTMLElement;
@@ -513,11 +510,14 @@ describe('Document workspace results', () => {
     expect(buttons.find((button) => button.textContent.includes('Download original'))?.disabled).toBe(false);
   });
 
-  it('shows both downloads and a review reminder for a completed no-pattern document', async () => {
+  it('shows both downloads and only the review sentence for a completed document without a final score', async () => {
     const page = await render(document);
-    expect(page.textContent).toContain('Completed');
-    expect(page.textContent).toContain('No writing patterns found');
-    expect(page.textContent).toContain('do not prove unchanged meaning');
+    expect(page.textContent).toContain('Download ready');
+    expect(page.textContent).toContain('Review the revised document before submitting it.');
+    expect(page.textContent).not.toContain('do not prove unchanged meaning');
+    expect(page.textContent).not.toMatch(/writing patterns found|AI vocabulary/);
+    expect(page.textContent).toContain('Final score unavailable');
+    expect(page.querySelector('#final-score-note')?.textContent).toContain('final score is unavailable');
     const buttons = [...page.querySelectorAll('button')].map((button) => button.textContent.trim());
     expect(buttons).toContain('Download original');
     expect(buttons).toContain('Download revised DOCX');
@@ -716,10 +716,14 @@ describe('Phase changes while watching', () => {
     http.expectOne(`/documents/${document.id}`).flush(queued);
     expect(store.phaseAnnouncement()).toBe('');
     store.loadSelected(true);
-    http.expectOne(`/documents/${document.id}`).flush({ ...queued, status: 'processing', processingStage: 'assessing' });
+    http
+      .expectOne(`/documents/${document.id}`)
+      .flush({ ...queued, status: 'processing', processingStage: 'assessing' });
     expect(store.phaseAnnouncement()).toBe('river.docx: Assessing writing.');
     store.loadSelected(true);
-    http.expectOne(`/documents/${document.id}`).flush({ ...queued, status: 'processing', processingStage: 'assessing' });
+    http
+      .expectOne(`/documents/${document.id}`)
+      .flush({ ...queued, status: 'processing', processingStage: 'assessing' });
     expect(store.phaseAnnouncement()).toBe('river.docx: Assessing writing.');
     expect(store.celebrating()).toBeNull();
     store.loadSelected(true);
@@ -738,7 +742,9 @@ describe('Phase changes while watching', () => {
   it('does not celebrate a document that was already complete when loaded or opened', () => {
     const { store, http } = setup();
     store.load(1);
-    http.expectOne((request) => request.url === '/documents').flush({ items: [document], page: 1, pageSize: 20, total: 1 });
+    http
+      .expectOne((request) => request.url === '/documents')
+      .flush({ items: [document], page: 1, pageSize: 20, total: 1 });
     http.expectOne('/documents/allowance').flush({});
     store.select(document);
     http.expectOne(`/documents/${document.id}`).flush(document);
@@ -752,13 +758,17 @@ describe('Phase changes while watching', () => {
     const { store, http } = setup();
     const editing = { ...document, status: 'processing', phase: 'rewrite', processingStage: 'editing' } as const;
     store.load(1);
-    http.expectOne((request) => request.url === '/documents').flush({ items: [editing], page: 1, pageSize: 20, total: 1 });
+    http
+      .expectOne((request) => request.url === '/documents')
+      .flush({ items: [editing], page: 1, pageSize: 20, total: 1 });
     http.expectOne('/documents/allowance').flush({});
     store.select(editing);
     http.expectOne(`/documents/${document.id}`).flush(editing);
     flushPreview(http);
     store.load(1, true);
-    http.expectOne((request) => request.url === '/documents').flush({ items: [document], page: 1, pageSize: 20, total: 1 });
+    http
+      .expectOne((request) => request.url === '/documents')
+      .flush({ items: [document], page: 1, pageSize: 20, total: 1 });
     http.expectOne('/documents/allowance').flush({});
     expect(store.celebrating()).toBe(document.id);
     expect(store.phaseAnnouncement()).toBe('river.docx: Download ready.');
@@ -798,7 +808,9 @@ describe('Upload progress', () => {
     expect(store.announcement()).toBe('Original uploaded. Assessment starts automatically.');
     expect(store.announcement()).not.toMatch(/complete/i);
     http.expectOne(`/documents/${document.id}`).flush(queued);
-    http.expectOne((request) => request.url === '/documents').flush({ items: [queued], page: 1, pageSize: 20, total: 1 });
+    http
+      .expectOne((request) => request.url === '/documents')
+      .flush({ items: [queued], page: 1, pageSize: 20, total: 1 });
     http.expectOne('/documents/allowance').flush({});
     http.verify();
   });
@@ -839,7 +851,12 @@ describe('Rewrite strength and Unslopify', () => {
     expect(store.strength()).toBe(20);
     store.strength.set(80);
     expect(store.strengthLabel()).toBe('Thorough');
-    const retryable = { ...assessed, id: '00000000-0000-4000-8000-000000000009', strength: 70, status: 'failed' } as const;
+    const retryable = {
+      ...assessed,
+      id: '00000000-0000-4000-8000-000000000009',
+      strength: 70,
+      status: 'failed'
+    } as const;
     store.select({ ...retryable, phase: 'rewrite' });
     http.expectOne(`/documents/${retryable.id}`).flush({ ...retryable, phase: 'rewrite' });
     http.expectOne(`/documents/${retryable.id}/preview`).flush({ blocks: [] });
@@ -875,7 +892,8 @@ describe('Rewrite strength and Unslopify', () => {
     http.expectOne(`/documents/${document.id}`).flush(assessed);
     flushPreview(http);
     store.unslopify(assessed);
-    const message = 'Your FREE allowance of 3 documents is fully used or reserved. It resets on 2026-12-01T00:00:00.000Z (UTC).';
+    const message =
+      'Your FREE allowance of 3 documents is fully used or reserved. It resets on 2026-12-01T00:00:00.000Z (UTC).';
     http.expectOne(`/documents/${document.id}/unslopify`).flush({ message }, { status: 409, statusText: 'Conflict' });
     expect(store.unslopifying()).toBeNull();
     expect(store.unslopifyError()).toEqual({ id: document.id, message });
@@ -910,7 +928,7 @@ describe('Document preview', () => {
 
   it('loads the preview once an assessment exists and keeps it across polls', () => {
     const { store, http } = setup();
-    const queued = { ...assessed, status: 'queued', assessment: null };
+    const queued: IDocumentAssessmentResponse = { ...assessed, status: 'queued', assessment: null };
     store.select(queued);
     http.expectOne(`/documents/${document.id}`).flush(queued);
     http.expectNone(`/documents/${document.id}/preview`);
@@ -931,7 +949,9 @@ describe('Document preview', () => {
     const { store, http } = setup();
     store.select(assessed);
     http.expectOne(`/documents/${document.id}`).flush(assessed);
-    http.expectOne(`/documents/${document.id}/preview`).flush({ message: 'Not found' }, { status: 404, statusText: 'Not Found' });
+    http
+      .expectOne(`/documents/${document.id}/preview`)
+      .flush({ message: 'Not found' }, { status: 404, statusText: 'Not Found' });
     expect(store.preview()).toBeNull();
     expect(store.previewError()).toBe('No preview is available for this document.');
     expect(store.detail()?.assessment?.score).toBe(62);

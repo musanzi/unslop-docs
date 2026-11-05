@@ -15,14 +15,7 @@ import { AuthStore } from '@web/domains/auth/shared/data-access';
 import { firstValueFrom } from 'rxjs';
 
 export type DocumentPhaseKey =
-  | 'stored'
-  | 'queued'
-  | 'assessing'
-  | 'ready-to-edit'
-  | 'editing'
-  | 'checking-result'
-  | 'download-ready'
-  | 'failed';
+  'stored' | 'queued' | 'assessing' | 'ready-to-edit' | 'editing' | 'checking-result' | 'download-ready' | 'failed';
 
 export interface DocumentPhase {
   key: DocumentPhaseKey;
@@ -406,10 +399,9 @@ export class DocumentsStore {
     this.deleteError.set(null);
     this.announcement.set('');
     try {
-      await firstValueFrom(
-        this.http.delete(`/documents/${document.id}`).pipe(takeUntilDestroyed(this.destroyRef)),
-        { defaultValue: null }
-      );
+      await firstValueFrom(this.http.delete(`/documents/${document.id}`).pipe(takeUntilDestroyed(this.destroyRef)), {
+        defaultValue: null
+      });
     } catch (error) {
       if (this.destroyRef.destroyed) return false;
       if (!(error instanceof HttpErrorResponse) || error.status !== 404) {
