@@ -55,6 +55,21 @@
               document.createdAt | date: 'MMM d, y'
             }}</time>
           </button>
+          @if (document.status === 'failed') {
+            <button
+              class="ui-button ui-ghost mb-3 ml-3 text-xs"
+              type="button"
+              (click)="store.retry(document)"
+              [disabled]="store.retrying() !== null"
+              [attr.aria-label]="'Retry ' + document.filename">
+              {{ store.retrying() === document.id ? 'Retrying…' : 'Retry' }}
+            </button>
+          }
+          @if (store.retryError(); as error) {
+            @if (error.id === document.id) {
+              <p class="mb-3 px-3 text-xs text-danger [overflow-wrap:anywhere]" role="alert">{{ error.message }}</p>
+            }
+          }
         }
         @if (store.loading() && !store.items().length) {
           <p class="text-muted" role="status">Loading documents…</p>

@@ -168,7 +168,7 @@ Run the real PostgreSQL acceptance check against an existing API container:
 bash tools/check-allowance-postgres.sh unslopy-api-1
 ```
 
-The check copies source into a temporary directory in that container, creates a random test database, applies migrations there, and uses fake DeepSeek responses. It proves the last-slot race with two blocked PostgreSQL connections in each of ten rounds, then checks month boundaries, publication, deletion, status changes, and reservation uniqueness. It removes the test database and copied files on exit. The database role must have permission to create a database. No application services start or restart. See the [issue #9 verification record](docs/evidence/issue-9/verification.md) for results and workspace screenshots.
+The check copies source into a temporary directory in that container, creates a random test database, applies migrations there, and uses fake DeepSeek responses. It proves the last-slot race with two blocked PostgreSQL connections in each of ten rounds, then checks month boundaries, publication, deletion, status changes, and reservation uniqueness. It removes the test database and copied files on exit. The database role must have permission to create a database. No application services start or restart. The same check runs ten concurrent user-retry races and a retry across January/February. See the [issue #9 verification record](docs/evidence/issue-9/verification.md) for allowance results and screenshots, and the [issue #10 verification record](docs/evidence/issue-10/verification.md) for user retries.
 
 ### Run background writing assessments
 
@@ -180,11 +180,21 @@ Valid uploads automatically enter the durable PostgreSQL queue. The HTTP upload 
 
 A queued job survives container restarts. Timeouts, network failures, rate limits, and provider server errors receive up to two automatic retries per request, including each editing chunk. Retries wait at least one second, then two seconds, and keep the document processing. A third failure, permanent error, or invalid output fails the document. LangChain and SDK retries remain disabled.
 
-Retries reuse the same document and processing attempt, with no new reservation or charge. Request counts and validated results survive worker restarts, so completed requests are reused. A crash during a request with an unknown outcome fails after lease expiry. The original persisted deadline, 15 minutes by default, bounds all calls and delays. Automatic retries retain their original allowance reservation. User-requested retries remain #10.
+Automatic provider retries reuse the same document and processing attempt, with no new reservation or charge. Request counts and validated results survive worker restarts, so completed requests are reused. A crash during a request with an unknown outcome fails after lease expiry. The original persisted deadline, 15 minutes by default, bounds all calls and delays. Automatic retries retain their original allowance reservation.
 
 Apply `ProviderRetries1793880500000` before deploying the updated worker. Stop old workers during the deployment: their recovery code treats delayed work as failed. Follow the [automatic retry acceptance guide](docs/provider-retry-acceptance.md) for isolated restart and migration checks.
 
 See the [worker reference](docs/assessment-worker.md) for lifecycle and privacy rules and the [assessment acceptance guide](docs/assessment-acceptance.md) for fake-provider smoke tests and remaining live evidence. Production Compose also defines a separate worker using the API image and its `worker.js` entry point. Full production hardening remains #14.
+
+### Retry a failed document
+
+A failed sidebar entry shows **Retry**. The action reuses the stored original and queues assessment and editing again. Other document states have no retry action. While the request is pending, retry controls are disabled to prevent duplicate submissions. The workspace refreshes history and allowance after the response and displays the API's allowance explanation when a retry is refused.
+
+`POST /documents/:id/retry` accepts only the signed-in owner's failed documents. It returns HTTP 200 with queued document metadata. Signed-out requests receive 401. Missing documents, invalid identifiers, other users, and admins without ownership receive the same 404. A non-failed document or exhausted allowance receives 409. Responses use private, no-store caching.
+
+The API locks the document, checks its failed state, reserves an available allowance slot, and resets processing metadata in one transaction. Concurrent retries create one queued job and one reservation. A refused retry leaves the document failed and sends no provider request. A database failure returns 503 with a reminder to refresh history before retrying because the commit outcome may be uncertain.
+
+Each user retry starts a fresh processing attempt with a new deadline and automatic provider retry budget. The reservation belongs to the UTC month of the user retry. A document that fails in January and succeeds after a February retry charges February. Failed attempts release their reservations, so repeated failures followed by success produce exactly one charge. The original upload and history entry stay unchanged.
 
 ### Verify Google sign-in locally
 

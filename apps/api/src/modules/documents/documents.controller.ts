@@ -6,6 +6,7 @@ import {
   Controller,
   Get,
   Header,
+  HttpCode,
   Param,
   Post,
   Query,
@@ -32,6 +33,7 @@ import {
 import { AbstractController } from '@api/shared/abstracts';
 import { CurrentUser } from '../auth/decorators';
 import { UploadDocument } from './commands/upload-document.handler';
+import { RetryDocument } from './commands/retry-document.handler';
 import { FindDocuments } from './queries/find-documents.handler';
 import { DownloadDocument } from './queries/download-document.handler';
 import { DocumentPage, DocumentResponse } from './dto/document-response';
@@ -41,6 +43,18 @@ import { ListDocumentsDto } from './dto/list-documents.dto';
 @ApiUnauthorizedResponse({ description: 'Sign-in required' })
 @Controller('documents')
 export class DocumentsController extends AbstractController {
+  @Post(':id/retry')
+  @HttpCode(200)
+  @Header('Cache-Control', 'private, no-store')
+  @ApiOperation({ summary: 'Retry your failed document using its stored original' })
+  @ApiOkResponse({ type: DocumentResponse })
+  @ApiNotFoundResponse({ description: 'Document does not exist or belongs to another user' })
+  @ApiConflictResponse({ description: 'Document is not failed, or monthly allowance is fully used or reserved' })
+  @ApiServiceUnavailableResponse({ description: 'Retry could not be confirmed; refresh history before retrying' })
+  retry(@CurrentUser('id') ownerId: string, @Param('id') id: string): Promise<DocumentResponse> {
+    return this.commandHandler.execute(new RetryDocument(ownerId, id));
+  }
+
   @Post()
   @Header('Cache-Control', 'private, no-store')
   @UseInterceptors(DocumentUploadInterceptor)

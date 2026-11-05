@@ -54,6 +54,8 @@ export class DocumentsStore {
   readonly total = signal(0);
   readonly loading = signal(true);
   readonly uploading = signal(false);
+  readonly retrying = signal<string | null>(null);
+  readonly retryError = signal<{ id: string; message: string } | null>(null);
   readonly downloading = signal(false);
   readonly listError = signal('');
   readonly uploadError = signal('');
@@ -191,6 +193,39 @@ export class DocumentsStore {
           this.uploadError.set(this.errorMessage(error, 'Upload failed. Check your history before trying again.'));
           if (error instanceof HttpErrorResponse && (error.status === 0 || error.status >= 500)) this.load(1);
           else this.loadAllowance();
+        }
+      });
+  }
+
+  retry(document: IDocumentResponse): void {
+    if (this.retrying() || document.status !== 'failed') return;
+    this.retrying.set(document.id);
+    this.retryError.set(null);
+    this.announcement.set('');
+    this.http
+      .post<IDocumentResponse>(`/documents/${document.id}/retry`, null)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (queued) => {
+          this.retrying.set(null);
+          this.items.update((items) => items.map((item) => (item.id === queued.id ? queued : item)));
+          if (this.selected()?.id === queued.id) this.select(queued);
+          this.announcement.set('Retry queued. Assessment and editing will start again.');
+          this.listPending = false;
+          this.load(this.page(), true);
+        },
+        error: (error: unknown) => {
+          this.retrying.set(null);
+          this.retryError.set({
+            id: document.id,
+            message: this.errorMessage(
+              error,
+              'The retry could not be confirmed. Refresh your history before trying again.'
+            )
+          });
+          this.listPending = false;
+          this.load(this.page(), true);
+          if (this.selected()?.id === document.id) this.loadSelected();
         }
       });
   }

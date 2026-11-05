@@ -16,12 +16,17 @@ import { UploadDocumentHandler } from './commands/upload-document.handler';
 import { Document } from './entities/document.entity';
 import { docxFixture } from '@api/shared/testing/docx-fixture';
 import { DocumentJobs } from '../processing/document-jobs';
+import { RetryDocumentHandler } from './commands/retry-document.handler';
+import { DataSource } from 'typeorm';
+import { FindDocumentHandler } from './queries/find-document.handler';
 
 async function allowanceHarness(database: PGlite, allowance: MonthlyAllowance) {
   const files = new Map<string, Buffer>();
   const query = async (sql: string, values?: unknown[]) => (await database.query(sql, values)).rows;
   const repository = {
     create: (data) => Object.assign(new Document(), { createdAt: new Date() }, data),
+    findOne: async ({ where }) =>
+      (await query('SELECT * FROM document WHERE id = $1 AND "ownerId" = $2', [where.id, where.ownerId]))[0] ?? null,
     manager: {
       transaction: (work) =>
         database.transaction(async (transaction) =>
@@ -52,12 +57,23 @@ async function allowanceHarness(database: PGlite, allowance: MonthlyAllowance) {
   const module = await Test.createTestingModule({
     providers: [
       UploadDocumentHandler,
+      RetryDocumentHandler,
+      FindDocumentHandler,
+      { provide: DataSource, useValue: repository.manager },
       { provide: getRepositoryToken(Document), useValue: repository },
       { provide: DocumentStorage, useValue: storage },
       { provide: MonthlyAllowance, useValue: allowance }
     ]
   }).compile();
-  return { query, files, storage, upload: module.get(UploadDocumentHandler), jobs: new DocumentJobs({ query }) };
+  return {
+    query,
+    files,
+    storage,
+    upload: module.get(UploadDocumentHandler),
+    retry: module.get(RetryDocumentHandler),
+    find: module.get(FindDocumentHandler),
+    jobs: new DocumentJobs({ query })
+  };
 }
 
 describe('Monthly allowance at upload and worker boundaries', () => {
@@ -84,6 +100,182 @@ describe('Monthly allowance at upload and worker boundaries', () => {
   });
   afterAll(() => database.close());
   const upload = async () => harness.upload.execute({ ownerId: owner, file: file(await docxFixture()) });
+
+  it('requeues a failed document using its stored original and a new allowance reservation', async () => {
+    const document = await upload();
+    const original = await harness.jobs.claim(900000);
+    await harness.jobs.fail(original, 'provider');
+    const files = new Map(harness.files);
+    expect(await harness.retry.execute({ ownerId: owner, id: document.id })).toMatchObject({
+      id: document.id,
+      status: 'queued',
+      failure: null,
+      processingStage: null
+    });
+    expect(await allowance.read({ query }, owner)).toMatchObject({ used: 0, reserved: 1, remaining: 2 });
+    const retried = await harness.jobs.claim(900000);
+    expect(retried).toMatchObject({ id: document.id, originalKey: original.originalKey, size: original.size });
+    expect(retried.processingAttemptId).not.toBe(original.processingAttemptId);
+    expect(harness.files).toEqual(files);
+    expect(await harness.jobs.claim(900000)).toBeNull();
+  });
+
+  it('clears the previous attempt before queueing and fences out its late results', async () => {
+    const document = await upload();
+    const old = await harness.jobs.claim(900000);
+    const request = await harness.jobs.startRequest(old, 'assess:v1', 'old-input');
+    await harness.jobs.finishRequest(old, 'assess:v1', { ...request, state: 'retry' }, 1000);
+    await harness.jobs.fail(old, 'provider');
+    await harness.retry.execute({ ownerId: owner, id: document.id });
+    const [queued] = await query('SELECT * FROM document WHERE id = $1', [document.id]);
+    expect(queued).toMatchObject({
+      status: 'queued',
+      processingAttemptId: null,
+      providerRequests: {},
+      nextRequestAt: null,
+      processingStartedAt: null,
+      processingDeadline: null,
+      leaseExpiresAt: null,
+      claimToken: null,
+      assessment: null,
+      revisedKey: null,
+      revisedSize: null,
+      processingStage: null,
+      failureCode: null
+    });
+    const fresh = await harness.jobs.claim(900000);
+    expect(await harness.jobs.startRequest(fresh, 'assess:v1', 'new-input')).toMatchObject({ attempts: 1 });
+    expect(await harness.jobs.fail(old, 'provider')).toBe(false);
+    expect(await harness.jobs.complete(old, { patterns: [] }, { key: 'stale.docx', size: 42 })).toBe(false);
+    expect(await allowance.read({ query }, owner)).toMatchObject({ used: 0, reserved: 1 });
+  });
+
+  it('fails twice with full automatic retry budgets, then charges exactly once in the user retry month', async () => {
+    now = new Date('2027-01-31T23:59:59.999Z');
+    const document = await upload();
+    const provider = faithfulRevisionProvider();
+    const assess = provider.assess;
+    let calls = 0;
+    provider.assess = async (...args) => {
+      if (++calls < 9) throw Object.assign(new Error('Temporary provider failure'), { status: 503 });
+      return assess(...args);
+    };
+    const worker = new AssessmentWorker(
+      harness.jobs,
+      {
+        ...harness.storage,
+        read: async (key) => harness.files.get(key)
+      },
+      provider,
+      'rules',
+      { processingTimeoutMs: 900000, providerTimeoutMs: 60000 }
+    );
+    for (let attempt = 0; attempt < 3; attempt++) {
+      for (let call = 0; call < 3; call++) {
+        await query(`UPDATE document SET "nextRequestAt" = now() - interval '1 second' WHERE id = $1`, [document.id]);
+        expect(await worker.runOnce()).toBe(true);
+      }
+      expect(calls).toBe((attempt + 1) * 3);
+      expect(await allowance.read({ query }, owner)).toMatchObject({ used: attempt === 2 ? 1 : 0, reserved: 0 });
+      expect(await harness.find.execute({ ownerId: owner, id: document.id })).toMatchObject({
+        status: attempt === 2 ? 'completed' : 'failed'
+      });
+      if (attempt < 2) {
+        now = new Date('2027-02-01T00:00:00Z');
+        await harness.retry.execute({ ownerId: owner, id: document.id });
+      }
+    }
+    expect(await worker.runOnce()).toBe(false);
+    expect(await allowance.read({ query }, owner)).toMatchObject({ month: '2027-02', used: 1, reserved: 0 });
+    now = new Date('2027-01-31T23:59:59.999Z');
+    expect(await allowance.read({ query }, owner)).toMatchObject({ month: '2027-01', used: 0, reserved: 0 });
+    expect(harness.files.size).toBe(2);
+  });
+
+  it('leaves an exhausted owner document failed without dispatching provider work', async () => {
+    const document = await upload();
+    await harness.jobs.fail(await harness.jobs.claim(900000), 'provider');
+    for (let index = 0; index < 3; index++) {
+      await upload();
+      await harness.jobs.complete(
+        await harness.jobs.claim(900000),
+        { patterns: [] },
+        { key: `result-${index}.docx`, size: 42 }
+      );
+    }
+    await expect(harness.retry.execute({ ownerId: owner, id: document.id })).rejects.toMatchObject({
+      status: 409,
+      message: expect.stringMatching(/FREE allowance of 3.*2026-12-01.*UTC/)
+    });
+    expect(await harness.find.execute({ ownerId: owner, id: document.id })).toMatchObject({ status: 'failed' });
+    expect(await allowance.read({ query }, owner)).toMatchObject({ used: 3, reserved: 0 });
+    const provider = faithfulRevisionProvider();
+    provider.assess = vi.fn(provider.assess);
+    const worker = new AssessmentWorker(
+      harness.jobs,
+      {
+        ...harness.storage,
+        read: async (key) => harness.files.get(key)
+      },
+      provider,
+      'rules',
+      { processingTimeoutMs: 900000, providerTimeoutMs: 60000 }
+    );
+    expect(await worker.runOnce()).toBe(false);
+    expect(provider.assess).not.toHaveBeenCalled();
+  });
+
+  it('accepts one concurrent retry and rejects non-failed work without a second reservation', async () => {
+    const document = await upload();
+    await harness.jobs.fail(await harness.jobs.claim(900000), 'provider');
+    const results = await Promise.allSettled([
+      harness.retry.execute({ ownerId: owner, id: document.id }),
+      harness.retry.execute({ ownerId: owner, id: document.id })
+    ]);
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.find((result) => result.status === 'rejected')).toMatchObject({ reason: { status: 409 } });
+    expect(await allowance.read({ query }, owner)).toMatchObject({ used: 0, reserved: 1 });
+    const claim = await harness.jobs.claim(900000);
+    await expect(harness.retry.execute({ ownerId: owner, id: document.id })).rejects.toMatchObject({ status: 409 });
+    await harness.jobs.complete(claim, { patterns: [] }, { key: 'completed.docx', size: 42 });
+    await expect(harness.retry.execute({ ownerId: owner, id: document.id })).rejects.toMatchObject({ status: 409 });
+    expect(await allowance.read({ query }, owner)).toMatchObject({ used: 1, reserved: 0 });
+    expect(await harness.jobs.claim(900000)).toBeNull();
+  });
+
+  it('does not reserve or queue a failed document for a different owner', async () => {
+    const document = await upload();
+    await harness.jobs.fail(await harness.jobs.claim(900000), 'provider');
+    const other = randomUUID();
+    await query('INSERT INTO "user" (id) VALUES ($1)', [other]);
+    await expect(harness.retry.execute({ ownerId: other, id: document.id })).rejects.toMatchObject({
+      status: 404,
+      message: 'Document not found.'
+    });
+    expect(await allowance.read({ query }, owner)).toMatchObject({ used: 0, reserved: 0 });
+    expect(await allowance.read({ query }, other)).toMatchObject({ used: 0, reserved: 0 });
+    expect(await harness.find.execute({ ownerId: owner, id: document.id })).toMatchObject({ status: 'failed' });
+    expect(await harness.jobs.claim(900000)).toBeNull();
+  });
+
+  it('rolls the retry reservation back if queueing cannot commit', async () => {
+    const document = await upload();
+    await harness.jobs.fail(await harness.jobs.claim(900000), 'provider');
+    await query(`CREATE FUNCTION reject_fixture_retry() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN RAISE EXCEPTION 'Fixture queue write failed'; END $$`);
+    await query(`CREATE TRIGGER reject_fixture_retry BEFORE UPDATE ON document
+      FOR EACH ROW WHEN (NEW.status = 'queued') EXECUTE FUNCTION reject_fixture_retry()`);
+    try {
+      await expect(harness.retry.execute({ ownerId: owner, id: document.id })).rejects.toMatchObject({ status: 503 });
+      expect(await allowance.read({ query }, owner)).toMatchObject({ used: 0, reserved: 0 });
+      expect(await harness.find.execute({ ownerId: owner, id: document.id })).toMatchObject({ status: 'failed' });
+      expect(await harness.jobs.claim(900000)).toBeNull();
+    } finally {
+      await query('DROP TRIGGER reject_fixture_retry ON document');
+      await query('DROP FUNCTION reject_fixture_retry()');
+    }
+    expect(await harness.retry.execute({ ownerId: owner, id: document.id })).toMatchObject({ status: 'queued' });
+  });
 
   it('reserves each valid upload and rejects the fourth FREE document without saving a file or runnable job', async () => {
     for (let index = 0; index < 3; index++) await upload();

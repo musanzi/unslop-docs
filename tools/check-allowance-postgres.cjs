@@ -11,6 +11,7 @@ const { User, StatusChange } = require('../apps/api/src/modules/users/entities')
 const { Role } = require('../apps/api/src/modules/roles/entities');
 const { MonthlyAllowance } = require('../apps/api/src/modules/documents/monthly-allowance');
 const { UploadDocumentHandler } = require('../apps/api/src/modules/documents/commands/upload-document.handler');
+const { RetryDocumentHandler } = require('../apps/api/src/modules/documents/commands/retry-document.handler');
 const { DocumentJobs } = require('../apps/api/src/modules/processing/document-jobs');
 const { AssessmentWorker } = require('../apps/api/src/modules/processing/assessment-worker');
 const { assessmentDocxFixture } = require('../apps/api/src/shared/testing/assessment-fixtures');
@@ -204,6 +205,55 @@ async function main() {
       (error) => error.code === '23505'
     );
     console.log('PASS database uniqueness rejects a second active reservation');
+
+    await database.query('DELETE FROM document');
+    const retry = new RetryDocumentHandler(database, allowance);
+    for (let round = 0; round < 10; round++) {
+      const retryOwner = await createOwner();
+      const failed = await add(retryOwner);
+      await jobs.fail(await jobs.claim(900000), 'provider');
+      const before = files.size;
+      await holdOwner(retryOwner);
+      const competing = Promise.allSettled([
+        retry.execute({ ownerId: retryOwner, id: failed.id }),
+        retry.execute({ ownerId: retryOwner, id: failed.id })
+      ]);
+      await waitForLock(2);
+      await releaseOwner();
+      const results = await competing;
+      assert.equal(results.filter((result) => result.status === 'fulfilled').length, 1);
+      assert.equal(results.find((result) => result.status === 'rejected').reason.getStatus(), 409);
+      assert.equal(files.size, before);
+      assert.equal((await allowance.read(database, retryOwner)).reserved, 1);
+      const claim = await jobs.claim(900000);
+      assert.equal(claim.id, failed.id);
+      assert.equal(await jobs.claim(900000), null);
+      await jobs.fail(claim, 'provider');
+      assert.equal((await allowance.read(database, retryOwner)).reserved, 0);
+      assert.equal((await allowance.read(database, retryOwner)).used, 0);
+    }
+    console.log(
+      'PASS PostgreSQL concurrent retries: 10 rounds, one queued job and reservation, no new original or charge'
+    );
+
+    now = new Date('2027-01-31T23:59:59.999Z');
+    const retryOwner = await createOwner();
+    const failed = await add(retryOwner);
+    await jobs.fail(await jobs.claim(900000), 'provider');
+    await holdOwner(retryOwner);
+    const retryCrossing = retry.execute({ ownerId: retryOwner, id: failed.id });
+    await waitForLock(1);
+    now = new Date('2027-02-01T00:00:00.000Z');
+    await releaseOwner();
+    await retryCrossing;
+    assert.equal((await allowance.read(database, retryOwner)).reserved, 1);
+    await worker.runOnce();
+    assert.equal((await allowance.read(database, retryOwner)).used, 1);
+    assert.equal((await allowance.read(database, retryOwner)).reserved, 0);
+    now = new Date('2027-01-31T23:59:59.999Z');
+    assert.equal((await allowance.read(database, retryOwner)).used, 0);
+    assert.equal((await allowance.read(database, retryOwner)).reserved, 0);
+    console.log('PASS retry waiting across January/February charges February after fake-provider completion');
   } finally {
     if (blocker) {
       await blocker.rollbackTransaction();

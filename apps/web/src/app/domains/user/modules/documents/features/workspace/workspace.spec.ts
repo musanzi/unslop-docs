@@ -27,6 +27,166 @@ const document: IDocumentAssessmentResponse = {
 
 afterEach(() => TestBed.resetTestingModule());
 
+describe('Retry from document history', () => {
+  function element<T extends Element = Element>(root: ParentNode, selector: string): T {
+    const found = root.querySelector<T>(selector);
+    if (!found) throw new Error(`Missing workspace element: ${selector}`);
+    return found;
+  }
+
+  const failed: IDocumentAssessmentResponse = {
+    ...document,
+    status: 'failed',
+    assessment: null,
+    failure: 'Processing failed. Your original is still available.'
+  };
+  const allowance: IAllowanceResponse = {
+    status: 'FREE',
+    limit: 3,
+    used: 0,
+    reserved: 0,
+    remaining: 3,
+    month: '2026-11',
+    resetsAt: '2026-12-01T00:00:00Z'
+  };
+  async function render(detail = failed) {
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([]),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        {
+          provide: AuthStore,
+          useValue: {
+            user: signal(null),
+            isAdmin: () => false,
+            signOut: vi.fn(),
+            isSigningOut: signal(false),
+            signOutError: signal('')
+          }
+        },
+        { provide: Media, useValue: { match: () => signal(false) } }
+      ]
+    });
+    TestBed.overrideComponent(User, {
+      set: {
+        template: readFileSync(`${import.meta.dirname}/../../../../../../shared/ui/user/user.html`, 'utf8'),
+        templateUrl: undefined
+      }
+    });
+    TestBed.overrideComponent(Workspace, {
+      set: {
+        template: readFileSync(`${import.meta.dirname}/workspace.html`, 'utf8'),
+        templateUrl: undefined
+      }
+    });
+    vi.spyOn(TestBed.inject(MatIconRegistry), 'getNamedSvgIcon').mockImplementation(() =>
+      of(globalThis.document.createElementNS('http://www.w3.org/2000/svg', 'svg'))
+    );
+    const fixture = TestBed.createComponent(Workspace);
+    await fixture.whenStable();
+    const http = TestBed.inject(HttpTestingController);
+    http
+      .expectOne((request) => request.url === '/documents')
+      .flush({ items: [detail], page: 1, pageSize: 20, total: 1 });
+    http.expectOne('/documents/allowance').flush(allowance);
+    await fixture.whenStable();
+    return { fixture, http, page: fixture.nativeElement as HTMLElement };
+  }
+
+  it('shows a retry action on a failed sidebar entry', async () => {
+    const { page, http } = await render();
+    const history = element(page, 'nav[aria-label="Document history"]');
+    expect(history.querySelector<HTMLButtonElement>('button[aria-label="Retry river.docx"]')).not.toBeNull();
+    http.verify();
+  });
+
+  it.each(['stored', 'queued', 'processing', 'assessed', 'completed'] as const)(
+    'hides retry for a %s entry',
+    async (status) => {
+      const { page, http } = await render({ ...document, status });
+      expect(page.querySelector('button[aria-label="Retry river.docx"]')).toBeNull();
+      http.verify();
+    }
+  );
+
+  it('sends one retry for a double click and replaces the failed entry with queued progress', async () => {
+    const { page, http, fixture } = await render();
+    const retry = element<HTMLButtonElement>(page, 'button[aria-label="Retry river.docx"]');
+    retry.click();
+    retry.click();
+    await fixture.whenStable();
+    expect(retry.disabled).toBe(true);
+    expect(retry.textContent).toContain('Retrying');
+    const request = http.expectOne(`/documents/${document.id}/retry`);
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toBeNull();
+    const queued = { ...failed, status: 'queued', failure: null };
+    request.flush(queued);
+    http.expectOne('/documents/allowance').flush({ ...allowance, reserved: 1, remaining: 2 });
+    http
+      .expectOne((request) => request.url === '/documents')
+      .flush({ items: [queued], page: 1, pageSize: 20, total: 1 });
+    await fixture.whenStable();
+    expect(page.querySelector('button[aria-label="Retry river.docx"]')).toBeNull();
+    expect(element(page, 'nav[aria-label="Document history"]').textContent).toContain('Queued');
+    expect(page.textContent).toContain('1 reserved');
+    http.verify();
+  });
+
+  it('keeps a refused retry failed and displays the server allowance explanation', async () => {
+    const { page, http, fixture } = await render();
+    element<HTMLButtonElement>(page, 'button[aria-label="Retry river.docx"]').click();
+    const message =
+      'Your FREE allowance of 3 documents is fully used or reserved. It resets on 2026-12-01T00:00:00.000Z (UTC).';
+    http.expectOne(`/documents/${document.id}/retry`).flush({ message }, { status: 409, statusText: 'Conflict' });
+    http.expectOne('/documents/allowance').flush({ ...allowance, used: 3, remaining: 0 });
+    http
+      .expectOne((request) => request.url === '/documents')
+      .flush({ items: [failed], page: 1, pageSize: 20, total: 1 });
+    await fixture.whenStable();
+    expect(element(page, 'nav[aria-label="Document history"]').textContent).toContain('Failed');
+    expect(element(page, '[role="alert"]').textContent).toContain(message);
+    expect(element<HTMLButtonElement>(page, 'button[aria-label="Retry river.docx"]').disabled).toBe(false);
+    http.verify();
+  });
+
+  it('refreshes the selected document after retry and ignores an older failure response', async () => {
+    const { page, http, fixture } = await render();
+    element<HTMLButtonElement>(page, 'nav[aria-label="Document history"] button').click();
+    const oldDetail = http.expectOne(`/documents/${document.id}`);
+    element<HTMLButtonElement>(page, 'button[aria-label="Retry river.docx"]').click();
+    const queued = { ...failed, status: 'queued', failure: null };
+    http.expectOne(`/documents/${document.id}/retry`).flush(queued);
+    http.expectOne(`/documents/${document.id}`).flush(queued);
+    http.expectOne('/documents/allowance').flush({ ...allowance, reserved: 1, remaining: 2 });
+    http
+      .expectOne((request) => request.url === '/documents')
+      .flush({ items: [queued], page: 1, pageSize: 20, total: 1 });
+    oldDetail.flush(failed);
+    await fixture.whenStable();
+    expect(page.textContent).not.toContain(failed.failure);
+    expect(page.querySelector('main')?.textContent).toContain('Queued');
+    expect(page.querySelector('button[aria-label="Retry river.docx"]')).toBeNull();
+    http.verify();
+  });
+
+  it('refreshes history after an uncertain response so an accepted retry no longer appears failed', async () => {
+    const { page, http, fixture } = await render();
+    element<HTMLButtonElement>(page, 'button[aria-label="Retry river.docx"]').click();
+    http.expectOne(`/documents/${document.id}/retry`).flush({}, { status: 503, statusText: 'Service unavailable' });
+    http.expectOne('/documents/allowance').flush({ ...allowance, reserved: 1, remaining: 2 });
+    http
+      .expectOne((request) => request.url === '/documents')
+      .flush({ items: [{ ...failed, status: 'processing', failure: null }], page: 1, pageSize: 20, total: 1 });
+    await fixture.whenStable();
+    expect(page.querySelector('button[aria-label="Retry river.docx"]')).toBeNull();
+    expect(element(page, '[role="alert"]').textContent).toContain('Refresh your history');
+    expect(element(page, 'nav[aria-label="Document history"]').textContent).toContain('Processing');
+    http.verify();
+  });
+});
+
 describe('Document workspace results', () => {
   async function render(
     detail: IDocumentAssessmentResponse,
@@ -58,6 +218,8 @@ describe('Document workspace results', () => {
       uploadError: signal(''),
       downloadError: signal(''),
       uploading: signal(false),
+      retrying: signal(null),
+      retryError: signal(null),
       downloading: signal(false),
       announcement: signal(''),
       progress: (item: IDocumentAssessmentResponse) => (item.status === 'completed' ? 'Completed' : 'Failed')
@@ -241,28 +403,24 @@ describe('Workspace allowance HTTP state', () => {
   it('retains the server limit/reset explanation after a competing upload takes the last slot', () => {
     const { store, http } = setup();
     store.upload(new File(['fixture'], 'fixture.docx'));
-    http
-      .expectOne('/documents')
-      .flush(
-        {
-          message:
-            'Your FREE allowance of 3 documents is fully used or reserved. It resets on 2027-01-01T00:00:00.000Z (UTC).'
-        },
-        { status: 409, statusText: 'Conflict' }
-      );
+    http.expectOne('/documents').flush(
+      {
+        message:
+          'Your FREE allowance of 3 documents is fully used or reserved. It resets on 2027-01-01T00:00:00.000Z (UTC).'
+      },
+      { status: 409, statusText: 'Conflict' }
+    );
     expect(store.uploadError()).toContain('3 documents');
     expect(store.uploadError()).toContain('2027-01-01');
-    http
-      .expectOne('/documents/allowance')
-      .flush({
-        status: 'FREE',
-        limit: 3,
-        used: 2,
-        reserved: 1,
-        remaining: 0,
-        month: '2026-12',
-        resetsAt: '2027-01-01T00:00:00Z'
-      });
+    http.expectOne('/documents/allowance').flush({
+      status: 'FREE',
+      limit: 3,
+      used: 2,
+      reserved: 1,
+      remaining: 0,
+      month: '2026-12',
+      resetsAt: '2027-01-01T00:00:00Z'
+    });
     expect(store.allowanceBlocked()).toBe(true);
     expect(store.items()).toEqual([]);
     expect(store.uploading()).toBe(false);

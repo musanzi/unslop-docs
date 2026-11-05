@@ -918,6 +918,49 @@
         ]
       }
     },
+    "/documents/{id}/retry": {
+      "post": {
+        "operationId": "DocumentsController_retry",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "404": {
+            "description": "Document does not exist or belongs to another user"
+          },
+          "409": {
+            "description": "Document is not failed, or monthly allowance is fully used or reserved"
+          },
+          "503": {
+            "description": "Retry could not be confirmed; refresh history before retrying"
+          }
+        },
+        "summary": "Retry your failed document using its stored original",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
     "/documents": {
       "post": {
         "operationId": "DocumentsController_upload",

@@ -29,6 +29,7 @@ import { HttpAdapterHost } from '@nestjs/core';
 import { DocumentsController } from './documents.controller';
 import { Document } from './entities/document.entity';
 import { UploadDocumentHandler } from './commands/upload-document.handler';
+import { RetryDocumentHandler } from './commands/retry-document.handler';
 import { FindDocumentsHandler } from './queries/find-documents.handler';
 import { DownloadDocumentHandler } from './queries/download-document.handler';
 import { DocumentStorage } from './document-storage';
@@ -44,6 +45,13 @@ describe('Private documents HTTP', () => {
   let databaseFailure = '';
   let settleCommit: (() => void) | undefined;
   const query = async (sql: string, values: unknown[]) => {
+    if (sql.startsWith('SELECT * FROM document'))
+      return records.filter((record) => record.id === values[0] && record.ownerId === values[1]);
+    if (sql.startsWith('UPDATE document')) {
+      const record = records.find((record) => record.id === values[0]);
+      Object.assign(record, { status: 'queued', failureCode: null });
+      return [record];
+    }
     if (sql.includes('GROUP BY'))
       return [
         {
@@ -129,6 +137,7 @@ describe('Private documents HTTP', () => {
         AuthGuard,
         RolesGuard,
         UploadDocumentHandler,
+        RetryDocumentHandler,
         MonthlyAllowance,
         AllowanceClock,
         FindDocumentsHandler,
@@ -145,6 +154,7 @@ describe('Private documents HTTP', () => {
           provide: DataSource,
           useValue: {
             query,
+            transaction: repository.manager.transaction,
             getRepository: (entity) => {
               if (entity !== User && entity !== Role) throw new Error('Admin document access is forbidden');
               return { count: async () => 1 };
@@ -192,6 +202,40 @@ describe('Private documents HTTP', () => {
   async function download(id: string, identity = 'owner') {
     return fetch(`${base}/documents/${id}/original`, { headers: identity ? { 'test-identity': identity } : {} });
   }
+
+  it('retries an owned failed document privately and refuses signed-out, foreign and non-failed documents', async () => {
+    const { data } = await (await upload(await docxFixture())).json();
+    const retry = (id: string, identity = 'owner') =>
+      fetch(`${base}/documents/${id}/retry`, {
+        method: 'POST',
+        headers: identity ? { 'test-identity': identity } : {}
+      });
+    records[0].status = 'failed';
+    records[0].failureCode = 'provider';
+    expect((await retry(data.id, '')).status).toBe(401);
+    const missing = await retry(randomUUID());
+    expect(missing.status).toBe(404);
+    const missingBody = await missing.json();
+    for (const [id, identity] of [
+      [data.id, 'other'],
+      [data.id, 'admin'],
+      ['invalid', 'owner']
+    ]) {
+      const denied = await retry(id, identity);
+      expect(denied.status).toBe(404);
+      expect(await denied.json()).toEqual(missingBody);
+    }
+    const response = await retry(data.id);
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(await response.json()).toMatchObject({ data: { id: data.id, status: 'queued', failure: null } });
+    for (const status of ['stored', 'queued', 'processing', 'assessed', 'completed'] as const) {
+      records[0].status = status;
+      const rejected = await retry(data.id);
+      expect(rejected.status).toBe(409);
+      expect(await rejected.json()).toMatchObject({ message: 'Only failed documents can be retried.' });
+    }
+  });
 
   it('returns only the signed-in owner allowance with private caching', async () => {
     await upload(await docxFixture());
