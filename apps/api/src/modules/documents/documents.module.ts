@@ -6,7 +6,7 @@ import { Document } from './entities/document.entity';
 import { DocumentStorage } from './document-storage';
 import { UploadDocumentHandler } from './commands/upload-document.handler';
 import { FindDocumentsHandler } from './queries/find-documents.handler';
-import { DownloadOriginalHandler } from './queries/download-original.handler';
+import { DownloadDocumentHandler } from './queries/download-document.handler';
 
 @Module({
   imports: [TypeOrmModule.forFeature([Document])],
@@ -16,7 +16,7 @@ import { DownloadOriginalHandler } from './queries/download-original.handler';
     UploadDocumentHandler,
     FindDocumentsHandler,
     FindDocumentHandler,
-    DownloadOriginalHandler
+    DownloadDocumentHandler
   ]
 })
 export class DocumentsModule {}

@@ -8,7 +8,7 @@ export interface DocxRun {
   readonly kind: 'run';
   readonly source: DocxSource;
   readonly text: string;
-  readonly textNodes: readonly { readonly source: DocxSource; readonly text: string }[];
+  readonly textNodes: readonly { readonly source: DocxSource; readonly contentStart: number; readonly text: string }[];
   readonly bold: boolean;
   readonly italic: boolean;
   readonly hyperlink?: { readonly target?: string; readonly anchor?: string };

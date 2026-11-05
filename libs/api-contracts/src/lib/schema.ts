@@ -310,6 +310,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/documents/{id}/revised": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download your validated revised DOCX */
+        get: operations["DocumentsController_revised"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -406,7 +423,9 @@ export interface components {
             /** @description Original size in bytes */
             size: number;
             /** @enum {string} */
-            status: "stored" | "queued" | "processing" | "assessed" | "failed";
+            status: "stored" | "queued" | "processing" | "assessed" | "completed" | "failed";
+            /** @enum {string|null} */
+            processingStage: "assessing" | "editing" | "validating" | null;
             failure: string | null;
             /** Format: date-time */
             createdAt: string;
@@ -433,7 +452,9 @@ export interface components {
             /** @description Original size in bytes */
             size: number;
             /** @enum {string} */
-            status: "stored" | "queued" | "processing" | "assessed" | "failed";
+            status: "stored" | "queued" | "processing" | "assessed" | "completed" | "failed";
+            /** @enum {string|null} */
+            processingStage: "assessing" | "editing" | "validating" | null;
             failure: string | null;
             /** Format: date-time */
             createdAt: string;
@@ -1123,6 +1144,41 @@ export interface operations {
                 content?: never;
             };
             /** @description Document does not exist or belongs to another user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    DocumentsController_revised: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": string;
+                };
+            };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Document or validated revision unavailable */
             404: {
                 headers: {
                     [name: string]: unknown;

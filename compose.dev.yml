@@ -66,7 +66,7 @@ services:
       UPLOADS_DIR: /app/apps/api/uploads
       DOCUMENTS_DIR: /app/private-documents
     volumes:
-      - documents_data:/app/private-documents:ro
+      - documents_data:/app/private-documents
     depends_on:
       db:
         condition: service_healthy

@@ -28,7 +28,7 @@ import { DocumentsController } from './documents.controller';
 import { Document } from './entities/document.entity';
 import { UploadDocumentHandler } from './commands/upload-document.handler';
 import { FindDocumentsHandler } from './queries/find-documents.handler';
-import { DownloadOriginalHandler } from './queries/download-original.handler';
+import { DownloadDocumentHandler } from './queries/download-document.handler';
 import { DocumentStorage } from './document-storage';
 import { readerFixture, textParagraph } from '@api/shared/testing/docx-reader-fixture';
 import { languageSamples } from '@api/shared/testing/docx-language-fixtures';
@@ -117,7 +117,7 @@ describe('Private documents HTTP', () => {
         UploadDocumentHandler,
         FindDocumentsHandler,
         FindDocumentHandler,
-        DownloadOriginalHandler,
+        DownloadDocumentHandler,
         {
           provide: DocumentStorage,
           useFactory: () => new DocumentStorage(join(root, 'private'), join(root, 'public'))
@@ -186,6 +186,7 @@ describe('Private documents HTTP', () => {
       size: bytes.length,
       createdAt: expect.any(String),
       status: 'queued',
+      processingStage: null,
       failure: null
     });
     expect(await (await list()).json()).toMatchObject({ data: { items: [document], total: 1, page: 1, pageSize: 20 } });
@@ -478,5 +479,46 @@ describe('Private documents HTTP', () => {
     const { data } = await (await list()).json();
     expect(data.total).toBe(1);
     expect(Buffer.from(await (await download(data.items[0].id)).arrayBuffer())).toEqual(bytes);
+  });
+  it('offers distinct owner-only original and validated revised downloads', async () => {
+    const original = await readerFixture(textParagraph('In order to study the river.'));
+    const revised = await readerFixture(textParagraph('To study the river.'));
+    const { data } = await (await upload(original)).json();
+    const get = (id: string, identity = 'owner') =>
+      fetch(`${base}/documents/${id}/revised`, { headers: identity ? { 'test-identity': identity } : {} });
+    expect((await get(data.id)).status).toBe(404);
+    const key = `${randomUUID()}.docx`;
+    await app.get(DocumentStorage).write(key, revised);
+    Object.assign(records[0], {
+      status: 'completed',
+      revisedKey: key,
+      revisedSize: revised.length,
+      assessment: { patterns: [] }
+    });
+    const response = await get(data.id);
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(response.headers.get('content-disposition')).toContain('revised-essay.docx');
+    expect(Buffer.from(await response.arrayBuffer())).toEqual(revised);
+    expect(Buffer.from(await (await download(data.id)).arrayBuffer())).toEqual(original);
+    const missing = await (await get(randomUUID())).json();
+    for (const identity of ['other', 'admin']) {
+      const denied = await get(data.id, identity);
+      expect(denied.status).toBe(404);
+      expect(await denied.json()).toEqual(missing);
+    }
+    expect(await (await get('invalid')).json()).toEqual(missing);
+    expect((await get(data.id, '')).status).toBe(401);
+    for (const path of [`/uploads/${key}`, `/private-documents/${key}`])
+      expect((await fetch(`${base}${path}`)).status).toBe(404);
+    records[0].status = 'failed';
+    records[0].failureCode = 'citation';
+    expect((await get(data.id)).status).toBe(404);
+    expect(Buffer.from(await (await download(data.id)).arrayBuffer())).toEqual(original);
+    const detail = await fetch(`${base}/documents/${data.id}`, { headers: { 'test-identity': 'owner' } });
+    expect(await detail.json()).toMatchObject({
+      data: { status: 'failed', assessment: null, failure: expect.stringContaining('citation') }
+    });
+    expect(JSON.stringify(await (await list()).json())).not.toContain(key);
   });
 });

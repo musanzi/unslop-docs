@@ -44,7 +44,7 @@
             (click)="select(document)">
             <span class="truncate">{{ document.filename }}</span>
             <span [class]="document.status === 'failed' ? 'text-xs text-danger' : 'text-xs text-muted'">{{
-              store.statusLabels[document.status]
+              store.progress(document)
             }}</span>
             <time class="text-[0.75rem] text-muted" [attr.datetime]="document.createdAt">{{
               document.createdAt | date: 'MMM d, y'
@@ -139,8 +139,25 @@
             (click)="download(document)"
             [disabled]="store.downloading()">
             <mat-icon svgIcon="download" />
-            {{ store.downloading() ? 'Downloading…' : 'Download original' }}
+            Download original
           </button>
+          @if (document.status === 'completed') {
+            <button
+              class="ml-3 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-divider px-3.5 py-[0.6rem] enabled:hover:bg-hover"
+              type="button"
+              (click)="download(document, 'revised')"
+              [disabled]="store.downloading()">
+              <mat-icon svgIcon="download" />
+              Download revised DOCX
+            </button>
+            <p class="mt-4 text-sm leading-relaxed text-muted">
+              Review the revised document before submitting it. Automated checks protect structure and selected content;
+              they do not prove unchanged meaning or factual accuracy.
+            </p>
+          }
+          @if (store.downloading()) {
+            <p class="mt-3 text-sm text-muted" role="status">Downloading…</p>
+          }
           <section class="mt-10" aria-labelledby="assessment-heading">
             <h2 id="assessment-heading" class="text-lg font-medium">Writing assessment</h2>
             <p class="my-3 flex items-center gap-2" role="status">
@@ -149,14 +166,16 @@
                   class="size-1.5 animate-pulse rounded-full bg-current motion-reduce:animate-none"
                   aria-hidden="true"></span>
               }
-              {{ store.statusLabels[document.status] }}
+              {{ store.progress(document) }}
             </p>
             @if (document.status === 'queued') {
               <p class="text-muted">
-                Your document is waiting for assessment. You can leave this page and return later.
+                Your document is waiting for assessment and editing. You can leave this page and return later.
               </p>
             } @else if (document.status === 'processing') {
-              <p class="text-muted">Reading your document for writing patterns.</p>
+              <p class="text-muted">
+                Assessment, editing, and validation run automatically. You can leave this page and return later.
+              </p>
             } @else if (document.status === 'failed') {
               <p class="mt-3 text-[0.875rem] text-danger [overflow-wrap:anywhere]" role="alert">
                 {{ document.failure }}
@@ -214,8 +233,8 @@
           [class.border-t]="store.selected()"
           [class.pt-6]="store.selected()">
           <p id="document-privacy" class="mb-5 max-w-xl text-[0.875rem] leading-[1.6] text-muted">
-            Uploading sends your document text to DeepSeek for a writing assessment. Your original stays private.
-            Editing is still in development.
+            Uploading sends your document text to DeepSeek for assessment and editing. Your original and revised DOCX
+            stay private.
           </p>
           <button
             class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-divider px-3.5 py-[0.6rem] enabled:hover:bg-hover"

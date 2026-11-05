@@ -30,6 +30,7 @@ export class FindDocumentHandler implements IQueryHandler<FindDocument, Document
           size: true,
           createdAt: true,
           status: true,
+          processingStage: true,
           failureCode: true,
           assessment: true
         }
@@ -38,6 +39,9 @@ export class FindDocumentHandler implements IQueryHandler<FindDocument, Document
       throw new ServiceUnavailableException('The document could not be loaded. Try again.');
     }
     if (!document) throw new NotFoundException('Document not found.');
-    return { ...documentResponse(document), assessment: document.status === 'assessed' ? document.assessment : null };
+    return {
+      ...documentResponse(document),
+      assessment: ['assessed', 'completed'].includes(document.status) ? document.assessment : null
+    };
   }
 }

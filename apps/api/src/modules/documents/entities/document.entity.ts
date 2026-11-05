@@ -1,4 +1,5 @@
 import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryColumn } from 'typeorm';
+import type { ProcessingStage } from '../document-workflow';
 import type { WritingAssessment } from '../assessment-workflow';
 import type { DocumentStatus, ProcessingFailure } from '../document-processing';
 import { User } from '../../users/entities';
@@ -21,6 +22,15 @@ export class Document {
 
   @Column({ unique: true })
   originalKey: string;
+
+  @Column({ type: 'varchar', nullable: true, unique: true, select: false })
+  revisedKey: string | null;
+
+  @Column({ type: 'integer', nullable: true })
+  revisedSize: number | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  processingStage: ProcessingStage | null;
 
   @Column('integer')
   size: number;

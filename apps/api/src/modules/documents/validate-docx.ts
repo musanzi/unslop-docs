@@ -102,6 +102,7 @@ function inspectXml(bytes: Buffer, budget: { nodes: number }) {
       children: [],
       text: '',
       start,
+      contentStart: parser.position,
       end: 0
     };
     if (tags.length) tags.at(-1).children.push(node);

@@ -44,13 +44,13 @@ export class Workspace {
     if (file) this.store.upload(file);
   }
 
-  protected async download(document: IDocumentResponse): Promise<void> {
-    const blob = await this.store.original(document);
+  protected async download(document: IDocumentResponse, version: 'original' | 'revised' = 'original'): Promise<void> {
+    const blob = await this.store.download(document, version);
     if (!blob || this.destroyRef.destroyed) return;
     const url = URL.createObjectURL(blob);
     const anchor = this.document.createElement('a');
     anchor.href = url;
-    anchor.download = document.filename;
+    anchor.download = version === 'original' ? document.filename : `revised-${document.filename}`;
     this.document.body.append(anchor);
     anchor.click();
     anchor.remove();

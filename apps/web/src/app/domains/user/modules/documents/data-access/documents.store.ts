@@ -24,10 +24,21 @@ export class DocumentsStore {
   readonly statusLabels: Record<IDocumentResponse['status'], string> = {
     stored: 'Original saved',
     queued: 'Queued',
-    processing: 'Assessing writing',
+    processing: 'Processing',
     assessed: 'Assessed',
+    completed: 'Completed',
     failed: 'Failed'
   };
+  readonly stageLabels = {
+    assessing: 'Assessing writing',
+    editing: 'Editing your document',
+    validating: 'Checking the revised document'
+  };
+
+  progress(document: IDocumentResponse): string {
+    return document.processingStage ? this.stageLabels[document.processingStage] : this.statusLabels[document.status];
+  }
+
   readonly items = signal<IDocumentResponse[]>([]);
   readonly selected = signal<IDocumentResponse | null>(null);
   readonly page = signal(1);
@@ -140,7 +151,7 @@ export class DocumentsStore {
         next: (document) => {
           this.uploading.set(false);
           this.select(document);
-          this.announcement.set('Original uploaded. Writing assessment queued.');
+          this.announcement.set('Original uploaded. Assessment and editing queued.');
           this.items.set([document, ...(this.page() === 1 ? this.items() : [])].slice(0, 20));
           this.page.set(1);
           this.total.update((total) => total + 1);
@@ -154,14 +165,14 @@ export class DocumentsStore {
       });
   }
 
-  async original(document: IDocumentResponse): Promise<Blob | null> {
+  async download(document: IDocumentResponse, version: 'original' | 'revised'): Promise<Blob | null> {
     if (this.downloading()) return null;
     this.downloading.set(true);
     this.downloadError.set('');
     try {
       return await firstValueFrom(
         this.http
-          .get(`/documents/${document.id}/original`, {
+          .get(`/documents/${document.id}/${version}`, {
             responseType: 'blob',
             transferCache: false
           })
@@ -169,7 +180,7 @@ export class DocumentsStore {
       );
     } catch (error) {
       if (!this.destroyRef.destroyed)
-        this.downloadError.set(this.errorMessage(error, 'Original unavailable. Try again.'));
+        this.downloadError.set(this.errorMessage(error, 'Download unavailable. Try again.'));
       return null;
     } finally {
       this.downloading.set(false);

@@ -1074,6 +1074,44 @@
           "documents"
         ]
       }
+    },
+    "/documents/{id}/revised": {
+      "get": {
+        "operationId": "DocumentsController_revised",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "404": {
+            "description": "Document or validated revision unavailable"
+          }
+        },
+        "summary": "Download your validated revised DOCX",
+        "tags": [
+          "documents"
+        ]
+      }
     }
   },
   "info": {
@@ -1301,7 +1339,20 @@
               "queued",
               "processing",
               "assessed",
+              "completed",
               "failed"
+            ]
+          },
+          "processingStage": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "assessing",
+              "editing",
+              "validating",
+              null
             ]
           },
           "failure": {
@@ -1320,6 +1371,7 @@
           "filename",
           "size",
           "status",
+          "processingStage",
           "failure",
           "createdAt"
         ]
@@ -1412,7 +1464,20 @@
               "queued",
               "processing",
               "assessed",
+              "completed",
               "failed"
+            ]
+          },
+          "processingStage": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "assessing",
+              "editing",
+              "validating",
+              null
             ]
           },
           "failure": {
@@ -1441,6 +1506,7 @@
           "filename",
           "size",
           "status",
+          "processingStage",
           "failure",
           "createdAt",
           "assessment"

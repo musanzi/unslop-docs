@@ -4,7 +4,8 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { AssessmentProvider } from './assessment-workflow';
+import { DocumentProvider } from './document-workflow';
+import { EditChunk } from './revise-docx';
 
 export function workerSettings(env: NodeJS.ProcessEnv) {
   const required = (key: string) => {
@@ -42,7 +43,7 @@ export async function loadAssessmentSkill(): Promise<string> {
   return bytes.toString('utf8');
 }
 
-export class DeepSeekProvider implements AssessmentProvider {
+export class DeepSeekProvider implements DocumentProvider {
   private readonly model: ChatDeepSeek;
 
   constructor(settings: ReturnType<typeof workerSettings>, fetcher?: typeof fetch) {
@@ -59,11 +60,20 @@ export class DeepSeekProvider implements AssessmentProvider {
   }
 
   async assess(system: string, text: string, signal?: AbortSignal): Promise<unknown> {
+    return this.request(system, { document: text }, signal);
+  }
+
+  async edit(system: string, chunk: EditChunk, signal?: AbortSignal): Promise<unknown> {
+    return this.request(system, { document: chunk }, signal);
+  }
+
+  private async request(system: string, data: unknown, signal?: AbortSignal): Promise<unknown> {
     try {
-      const result = await this.model.invoke(
-        [new SystemMessage(system), new HumanMessage(JSON.stringify({ document: text }))],
-        { signal, response_format: { type: 'json_object' }, maxRetries: 0 }
-      );
+      const result = await this.model.invoke([new SystemMessage(system), new HumanMessage(JSON.stringify(data))], {
+        signal,
+        response_format: { type: 'json_object' },
+        maxRetries: 0
+      });
       if (typeof result.content !== 'string' || result.response_metadata['finish_reason'] !== 'stop')
         throw new Error('Incomplete assessment');
       return JSON.parse(result.content);

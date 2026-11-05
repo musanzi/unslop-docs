@@ -27,9 +27,13 @@ _Avoid_: AI detection rate, AI authorship percentage.
 
 **Queued document**: An accepted upload waiting for its writing assessment to start.
 
-**Processing document**: A document whose writing assessment is in progress.
+**Processing document**: A document whose writing assessment, editing, or validation is in progress.
 
 **Assessed document**: A document with a complete writing assessment. Assessment alone does not mean editing has succeeded.
+
+**Revised document**: The edited DOCX that passes the document preservation checks. Its owner can download it separately from the original and reviews it before use.
+
+**Completed document**: A document with a writing assessment and a validated revised document.
 
 **Failed document**: A document whose processing ended without a usable result. Its original remains available.
 

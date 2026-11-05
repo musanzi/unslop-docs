@@ -30,7 +30,7 @@ import { AbstractController } from '@api/shared/abstracts';
 import { CurrentUser } from '../auth/decorators';
 import { UploadDocument } from './commands/upload-document.handler';
 import { FindDocuments } from './queries/find-documents.handler';
-import { DownloadOriginal } from './queries/download-original.handler';
+import { DownloadDocument } from './queries/download-document.handler';
 import { DocumentPage, DocumentResponse } from './dto/document-response';
 import { ListDocumentsDto } from './dto/list-documents.dto';
 
@@ -81,6 +81,15 @@ export class DocumentsController extends AbstractController {
   @ApiOkResponse({ description: 'Original DOCX bytes', schema: { type: 'string', format: 'binary' } })
   @ApiNotFoundResponse({ description: 'Document does not exist or belongs to another user' })
   original(@CurrentUser('id') ownerId: string, @Param('id') id: string): Promise<StreamableFile> {
-    return this.queryHandler.execute(new DownloadOriginal(ownerId, id));
+    return this.queryHandler.execute(new DownloadDocument(ownerId, id));
+  }
+  @Get(':id/revised')
+  @Header('Cache-Control', 'private, no-store')
+  @ApiOperation({ summary: 'Download your validated revised DOCX' })
+  @ApiProduces('application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+  @ApiOkResponse({ schema: { type: 'string', format: 'binary' } })
+  @ApiNotFoundResponse({ description: 'Document or validated revision unavailable' })
+  revised(@CurrentUser('id') ownerId: string, @Param('id') id: string): Promise<StreamableFile> {
+    return this.queryHandler.execute(new DownloadDocument(ownerId, id, 'revised'));
   }
 }

@@ -19,6 +19,7 @@ export interface XmlNode {
   children: XmlNode[];
   text: string;
   start: number;
+  contentStart: number;
   end: number;
 }
 
@@ -163,7 +164,7 @@ export function documentModel(mainPart: string, trees: Map<string, XmlNode>) {
           kind: 'run',
           textNodes: item.children
             .filter((node) => isWord(node, 't'))
-            .map((node) => ({ source: source(node), text: node.text })),
+            .map((node) => ({ source: source(node), contentStart: node.contentStart, text: node.text })),
           source: source(item),
           text: textOf(item),
           bold: enabled(property('b')),
