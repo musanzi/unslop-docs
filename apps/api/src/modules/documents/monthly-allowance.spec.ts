@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Readable } from 'node:stream';
 import { DocumentStorage } from './document-storage';
+import { DocumentProvider } from './document-workflow';
 import { AssessmentWorker } from '../processing/assessment-worker';
 import { faithfulRevisionProvider } from '@api/shared/testing/revision-fixtures';
 import { PGlite } from '@electric-sql/pglite';
@@ -100,6 +101,17 @@ describe('Monthly allowance at upload and worker boundaries', () => {
   });
   afterAll(() => database.close());
   const upload = async () => harness.upload.execute({ ownerId: owner, file: file(await docxFixture()) });
+  const workerFor = (provider: DocumentProvider) =>
+    new AssessmentWorker(
+      harness.jobs,
+      {
+        ...harness.storage,
+        read: async (key) => harness.files.get(key)
+      },
+      provider,
+      'rules',
+      { processingTimeoutMs: 900000, providerTimeoutMs: 60000 }
+    );
 
   it('requeues a failed document using its stored original and a new allowance reservation', async () => {
     const document = await upload();
@@ -160,16 +172,7 @@ describe('Monthly allowance at upload and worker boundaries', () => {
       if (++calls < 9) throw Object.assign(new Error('Temporary provider failure'), { status: 503 });
       return assess(...args);
     };
-    const worker = new AssessmentWorker(
-      harness.jobs,
-      {
-        ...harness.storage,
-        read: async (key) => harness.files.get(key)
-      },
-      provider,
-      'rules',
-      { processingTimeoutMs: 900000, providerTimeoutMs: 60000 }
-    );
+    const worker = workerFor(provider);
     for (let attempt = 0; attempt < 3; attempt++) {
       for (let call = 0; call < 3; call++) {
         await query(`UPDATE document SET "nextRequestAt" = now() - interval '1 second' WHERE id = $1`, [document.id]);
@@ -211,16 +214,7 @@ describe('Monthly allowance at upload and worker boundaries', () => {
     expect(await allowance.read({ query }, owner)).toMatchObject({ used: 3, reserved: 0 });
     const provider = faithfulRevisionProvider();
     provider.assess = vi.fn(provider.assess);
-    const worker = new AssessmentWorker(
-      harness.jobs,
-      {
-        ...harness.storage,
-        read: async (key) => harness.files.get(key)
-      },
-      provider,
-      'rules',
-      { processingTimeoutMs: 900000, providerTimeoutMs: 60000 }
-    );
+    const worker = workerFor(provider);
     expect(await worker.runOnce()).toBe(false);
     expect(provider.assess).not.toHaveBeenCalled();
   });
@@ -422,16 +416,7 @@ describe('Monthly allowance at upload and worker boundaries', () => {
       expect(await allowance.read({ query }, owner)).toMatchObject({ used: 0, reserved: 1 });
       return edit(...args);
     };
-    const worker = new AssessmentWorker(
-      harness.jobs,
-      {
-        ...harness.storage,
-        read: async (key) => harness.files.get(key)
-      },
-      provider,
-      'rules',
-      { processingTimeoutMs: 900000, providerTimeoutMs: 60000 }
-    );
+    const worker = workerFor(provider);
     await worker.runOnce();
     expect(await allowance.read({ query }, owner)).toMatchObject({ used: 0, reserved: 1 });
     await query(`UPDATE document SET "nextRequestAt" = now() - interval '1 second' WHERE id = $1`, [uploaded.id]);
@@ -444,16 +429,7 @@ describe('Monthly allowance at upload and worker boundaries', () => {
     await upload();
     const provider = faithfulRevisionProvider();
     provider.edit = async () => ({ edits: [] });
-    await new AssessmentWorker(
-      harness.jobs,
-      {
-        ...harness.storage,
-        read: async (key) => harness.files.get(key)
-      },
-      provider,
-      'rules',
-      { processingTimeoutMs: 900000, providerTimeoutMs: 60000 }
-    ).runOnce();
+    await workerFor(provider).runOnce();
     expect(await allowance.read({ query }, owner)).toMatchObject({ used: 0, reserved: 0, remaining: 3 });
     expect(harness.files.size).toBe(1);
   });

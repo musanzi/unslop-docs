@@ -50,7 +50,7 @@ export class DocumentsController extends AbstractController {
   @ApiOkResponse({ type: DocumentResponse })
   @ApiNotFoundResponse({ description: 'Document does not exist or belongs to another user' })
   @ApiConflictResponse({ description: 'Document is not failed, or monthly allowance is fully used or reserved' })
-  @ApiServiceUnavailableResponse({ description: 'Retry could not be confirmed; refresh history before retrying' })
+  @ApiServiceUnavailableResponse({ description: 'Retry could not be confirmed. Refresh history before retrying.' })
   retry(@CurrentUser('id') ownerId: string, @Param('id') id: string): Promise<DocumentResponse> {
     return this.commandHandler.execute(new RetryDocument(ownerId, id));
   }

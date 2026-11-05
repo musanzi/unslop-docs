@@ -1114,7 +1114,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Retry could not be confirmed; refresh history before retrying */
+            /** @description Retry could not be confirmed. Refresh history before retrying. */
             503: {
                 headers: {
                     [name: string]: unknown;

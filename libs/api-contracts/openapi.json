@@ -952,7 +952,7 @@
             "description": "Document is not failed, or monthly allowance is fully used or reserved"
           },
           "503": {
-            "description": "Retry could not be confirmed; refresh history before retrying"
+            "description": "Retry could not be confirmed. Refresh history before retrying."
           }
         },
         "summary": "Retry your failed document using its stored original",
