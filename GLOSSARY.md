@@ -4,6 +4,8 @@ Unslop-docs helps students edit documents and download the revised documents.
 
 ## Language
 
+**Document**: A user's uploaded work, including its original and any revised version. Only its owner can view or download it.
+
 **FREE**: A user status with an allowance of three documents per month.
 
 **PREMIUM**: A user status with an allowance of 15 documents per month.

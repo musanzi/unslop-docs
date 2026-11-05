@@ -1,0 +1,143 @@
+<a href="#workspace-content" class="skip-link">Skip to document</a>
+<mat-sidenav-container class="workspace">
+  <mat-sidenav
+    #history
+    id="document-history"
+    class="history"
+    [mode]="isMobile() ? 'over' : 'side'"
+    [opened]="!isMobile()"
+    [disableClose]="!isMobile()"
+    [autoFocus]="isMobile()"
+    aria-label="Your documents">
+    <div class="history-content">
+      <div class="history-header">
+        <a routerLink="/" class="wordmark">unslop-docs</a>
+        @if (isMobile()) {
+          <button class="icon-button" type="button" (click)="history.close()" aria-label="Close documents">
+            <mat-icon svgIcon="x" />
+          </button>
+        }
+      </div>
+      <button class="new-document" type="button" (click)="select(null)" [disabled]="store.uploading()">
+        <mat-icon svgIcon="plus" /> New document
+      </button>
+      <nav class="document-list" aria-label="Document history" [attr.aria-busy]="store.loading()">
+        @for (document of store.items(); track document.id) {
+          <button
+            class="document-entry"
+            type="button"
+            [class.selected]="store.selected()?.id === document.id"
+            [attr.aria-current]="store.selected()?.id === document.id ? 'true' : null"
+            (click)="select(document)">
+            <span class="filename">{{ document.filename }}</span>
+            <time [attr.datetime]="document.createdAt">{{ document.createdAt | date: 'MMM d, y' }}</time>
+          </button>
+        }
+        @if (store.loading() && !store.items().length) {
+          <p class="muted" role="status">Loading documents…</p>
+        } @else if (!store.loading() && !store.listError() && !store.items().length) {
+          <p class="muted">Your uploads appear here.</p>
+        }
+        @if (store.listError()) {
+          <p class="error" role="alert">{{ store.listError() }}</p>
+          <button class="text-button" type="button" (click)="store.load()" [disabled]="store.loading()">
+            Try again
+          </button>
+        }
+      </nav>
+      @if (store.pageCount() > 1) {
+        <nav class="pagination" aria-label="Document pages">
+          <button
+            class="icon-button"
+            type="button"
+            aria-label="Newer documents"
+            (click)="store.load(store.page() - 1)"
+            [disabled]="store.page() === 1 || store.loading()">
+            <mat-icon svgIcon="chevron-left" />
+          </button>
+          <span>{{ store.page() }} / {{ store.pageCount() }}</span>
+          <button
+            class="icon-button"
+            type="button"
+            aria-label="Older documents"
+            (click)="store.load(store.page() + 1)"
+            [disabled]="store.page() === store.pageCount() || store.loading()">
+            <mat-icon svgIcon="chevron-right" />
+          </button>
+        </nav>
+      }
+      <footer class="account">
+        <a routerLink="/user/profile">My profile</a>
+        @if (auth.isAdmin()) {
+          <a routerLink="/admin">Administration</a>
+        }
+        <button class="text-button" type="button" (click)="auth.signOut()">Sign out</button>
+      </footer>
+    </div>
+  </mat-sidenav>
+  <mat-sidenav-content class="workspace-main">
+    <header class="workspace-header">
+      @if (isMobile()) {
+        <button
+          class="icon-button"
+          type="button"
+          (click)="history.open()"
+          aria-controls="document-history"
+          [attr.aria-expanded]="history.opened"
+          aria-label="Open documents">
+          <mat-icon svgIcon="panel-left" />
+        </button>
+      }
+      <span>Documents</span>
+    </header>
+    <main id="workspace-content" tabindex="-1">
+      <div class="document-content">
+        @if (store.selected(); as document) {
+          <h1>{{ document.filename }}</h1>
+          <p class="muted document-meta">
+            Original · {{ document.createdAt | date: 'mediumDate' }} ·
+            {{ document.size / 1000000 | number: '1.0-2' }} MB
+          </p>
+          <button class="primary-button" type="button" (click)="download(document)" [disabled]="store.downloading()">
+            <mat-icon svgIcon="download" />
+            {{ store.downloading() ? 'Downloading…' : 'Download original' }}
+          </button>
+          @if (store.downloadError()) {
+            <p class="error" role="alert">{{ store.downloadError() }}</p>
+          }
+        } @else {
+          <h1>Upload your document.</h1>
+        }
+        <div class="upload-area" [class.with-document]="store.selected()">
+          <p id="document-privacy" class="privacy">
+            Document text goes to DeepSeek for assessment and editing. Your files are private to you.
+          </p>
+          <button
+            class="upload-button"
+            type="button"
+            (click)="fileInput.click()"
+            [disabled]="store.uploading()"
+            aria-describedby="document-privacy upload-limit">
+            <mat-icon svgIcon="paperclip" />
+            {{ store.uploading() ? 'Uploading…' : 'Upload DOCX' }}
+          </button>
+          <input
+            #fileInput
+            type="file"
+            accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            (change)="upload($event)"
+            [disabled]="store.uploading()"
+            hidden
+            aria-label="Choose a DOCX file" />
+          <p id="upload-limit" class="muted upload-limit">Up to 10 MB</p>
+          @if (store.uploadError()) {
+            <p class="error" role="alert">{{ store.uploadError() }}</p>
+          }
+          <p class="status" role="status">
+            {{ store.uploading() ? 'Uploading your original…' : store.announcement() }}
+          </p>
+        </div>
+      </div>
+    </main>
+  </mat-sidenav-content>
+</mat-sidenav-container>

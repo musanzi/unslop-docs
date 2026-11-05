@@ -1,0 +1,20 @@
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { DocumentsController } from './documents.controller';
+import { Document } from './entities/document.entity';
+import { DocumentStorage } from './document-storage';
+import { UploadDocumentHandler } from './commands/upload-document.handler';
+import { FindDocumentsHandler } from './queries/find-documents.handler';
+import { DownloadOriginalHandler } from './queries/download-original.handler';
+
+@Module({
+  imports: [TypeOrmModule.forFeature([Document])],
+  controllers: [DocumentsController],
+  providers: [
+    { provide: DocumentStorage, useFactory: () => new DocumentStorage() },
+    UploadDocumentHandler,
+    FindDocumentsHandler,
+    DownloadOriginalHandler
+  ]
+})
+export class DocumentsModule {}

@@ -4,13 +4,18 @@ import { UserLayout } from './layout/layout';
 
 const routes: Routes = [
   {
+    path: 'documents',
+    title: 'Documents',
+    loadComponent: () => import('./modules/documents/features/workspace/workspace').then((module) => module.Workspace)
+  },
+  {
     path: '',
     component: UserLayout,
     children: [
       {
         path: '',
         pathMatch: 'full',
-        redirectTo: 'profile'
+        redirectTo: 'documents'
       },
       {
         path: 'profile',

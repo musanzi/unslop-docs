@@ -194,7 +194,7 @@ describe('Google-only HTTP surface', () => {
       headers: { cookie }
     });
     expect(response.status).toBe(302);
-    expect(response.headers.get('location')).toBe('http://localhost:4200');
+    expect(response.headers.get('location')).toBe('http://localhost:4200/user/documents');
     const signedInCookie = response.headers.get('set-cookie').split(';')[0];
     expect(signedInCookie).not.toBe(cookie);
     return signedInCookie;
@@ -211,7 +211,7 @@ describe('Google-only HTTP surface', () => {
     });
     const out = await fetch(`${base}/auth/signout`, { method: 'POST', headers: { cookie } });
     expect(out.status).toBe(201);
-    expect((await fetch(`${base}/auth/me`, { headers: { cookie } })).status).toBe(403);
+    expect((await fetch(`${base}/auth/me`, { headers: { cookie } })).status).toBe(401);
   });
 
   it('lets the admin change status and read the recorded change through the API', async () => {
@@ -405,7 +405,7 @@ describe('Google-only HTTP surface', () => {
       headers: { cookie }
     });
     expect(response.headers.get('location')).toContain('error=google-failed');
-    expect((await fetch(`${base}/auth/me`, { headers: { cookie } })).status).toBe(403);
+    expect((await fetch(`${base}/auth/me`, { headers: { cookie } })).status).toBe(401);
     expect(users).toHaveLength(0);
   });
 
@@ -443,7 +443,7 @@ describe('Google-only HTTP surface', () => {
     expect(response.status).toBe(302);
     expect(response.headers.get('location')).toBe(`http://localhost:4200/auth/sign-in?error=${reason}`);
     expect(exchangeCode).not.toHaveBeenCalled();
-    expect((await fetch(`${base}/auth/me`, { headers: { cookie } })).status).toBe(403);
+    expect((await fetch(`${base}/auth/me`, { headers: { cookie } })).status).toBe(401);
   });
 
   it('rejects a callback replay after successful sign-in', async () => {

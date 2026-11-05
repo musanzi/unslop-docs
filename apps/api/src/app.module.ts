@@ -1,3 +1,4 @@
+import { DocumentsModule } from './modules/documents/documents.module';
 import { validateAuthConfig } from './modules/auth/auth-config';
 import { Module } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
@@ -84,7 +85,8 @@ import { ApiResponseInterceptor } from './shared/interceptors';
     AuthModule,
     UsersModule,
     RolesModule,
-    StatsModule
+    StatsModule,
+    DocumentsModule
   ],
   providers: [
     { provide: APP_FILTER, useClass: ApiExceptionFilter },

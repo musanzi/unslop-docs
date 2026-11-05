@@ -1,3 +1,4 @@
+import { UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ExecutionContextHost } from '@nestjs/core/helpers/execution-context-host';
 import { Test } from '@nestjs/testing';
@@ -29,13 +30,17 @@ describe('AuthGuard', () => {
     expect(isAuthenticated).not.toHaveBeenCalled();
   });
 
-  it.each([true, false])('uses authentication for protected access: %s', async (authenticated) => {
-    await expect(guard.canActivate(context(vi.fn(() => authenticated)))).resolves.toBe(authenticated);
+  it('allows authenticated access', async () => {
+    await expect(guard.canActivate(context(vi.fn(() => true)))).resolves.toBe(true);
+  });
+
+  it('returns 401 for signed-out access', async () => {
+    await expect(guard.canActivate(context())).rejects.toThrow(UnauthorizedException);
   });
 
   it('lets a protected method override a public controller', async () => {
     Reflect.defineMetadata(IS_PUBLIC_KEY, true, Controller);
     Reflect.defineMetadata(IS_PUBLIC_KEY, false, Controller.prototype.action);
-    await expect(guard.canActivate(context())).resolves.toBe(false);
+    await expect(guard.canActivate(context())).rejects.toThrow(UnauthorizedException);
   });
 });

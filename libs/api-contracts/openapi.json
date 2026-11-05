@@ -886,6 +886,154 @@
           "stats"
         ]
       }
+    },
+    "/documents": {
+      "post": {
+        "operationId": "DocumentsController_upload",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing, invalid or unsafe DOCX content"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "413": {
+            "description": "Original exceeds 10,000,000 bytes"
+          },
+          "503": {
+            "description": "Upload could not be confirmed; refresh history before retrying"
+          }
+        },
+        "summary": "Upload a private original DOCX",
+        "tags": [
+          "documents"
+        ]
+      },
+      "get": {
+        "operationId": "DocumentsController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid pagination"
+          },
+          "401": {
+            "description": "Sign-in required"
+          }
+        },
+        "summary": "List your documents, newest first",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/documents/{id}/original": {
+      "get": {
+        "operationId": "DocumentsController_original",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Original DOCX bytes",
+            "content": {
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "404": {
+            "description": "Document does not exist or belongs to another user"
+          }
+        },
+        "summary": "Download your original document",
+        "tags": [
+          "documents"
+        ]
+      }
     }
   },
   "info": {
@@ -1089,6 +1237,63 @@
         "required": [
           "label",
           "total"
+        ]
+      },
+      "DocumentResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "size": {
+            "type": "number",
+            "description": "Original size in bytes",
+            "maximum": 10000000
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "filename",
+          "size",
+          "createdAt"
+        ]
+      },
+      "Object": {
+        "type": "object",
+        "properties": {}
+      },
+      "DocumentPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DocumentResponse"
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "page": {
+            "type": "number"
+          },
+          "pageSize": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "pageSize"
         ]
       }
     }

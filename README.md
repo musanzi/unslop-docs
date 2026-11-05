@@ -72,6 +72,28 @@ The two status endpoints return 403 for non-admins and 404 for an unknown user. 
 
 To verify the UI on the owner's stack, apply the migration, change a user's status, and reopen their history. Confirm that the list and profile show the saved status, then sign in again as that user. Capture the status control and history for issue #3. Automated HTTP specs cover authorization, audit contents, no-op submissions, history order, rollback, and persistence, including concurrent profile and sign-in writes. PostgreSQL migration execution and browser screenshots require the running stack.
 
+### Upload and download documents
+
+Google sign-in opens `/user/documents`. Choose **Upload DOCX** after reading the DeepSeek privacy notice. The workspace lists your originals, newest first, with 20 entries per page. On phones, **Open documents** opens the history drawer. Choose an entry, then **Download original**. This slice stores originals only. Assessment, editing, word limits, allowances, and deletion belong to later issues.
+
+The `PrivateDocuments1793880200000` migration adds document ownership, display filename, byte size, upload time, and a generated original storage key. No document relation is added to user responses or CSV exports. Admin access does not grant access to another user's documents. The original has its own download endpoint and remains separate from future revised files.
+
+| Endpoint                                  | Result                                                                                   |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `POST /documents`, multipart field `file` | Upload metadata: `id`, `filename`, `size`, and `createdAt`.                              |
+| `GET /documents?page=1&pageSize=20`       | Owner-only `items`, `total`, `page`, and `pageSize`. Page size is limited to 50.         |
+| `GET /documents/:id/original`             | Original DOCX bytes, with an attachment filename and `Cache-Control: private, no-store`. |
+
+Signed-out requests return 401. Download requests from another user or the admin return the same 404 as an unknown document. Invalid pagination or DOCX content returns 400. Uploads over 10 MB return 413. Metadata responses also disable caching. Stored names never contain the supplied filename, and no static route serves the private directory.
+
+The upload limit is exactly 10,000,000 bytes. The API checks content rather than trusting the extension or MIME type. `yauzl` reads ZIP entries lazily without extracting files. `saxes` parses namespace-aware XML without resolving external entities. Validation checks DOCX content types, the main relationship, document XML, entry lengths, and CRC checksums. Archives with encrypted entries, duplicate or unsafe paths, DTDs, malformed XML, or more than 2,048 entries are rejected. Expanded data is limited to 50 MB total, 20 MB per entry, and 10 MB per XML part, with XML nesting limited to 128 levels. These are parser safety limits. Processing eligibility checks belong to issue #5.
+
+Uploads write and sync the original before committing its metadata. A failed write or database insert removes the private file when possible and publishes no document. Once a transaction reaches its commit phase, a connection failure can leave its outcome uncertain. The API retains the private file in that case because a delayed commit could still publish its metadata. An immediate empty lookup would not prove that the transaction rolled back. An unreferenced file has no download route. Failed cleanup and interrupted uploads can leave unreferenced files in the private volume; do not delete them until database recovery confirms that no document references them. Errors never log document text. A failed or interrupted upload can have completed, so refresh the history before retrying.
+
+Reverting the migration removes metadata but leaves files in the volume. Restore the database and volume together to recover access. Container restarts preserve the named volume.
+
+Automated HTTP tests cover ownership, admin denial, signed-out requests, pagination, public route isolation, safe filenames, byte-for-byte original downloads, malformed archives, the exact size boundary, and failure cleanup. Filesystem tests cover storage reinitialization, permissions, and symlink isolation. Live PostgreSQL migration execution and container restart verification remain owner-run checks. Capture empty and populated workspaces at desktop and phone widths from a stack running this revision; a different checkout cannot provide valid UI evidence. The original-after-editing check becomes runnable when editing exists.
+
 ### Verify Google sign-in locally
 
 1. Apply the migrations, then open **Sign in** and choose **Continue with Google**.
@@ -101,7 +123,7 @@ pnpm dev
 
 `DB_*` configures PostgreSQL. `REDIS_URL` supplies sessions and cache. `MAIL_*` configures SMTP, with `MAIL_FROM` as the sender. Mailpit uses port 1025 inside Compose and needs no credentials. `SESSION_MAX_AGE` sets the session lifetime in milliseconds. `ADMIN_EMAIL`, `GOOGLE_CLIENT_ID`, `GOOGLE_SECRET`, and `GOOGLE_REDIRECT_URI` configure Google-only sign-in. `FRONTEND_URI` sets the browser origin for redirects and CORS.
 
-`UPLOADS_DIR` holds public profile images. Compose overrides it with `/app/apps/api/uploads` and mounts `uploads_data` there. Do not store student documents there. Private document storage and the background worker are planned in separate issues.
+`UPLOADS_DIR` holds public profile images. Compose overrides it with `/app/apps/api/uploads` and mounts `uploads_data` there. Do not store student documents there. `DOCUMENTS_DIR` holds private originals. It defaults to `private-documents`, relative to the API working directory. Both Compose files override it with `/app/private-documents` and mount the separate `documents_data` volume. The web container does not mount this volume. The API rejects overlapping public and private storage paths, including symlink aliases. The production image prepares the private directory for its `node` user. The background worker is a later issue.
 
 `WEB_PORT` also sets the production SSR listener. `pm_id` is an optional process-manager marker used by the SSR entry point, and is not needed in Docker. `OPENAPI_INPUT` optionally selects an alternate schema for contract generation. `NODE_ENV=production` is set by the production Docker image for runtime dependencies. DeepSeek settings will be added when document processing is implemented.
 
@@ -156,4 +178,4 @@ There is no numeric coverage threshold.
 docker compose -f compose.prod.yml up -d --build
 ```
 
-Apply migrations separately during deployment. Back up PostgreSQL and uploaded files before releases. Compose stores PostgreSQL data, Redis data, and uploads in named volumes. `down` preserves those volumes. `down -v` deletes them.
+Apply migrations separately during deployment. Back up PostgreSQL and uploaded files before releases. Compose stores PostgreSQL data, Redis data, public uploads, and private documents in separate named volumes. Back up `documents_data` together with PostgreSQL. If you move a volume between development and production, give the production `node` user ownership of the private directory and its files before starting the API. `down` preserves those volumes. `down -v` deletes them.

@@ -1,0 +1,414 @@
+import { DataSource } from 'typeorm';
+import { UsersController } from '../users/controllers';
+import { User } from '../users/entities';
+import { Role } from '../roles/entities';
+import { userFixture } from '@api/shared/testing/fixtures';
+import { FindUsersHandler } from '../users/queries/handlers/find-users.handler';
+import { FindUserByEmailHandler } from '../users/queries/handlers/find-user-by-email.handler';
+import { ExportUsersCsvHandler } from '../users/queries/handlers/export-users-csv.handler';
+import { StatsController } from '../stats/controllers';
+import { FindStatsHandler } from '../stats/queries/handlers/find-stats.handler';
+import { INestApplication, Logger, ValidationPipe } from '@nestjs/common';
+import { ExpressAdapter } from '@nestjs/platform-express';
+import { ServeStaticModule } from '@nestjs/serve-static';
+import { CqrsModule } from '@nestjs/cqrs';
+import { Test } from '@nestjs/testing';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mkdtemp, readdir, rm, mkdir, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { AuthGuard, RolesGuard } from '../auth/guards';
+import { ApiResponseInterceptor } from '@api/shared/interceptors';
+import { ApiExceptionFilter } from '@api/shared/filters';
+import { HttpAdapterHost } from '@nestjs/core';
+import { DocumentsController } from './documents.controller';
+import { Document } from './entities/document.entity';
+import { UploadDocumentHandler } from './commands/upload-document.handler';
+import { FindDocumentsHandler } from './queries/find-documents.handler';
+import { DownloadOriginalHandler } from './queries/download-original.handler';
+import { DocumentStorage } from './document-storage';
+import { docxFixture } from '@api/shared/testing/docx-fixture';
+
+describe('Private documents HTTP', () => {
+  let app: INestApplication;
+  let base: string;
+  let root: string;
+  let records: Document[] = [];
+  let databaseFailure = '';
+  let settleCommit: (() => void) | undefined;
+  const repository = {
+    create: (data) => Object.assign(new Document(), { id: randomUUID(), createdAt: new Date() }, data),
+    findOneBy: async (where) => {
+      if (databaseFailure === 'unavailable') throw new Error('Database unavailable');
+      return records.find((record) => Object.entries(where).every(([key, value]) => record[key] === value)) ?? null;
+    },
+    findAndCount: async ({ where, order, skip, take }) => {
+      const matching = records
+        .filter((record) => record.ownerId === where.ownerId)
+        .sort((a, b) => {
+          const direction = order.createdAt === 'DESC' ? -1 : 1;
+          return direction * (a.createdAt.getTime() - b.createdAt.getTime()) || b.id.localeCompare(a.id);
+        });
+      return [matching.slice(skip, skip + take), matching.length];
+    },
+    manager: {
+      transaction: async (work) => {
+        const pending = [...records];
+        const result = await work({
+          getRepository: () => ({
+            save: async (record) => {
+              if (databaseFailure === 'save') throw new Error('Write failed');
+              pending.push(record);
+              return record;
+            }
+          })
+        });
+        if (databaseFailure === 'late-commit') {
+          settleCommit = () => {
+            records = pending;
+          };
+          throw new Error('Connection lost while committing');
+        }
+        if (databaseFailure === 'commit' || databaseFailure === 'unavailable') throw new Error('Commit failed');
+        records = pending;
+        if (databaseFailure === 'acknowledgement') throw new Error('Commit acknowledgement lost');
+        return result;
+      }
+    }
+  };
+
+  beforeAll(async () => {
+    root = await mkdtemp(join(tmpdir(), 'unslop-documents-'));
+    const users = [userFixture({ id: 'owner' })];
+    const userBuilder = {
+      select: () => userBuilder,
+      leftJoinAndSelect: () => userBuilder,
+      innerJoinAndSelect: () => userBuilder,
+      orderBy: () => userBuilder,
+      skip: () => userBuilder,
+      take: () => userBuilder,
+      where: () => userBuilder,
+      getMany: async () => users,
+      getManyAndCount: async () => [users, users.length],
+      getOneOrFail: async () => users[0]
+    };
+    const adapter = new ExpressAdapter();
+    const adapterHost = new HttpAdapterHost();
+    adapterHost.httpAdapter = adapter;
+    const module = await Test.createTestingModule({
+      imports: [
+        CqrsModule.forRoot(),
+        ServeStaticModule.forRoot({ rootPath: join(root, 'public'), serveRoot: '/uploads' })
+      ],
+      controllers: [DocumentsController, UsersController, StatsController],
+      providers: [
+        FindUsersHandler,
+        FindUserByEmailHandler,
+        ExportUsersCsvHandler,
+        FindStatsHandler,
+        AuthGuard,
+        RolesGuard,
+        UploadDocumentHandler,
+        FindDocumentsHandler,
+        DownloadOriginalHandler,
+        {
+          provide: DocumentStorage,
+          useFactory: () => new DocumentStorage(join(root, 'private'), join(root, 'public'))
+        },
+        { provide: getRepositoryToken(Document), useValue: repository },
+        { provide: getRepositoryToken(User), useValue: { createQueryBuilder: () => userBuilder } },
+        {
+          provide: DataSource,
+          useValue: {
+            getRepository: (entity) => {
+              if (entity !== User && entity !== Role) throw new Error('Admin document access is forbidden');
+              return { count: async () => 1 };
+            }
+          }
+        }
+      ]
+    })
+      .overrideProvider(HttpAdapterHost)
+      .useValue(adapterHost)
+      .compile();
+    app = module.createNestApplication(adapter);
+    app.use((req, _res, next) => {
+      const id = req.headers['test-identity'];
+      req.isAuthenticated = () => typeof id === 'string';
+      if (id) req.user = { id, isAdmin: id === 'admin', roles: ['user'] };
+      next();
+    });
+    app.useGlobalPipes(new ValidationPipe({ transform: true }));
+    app.useGlobalGuards(module.get(AuthGuard), module.get(RolesGuard));
+    app.useGlobalInterceptors(new ApiResponseInterceptor());
+    app.useGlobalFilters(new ApiExceptionFilter(app.get(HttpAdapterHost)));
+    await app.listen(0, '127.0.0.1');
+    base = await app.getUrl();
+  });
+  beforeEach(async () => {
+    records = [];
+    databaseFailure = '';
+    await rm(join(root, 'private'), { recursive: true, force: true });
+    await mkdir(join(root, 'private'));
+  });
+  afterAll(async () => {
+    await app?.close();
+    await rm(root, { recursive: true, force: true });
+  });
+
+  async function upload(bytes: Buffer, name = 'essay.docx', identity = 'owner') {
+    const body = new FormData();
+    body.append('file', new Blob([new Uint8Array(bytes)]), name);
+    return fetch(`${base}/documents`, { method: 'POST', headers: identity ? { 'test-identity': identity } : {}, body });
+  }
+  async function list(identity = 'owner', query = '') {
+    return fetch(`${base}/documents${query}`, { headers: identity ? { 'test-identity': identity } : {} });
+  }
+  async function download(id: string, identity = 'owner') {
+    return fetch(`${base}/documents/${id}/original`, { headers: identity ? { 'test-identity': identity } : {} });
+  }
+
+  it('uploads a DOCX, lists its metadata and downloads the exact original privately', async () => {
+    const bytes = await docxFixture();
+    const response = await upload(bytes);
+    expect(response.status).toBe(201);
+    const { data: document } = await response.json();
+    expect(document).toEqual({
+      id: expect.any(String),
+      filename: 'essay.docx',
+      size: bytes.length,
+      createdAt: expect.any(String)
+    });
+    expect(await (await list()).json()).toMatchObject({ data: { items: [document], total: 1, page: 1, pageSize: 20 } });
+    const original = await download(document.id);
+    expect(original.status).toBe(200);
+    expect(Buffer.from(await original.arrayBuffer())).toEqual(bytes);
+    expect(original.headers.get('cache-control')).toBe('private, no-store');
+    expect(original.headers.get('content-disposition')).toContain('attachment;');
+    expect(original.headers.get('content-type')).toBe(
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    );
+    expect(await readdir(join(root, 'public'))).toEqual([]);
+  });
+  it('rejects content that is not a DOCX without storing anything', async () => {
+    const before = await readdir(join(root, 'private'));
+    for (const bytes of [
+      Buffer.from('not a DOCX'),
+      await docxFixture({ 'word/document.xml': null }),
+      await docxFixture({ 'word/document.xml': '<wrong/>' })
+    ]) {
+      const response = await upload(bytes, 'disguise.docx');
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({ message: expect.stringContaining('DOCX') });
+    }
+    expect(await (await list()).json()).toMatchObject({ data: { items: [], total: 0 } });
+    expect(await readdir(join(root, 'private'))).toEqual(before);
+  });
+
+  it('accepts exactly 10 MB and rejects one byte over without storage', async () => {
+    const accepted = await upload(await docxFixture({}, 10000000));
+    expect(accepted.status).toBe(201);
+    expect(await accepted.json()).toMatchObject({ data: { size: 10000000 } });
+    const before = await readdir(join(root, 'private'));
+    const rejected = await upload(await docxFixture({}, 10000001));
+    expect(rejected.status).toBe(413);
+    expect(await rejected.json()).toMatchObject({ message: expect.stringContaining('10 MB') });
+    expect(await readdir(join(root, 'private'))).toEqual(before);
+    expect(await (await list()).json()).toMatchObject({ data: { total: 1 } });
+  });
+
+  it('returns the same 404 for another user, the admin, an unknown ID and an invalid ID', async () => {
+    const { data } = await (await upload(await docxFixture())).json();
+    const missing = await download(randomUUID());
+    const missingBody = await missing.json();
+    expect(missing.status).toBe(404);
+    for (const identity of ['other', 'admin']) {
+      expect(await (await list(identity)).json()).toMatchObject({ data: { items: [], total: 0 } });
+      const denied = await download(data.id, identity);
+      expect(denied.status).toBe(404);
+      expect(await denied.json()).toEqual(missingBody);
+    }
+    expect((await download('invalid')).status).toBe(404);
+  });
+
+  it('returns 401 for every signed-out document endpoint and stores nothing', async () => {
+    expect((await upload(await docxFixture(), 'essay.docx', '')).status).toBe(401);
+    expect((await list('')).status).toBe(401);
+    expect((await download(randomUUID(), '')).status).toBe(401);
+    expect(await readdir(join(root, 'private'))).toEqual([]);
+  });
+
+  it('paginates newest first and does not let a query parameter select another owner', async () => {
+    for (let i = 1; i <= 3; i++) {
+      await upload(await docxFixture(), `essay-${i}.docx`);
+      records.at(-1).createdAt = new Date(`2026-01-0${i}T00:00:00Z`);
+    }
+    await upload(await docxFixture(), 'someone-else.docx', 'other');
+    const first = await (await list('owner', '?pageSize=2&ownerId=other')).json();
+    expect(first.data.items.map((item) => item.filename)).toEqual(['essay-3.docx', 'essay-2.docx']);
+    expect(first.data).toMatchObject({ total: 3, page: 1, pageSize: 2 });
+    const second = await (await list('owner', '?page=2&pageSize=2')).json();
+    expect(second.data.items.map((item) => item.filename)).toEqual(['essay-1.docx']);
+    for (const query of ['?page=0', '?pageSize=51', '?page=1.5', '?page=letters'])
+      expect((await list('owner', query)).status).toBe(400);
+  });
+
+  it('uses generated disk names and safe names for metadata and downloads', async () => {
+    const { data } = await (await upload(await docxFixture(), 'résumé";bad.exe')).json();
+    expect(data.filename).toBe('résumé_bad.docx');
+    const original = await download(data.id);
+    expect(original.headers.get('content-disposition')).toContain("filename*=UTF-8''r%C3%A9sum%C3%A9_bad.docx");
+    const files = await readdir(join(root, 'private'));
+    expect(files).toHaveLength(1);
+    expect(files[0]).toMatch(/^[0-9a-f-]{36}\.docx$/);
+    expect(files[0]).not.toBe(data.filename);
+  });
+
+  it('removes private bytes when the database insert fails before committing', async () => {
+    databaseFailure = 'save';
+    expect((await upload(await docxFixture())).status).toBe(503);
+    expect(await (await list()).json()).toMatchObject({ data: { total: 0 } });
+    expect(await readdir(join(root, 'private'))).toEqual([]);
+  });
+
+  it('keeps a committed original intact if the commit acknowledgement is lost', async () => {
+    databaseFailure = 'acknowledgement';
+    const bytes = await docxFixture();
+    expect((await upload(bytes)).status).toBe(503);
+    databaseFailure = '';
+    const { data } = await (await list()).json();
+    expect(data.total).toBe(1);
+    expect(Buffer.from(await (await download(data.items[0].id)).arrayBuffer())).toEqual(bytes);
+  });
+
+  it.each(['commit', 'unavailable'])('leaves uncertain files inaccessible after a %s failure', async (failure) => {
+    databaseFailure = failure;
+    expect((await upload(await docxFixture())).status).toBe(503);
+    databaseFailure = '';
+    expect(await (await list()).json()).toMatchObject({ data: { total: 0 } });
+    const [key] = await readdir(join(root, 'private'));
+    expect((await download(key)).status).toBe(404);
+    expect((await fetch(`${base}/uploads/${key}`)).status).toBe(404);
+  });
+
+  it('does not publish a record if the filesystem write fails', async () => {
+    await rm(join(root, 'private'), { recursive: true });
+    await writeFile(join(root, 'private'), 'unavailable directory');
+    expect((await upload(await docxFixture())).status).toBe(503);
+    expect(await (await list()).json()).toMatchObject({ data: { total: 0 } });
+  });
+
+  it('rejects unsafe or corrupt DOCX packages before persistence', async () => {
+    const valid = await docxFixture();
+    const corrupt = Buffer.from(valid);
+    corrupt[corrupt.indexOf('Private student text.')] = 88;
+    const traversal = Buffer.from(
+      valid.toString('binary').replaceAll('word/document.xml', '../x/document.xml'),
+      'binary'
+    );
+    const fixtures = [
+      corrupt,
+      traversal,
+      valid.subarray(0, valid.length - 12),
+      await docxFixture({
+        'word/document.xml': '<!DOCTYPE doc [<!ENTITY secret SYSTEM "file:///etc/passwd">]><doc>&secret;</doc>'
+      }),
+      await docxFixture({
+        'word/document.xml':
+          '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body></w:document>'
+      }),
+      await docxFixture({
+        '_rels/.rels':
+          '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="https://example.com/secret" TargetMode="External"/></Relationships>'
+      }),
+      await docxFixture({
+        '[Content_Types].xml':
+          '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Override PartName="/word/document.xml" ContentType="application/vnd.ms-word.document.macroEnabled.main+xml"/></Types>'
+      })
+    ];
+    for (const bytes of fixtures) expect((await upload(bytes)).status).toBe(400);
+    expect(vi.mocked(Logger.prototype.error)).not.toHaveBeenCalled();
+    expect(await readdir(join(root, 'private'))).toEqual([]);
+    expect(await (await list()).json()).toMatchObject({ data: { total: 0 } });
+  });
+
+  it('serves public uploads without exposing private originals by any storage path', async () => {
+    const { data } = await (await upload(await docxFixture())).json();
+    const [key] = await readdir(join(root, 'private'));
+    await writeFile(join(root, 'public', 'profile.txt'), 'public avatar placeholder');
+    expect((await fetch(`${base}/uploads/profile.txt`)).status).toBe(200);
+    for (const path of [
+      `/uploads/${key}`,
+      `/uploads/${data.id}`,
+      `/private-documents/${key}`,
+      `/documents/${key}`,
+      `/uploads/%2e%2e%2fprivate%2f${key}`
+    ]) {
+      expect((await fetch(`${base}${path}`)).status).toBe(404);
+    }
+  });
+
+  it('does not expose document filenames or contents through admin users, statistics or CSV', async () => {
+    const paths = ['/users', '/users/alice@example.com', '/users/export/csv', '/stats'];
+    const responses = async () =>
+      Promise.all(
+        paths.map(async (path) => {
+          const response = await fetch(`${base}${path}`, { headers: { 'test-identity': 'admin' } });
+          expect(response.status).toBe(200);
+          return response.text();
+        })
+      );
+    const before = await responses();
+    await upload(await docxFixture(), 'confidential-thesis.docx');
+    const after = await responses();
+    expect(after).toEqual(before);
+    expect(after.join('')).not.toContain('confidential-thesis');
+    expect(after.join('')).not.toContain('Private student text.');
+  });
+
+  it('rejects compressed expansion and excessive XML nesting before storage', async () => {
+    const huge = await docxFixture({ 'word/huge.bin': Buffer.alloc(20000001) }, undefined, true);
+    expect(huge.length).toBeLessThan(10000000);
+    const nested = await docxFixture({ 'word/document.xml': '<x>'.repeat(129) + '</x>'.repeat(129) });
+    for (const bytes of [huge, nested]) expect((await upload(bytes)).status).toBe(400);
+    expect(await readdir(join(root, 'private'))).toEqual([]);
+  });
+
+  it('accepts compressed DOCX content regardless of the supplied extension or MIME type', async () => {
+    const bytes = await docxFixture({}, undefined, true);
+    const response = await upload(bytes, 'renamed.zip');
+    expect(response.status).toBe(201);
+    const { data } = await response.json();
+    expect(data.filename).toBe('renamed.docx');
+    expect(Buffer.from(await (await download(data.id)).arrayBuffer())).toEqual(bytes);
+  });
+
+  it('rejects missing files, extra multipart fields and multiple files without persistence', async () => {
+    for (const kind of ['missing', 'field', 'multiple']) {
+      const body = new FormData();
+      if (kind !== 'missing') body.append('file', new Blob([new Uint8Array(await docxFixture())]), 'one.docx');
+      if (kind === 'field') body.append('ownerId', 'another-owner');
+      if (kind === 'multiple') body.append('file', new Blob([new Uint8Array(await docxFixture())]), 'two.docx');
+      const response = await fetch(`${base}/documents`, {
+        method: 'POST',
+        headers: { 'test-identity': 'owner' },
+        body
+      });
+      expect(response.status).toBe(400);
+    }
+    expect(await readdir(join(root, 'private'))).toEqual([]);
+  });
+  it('retains original bytes when a lost commit connection settles after an empty lookup', async () => {
+    databaseFailure = 'late-commit';
+    const bytes = await docxFixture();
+    expect((await upload(bytes)).status).toBe(503);
+    expect(await (await list()).json()).toMatchObject({ data: { total: 0 } });
+    settleCommit();
+    databaseFailure = '';
+    const { data } = await (await list()).json();
+    expect(data.total).toBe(1);
+    expect(Buffer.from(await (await download(data.items[0].id)).arrayBuffer())).toEqual(bytes);
+  });
+});

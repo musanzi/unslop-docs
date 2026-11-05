@@ -10,6 +10,7 @@ coverage/
 **/.env.*
 !**/.env.example
 **/uploads/
+**/private-documents/
 *.log
 .DS_Store
 .idea/
