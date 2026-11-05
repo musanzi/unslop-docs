@@ -12,7 +12,7 @@ Checked on 2026-11-05 with the development API, worker, PostgreSQL, and private 
 | Private downloads      | Owner received both files; other users and admin received 404; signed-out requests received 401    |
 | Failure publication    | Altered citations and late responses failed without a revised file in isolated PostgreSQL tests    |
 | LibreOffice            | Version 26.8.2.2 opened and rendered the corrected original and revised English and French samples |
-| Microsoft Word         | Pending owner verification                                                                         |
+| Microsoft Word         | Owner confirmed the English and French real-worker revisions open correctly                        |
 
 `english-original.docx` and `french-original.docx` are synthetic inputs. The corresponding `*-revised.docx` files use the deterministic faithful test provider. The `*-real-revised.docx` files came from the running worker and real DeepSeek requests. The `*-libreoffice.pdf` files render those real-worker outputs.
 
