@@ -7,6 +7,13 @@ export const NAVIGATION: INavigationItem[] = [
     description: 'Manage your personal information',
     children: [
       {
+        id: 'documents',
+        label: 'Documents',
+        icon: 'files',
+        route: '/user/documents',
+        activeOptions: { exact: true }
+      },
+      {
         id: 'profile',
         label: 'My profile',
         icon: 'user-round',

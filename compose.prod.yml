@@ -8,10 +8,12 @@ services:
     env_file: ./.env
     environment:
       UPLOADS_DIR: /app/apps/api/uploads
+      DOCUMENTS_DIR: /app/private-documents
     ports:
       - ${API_PORT:-8000}:${API_PORT}
     volumes:
       - uploads_data:/app/apps/api/uploads
+      - documents_data:/app/private-documents
     depends_on:
       db:
         condition: service_healthy
@@ -54,3 +56,4 @@ volumes:
   postgres_data:
   redis_data:
   uploads_data:
+  documents_data:

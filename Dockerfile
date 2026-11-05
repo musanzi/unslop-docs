@@ -29,12 +29,12 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --prod --frozen-lockfile --ignore-scripts
 
 FROM node:24-alpine AS api-production
-ENV NODE_ENV=production UPLOADS_DIR=/app/apps/api/uploads
+ENV NODE_ENV=production UPLOADS_DIR=/app/apps/api/uploads DOCUMENTS_DIR=/app/private-documents
 WORKDIR /app
 COPY --from=production-dependencies /app/node_modules /app/node_modules
 COPY --from=production-dependencies /app/package.json /app/package.json
 COPY --from=api-build /app/dist/apps/api /app/dist/apps/api
-RUN mkdir -p "$UPLOADS_DIR" && chown -R node:node "$UPLOADS_DIR"
+RUN mkdir -p "$UPLOADS_DIR" "$DOCUMENTS_DIR" && chown -R node:node "$UPLOADS_DIR" "$DOCUMENTS_DIR" && chmod 700 "$DOCUMENTS_DIR"
 USER node
 CMD ["node", "dist/apps/api/src/main.js"]
 

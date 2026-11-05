@@ -8,6 +8,6 @@ export class GoogleRedirectHandler implements IQueryHandler<GoogleRedirect, void
 
   async execute(query: GoogleRedirect): Promise<void> {
     const frontendUri = this.configService.get<string>('FRONTEND_URI');
-    query.response.redirect(frontendUri);
+    query.response.redirect(`${frontendUri.replace(/\/$/, '')}/user/documents`);
   }
 }
