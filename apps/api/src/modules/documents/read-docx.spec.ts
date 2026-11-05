@@ -145,6 +145,39 @@ describe('DOCX reader', () => {
     await expect(readDocx(await readerFixture(`<w:p>${content}</w:p>`))).rejects.toThrow(reason);
   });
 
+  it('counts words inside content controls toward the limit', async () => {
+    const bytes = await readerFixture(control(textParagraph('word '.repeat(5001)), 'Body') + textParagraph('word '.repeat(5000)));
+    await expect(readDocx(bytes)).rejects.toThrow('10,001 words. The limit is 10,000');
+  });
+
+  it('keeps controls and revisions inside headers and notes byte for byte', async () => {
+    const header = `<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p>${control('<w:r><w:t>Header control</w:t></w:r>')}</w:p></w:hdr>`;
+    const footnotes = `<w:footnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:footnote w:id="1"><w:p><w:ins w:id="1"><w:r><w:t>Inserted note</w:t></w:r></w:ins></w:p></w:footnote></w:footnotes>`;
+    const result = await readDocx(
+      await readerFixture(paragraph('Essay'), { 'word/header1.xml': header, 'word/footnotes.xml': footnotes })
+    );
+    expect(result.text).toBe('Essay');
+    expect(result.readPart('word/header1.xml').toString()).toBe(header);
+    expect(result.readPart('word/footnotes.xml').toString()).toBe(footnotes);
+  });
+
+  it('preserves text boxes unedited and counts their visible words', async () => {
+    const result = await readDocx(
+      await readerFixture(
+        '<w:p><w:r><w:t xml:space="preserve">Before </w:t></w:r><w:r><w:pict><v:shape xmlns:v="urn:schemas-microsoft-com:vml" id="box"><v:textbox><w:txbxContent>' +
+          paragraph('Boxed text') +
+          '</w:txbxContent></v:textbox></v:shape></w:pict></w:r></w:p>'
+      )
+    );
+    expect(result.blocks[0]).toMatchObject({
+      inlines: [
+        { kind: 'run', text: 'Before ' },
+        { kind: 'protected', reason: 'text-box', text: 'Boxed text' }
+      ]
+    });
+    expect(result.wordCount).toBe(3);
+  });
+
   it('reads the final version of tracked changes without duplicating moved text', async () => {
     const revision = 'w:id="1" w:author="Tutor" w:date="2026-01-01T00:00:00Z"';
     const result = await readDocx(

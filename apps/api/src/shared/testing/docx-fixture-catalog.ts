@@ -35,7 +35,6 @@ export const docxFixtureCases: readonly { name: string; rejection?: string; crea
   },
   {
     name: 'text-box',
-    rejection: 'text boxes',
     create: () =>
       readerFixture(
         '<w:p><w:r><w:pict><v:shape xmlns:v="urn:schemas-microsoft-com:vml" id="box" style="width:100pt;height:50pt"><v:textbox><w:txbxContent>' +

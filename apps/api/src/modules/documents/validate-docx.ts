@@ -43,7 +43,6 @@ function inspectXml(bytes: Buffer, budget: { nodes: number }) {
   parser.on('opentag', (tag) => {
     if (wordNamespaces.has(tag.uri)) {
       const unsupported: Record<string, string> = {
-        txbxContent: 'text boxes',
         object: 'embedded objects',
         altChunk: 'imported content',
         subDoc: 'subdocuments'
@@ -53,12 +52,9 @@ function inspectXml(bytes: Buffer, budget: { nodes: number }) {
           `This DOCX contains unsupported ${unsupported[tag.local]}. Convert them to ordinary paragraphs or images, then upload again.`
         );
     }
-    if (
-      (tag.uri === 'urn:schemas-microsoft-com:vml' && tag.local === 'textbox') ||
-      (tag.uri === 'urn:schemas-microsoft-com:office:office' && tag.local === 'OLEObject')
-    )
+    if (tag.uri === 'urn:schemas-microsoft-com:office:office' && tag.local === 'OLEObject')
       throw new BadRequestException(
-        'This DOCX contains unsupported text boxes or embedded objects. Convert them to ordinary paragraphs or images, then upload again.'
+        'This DOCX contains unsupported embedded objects. Convert them to ordinary paragraphs or images, then upload again.'
       );
     if (
       tag.uri === relationshipsNamespace &&

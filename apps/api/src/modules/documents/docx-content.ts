@@ -82,6 +82,8 @@ export function documentModel(mainPart: string, trees: Map<string, XmlNode>) {
   };
   const enabled = (node: XmlNode | undefined) => !!node && !['0', 'false', 'off'].includes(attr(node, 'val'));
   let fieldDepth = 0;
+  const containsTextBox = (node: XmlNode): boolean =>
+    isWord(node, 'txbxContent') || node.children.some(containsTextBox);
   const protectedReason = (node: XmlNode): string | undefined => {
     if (node.uri.endsWith('/math')) return 'equation';
     if (isWord(node)) {
@@ -93,6 +95,7 @@ export function documentModel(mainPart: string, trees: Map<string, XmlNode>) {
         endnoteReference: 'endnote',
         commentReference: 'comment'
       };
+      if (reasons[node.local] === 'image' && containsTextBox(node)) return 'text-box';
       if (reasons[node.local]) return reasons[node.local];
     }
     return node.children.map(protectedReason).find(Boolean);
