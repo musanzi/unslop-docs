@@ -46,7 +46,6 @@ export const docxFixtureCases: readonly { name: string; rejection?: string; crea
   },
   {
     name: 'content-control',
-    rejection: 'content controls',
     create: () =>
       readerFixture(
         '<w:sdt><w:sdtPr><w:alias w:val="Student name"/><w:tag w:val="student"/></w:sdtPr><w:sdtContent>' +

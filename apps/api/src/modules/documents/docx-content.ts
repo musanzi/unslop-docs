@@ -20,6 +20,7 @@ export interface XmlNode {
   text: string;
   start: number;
   contentStart: number;
+  contentEnd: number;
   end: number;
 }
 

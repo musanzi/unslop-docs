@@ -5,7 +5,7 @@ import { docxFixtureCases } from '@api/shared/testing/docx-fixture-catalog';
 import { describe, expect, it } from 'vitest';
 import { docxFixture } from '@api/shared/testing/docx-fixture';
 import { languageSamples } from '@api/shared/testing/docx-language-fixtures';
-import { readerFixture } from '@api/shared/testing/docx-reader-fixture';
+import { readerFixture, textParagraph } from '@api/shared/testing/docx-reader-fixture';
 import { readDocx } from './validate-docx';
 
 const documentXml = (body: string) =>
@@ -100,12 +100,45 @@ describe('DOCX reader', () => {
     );
   });
 
+  const control = (content: string, alias = 'Field') =>
+    `<w:sdt><w:sdtPr><w:alias w:val="${alias}"/><w:tag w:val="${alias}"/><w:text/></w:sdtPr><w:sdtContent>${content}</w:sdtContent><w:sdtEndPr/></w:sdt>`;
+
+  it('normalizes inline, block, table and nested content controls into visible text', async () => {
+    const result = await readDocx(
+      await readerFixture(
+        `<w:p><w:r><w:t xml:space="preserve">Name: </w:t></w:r>${control('<w:r><w:rPr><w:b/></w:rPr><w:t>Student</w:t></w:r>')}</w:p>` +
+          control(`<w:p><w:pPr><w:pStyle w:val="ResearchTitle"/></w:pPr><w:r><w:t>Findings</w:t></w:r></w:p>${textParagraph('Outer paragraph.')}`, 'Section') +
+          control(`<w:p><w:r><w:t>Nested </w:t></w:r>${control('<w:r><w:t>control</w:t></w:r>', 'Inner')}</w:p>`, 'Outer') +
+          `<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w="2400"/><w:gridCol w:w="2400"/></w:tblGrid>${control(
+            `<w:tr>${control(`<w:tc><w:tcPr/>${textParagraph('Cell control')}</w:tc>`, 'Cell')}<w:tc>${textParagraph('Plain cell')}</w:tc></w:tr>`,
+            'Row'
+          )}</w:tbl>`
+      )
+    );
+    expect(result.blocks).toMatchObject([
+      {
+        kind: 'paragraph',
+        text: 'Name: Student',
+        inlines: [
+          { kind: 'run', text: 'Name: ', bold: false },
+          { kind: 'run', text: 'Student', bold: true }
+        ]
+      },
+      { kind: 'heading', level: 1, text: 'Findings' },
+      { kind: 'paragraph', text: 'Outer paragraph.' },
+      { kind: 'paragraph', text: 'Nested control' },
+      { kind: 'table', rows: [{ cells: [{ blocks: [{ text: 'Cell control' }] }, { blocks: [{ text: 'Plain cell' }] }] }] }
+    ]);
+    expect(result.text).toBe('Name: Student\nFindings\nOuter paragraph.\nNested control\nCell control\nPlain cell');
+    expect(result.wordCount).toBe(11);
+    expect(result.readXmlPart(result.mainPart)).not.toContain('sdt');
+    const heading = result.blocks[1];
+    expect(result.readXmlPart(result.mainPart).slice(heading.source.start, heading.source.end)).toBe(
+      '<w:p><w:pPr><w:pStyle w:val="ResearchTitle"/></w:pPr><w:r><w:t>Findings</w:t></w:r></w:p>'
+    );
+  });
+
   it.each([
-    ['<w:ins w:id="1"><w:r><w:t>Inserted text</w:t></w:r></w:ins>', 'accept or reject'],
-    ['<w:pPr><w:pPrChange w:id="1"><w:pPr/></w:pPrChange></w:pPr>', 'accept or reject'],
-    ['<w:moveFrom w:id="1"><w:r><w:t>Moved text</w:t></w:r></w:moveFrom>', 'accept or reject'],
-    ['<w:r><w:pict><w:txbxContent><w:p/></w:txbxContent></w:pict></w:r>', 'text boxes'],
-    ['<w:sdt><w:sdtContent><w:r><w:t>Controlled text</w:t></w:r></w:sdtContent></w:sdt>', 'content controls'],
     ['<w:r><w:object/></w:r>', 'embedded objects'],
     ['<w:altChunk r:id="html"/>', 'imported content']
   ])('rejects unsupported content %s with instructions', async (content, reason) => {

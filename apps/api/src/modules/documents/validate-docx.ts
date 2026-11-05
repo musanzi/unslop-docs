@@ -4,6 +4,7 @@ import { fromBufferPromise } from 'yauzl';
 import { SaxesParser } from 'saxes';
 import { createHash } from 'node:crypto';
 import { documentModel, freezeModel, XmlNode } from './docx-content';
+import { finalVersion } from './docx-final-version';
 import { documentLanguage } from './docx-language';
 import { DocxDocument } from './docx-model';
 
@@ -69,7 +70,6 @@ function inspectXml(bytes: Buffer, budget: { nodes: number }) {
         );
       const unsupported: Record<string, string> = {
         txbxContent: 'text boxes',
-        sdt: 'content controls',
         object: 'embedded objects',
         altChunk: 'imported content',
         subDoc: 'subdocuments'
@@ -103,6 +103,7 @@ function inspectXml(bytes: Buffer, budget: { nodes: number }) {
       text: '',
       start,
       contentStart: parser.position,
+      contentEnd: 0,
       end: 0
     };
     if (tags.length) tags.at(-1).children.push(node);
@@ -135,9 +136,10 @@ function inspectXml(bytes: Buffer, budget: { nodes: number }) {
   };
   parser.on('text', collectText);
   parser.on('cdata', collectText);
-  parser.on('closetag', () => {
+  parser.on('closetag', (closing) => {
     const tag = tags.pop();
     tag.end = parser.position;
+    tag.contentEnd = closing.isSelfClosing ? tag.contentStart : source.lastIndexOf('</', parser.position - 1);
     depth--;
   });
   parser.write(source).close();
@@ -220,6 +222,11 @@ export async function readDocx(bytes: Buffer): Promise<DocxDocument> {
         !main.body
       )
         throw new Error('Missing DOCX content');
+      const normalized = finalVersion(main.source, main.tree);
+      if (normalized !== undefined) {
+        parts.set(target, Buffer.from(normalized));
+        xml.set(target, inspectXml(parts.get(target), { nodes: 0 }));
+      }
       const model = documentModel(target, new Map([...xml].map(([name, value]) => [name, value.tree])));
       let wordCount = 0;
       for (const segment of new Intl.Segmenter('en', { granularity: 'word' }).segment(model.text))
