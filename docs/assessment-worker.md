@@ -76,6 +76,12 @@ Queueing clears the previous failure, processing stage, claim token, lease, atte
 
 The retry API makes no provider call. A rewrite retry returns HTTP 409 when the allowance is exhausted and leaves the failed document, its assessment, and its strength unchanged. Rollback removes the new reservation if queueing fails. A completed document whose final score is unavailable is not retried: its revision is published and charged, and no separate assessment action exists.
 
+## Deletion
+
+`DELETE /documents/:id` locks the owner-matched row, refuses `queued` and `processing` documents in either phase with HTTP 409 until issue #12 lands, removes the original and any revised DOCX from private storage, and then deletes the row. The row carries the preview, both assessments, revision notices, and request checkpoints, so nothing of the document outlives it. Files go before the row: a removal failure returns HTTP 503 and leaves the record pointing at the remaining file, so the owner can repeat the deletion, and a file is never left without a record. Storage removal is idempotent, so a repeat after a lost database acknowledgement finishes the job.
+
+Usage records stay unchanged. A completed document keeps its charged reservation, and an assessed preview or failed document has none to release. The `release_document_reservation` trigger would release an active reservation, but no deletable state holds one. Another user and the admin receive the same HTTP 404 as a document that never existed, and so does a repeated delete once the document is gone; the web client treats that 404 as already deleted.
+
 ## Migration
 
 Migration `1793880900000-AssessThenUnslopify` adds `phase`, `strength`, `finalAssessment`, `preview`, `editingCompleted`, and `editingTotal`, and rewrites the check constraints so a failed or queued rewrite keeps its assessment and a processing rewrite may hold a saved revision. Completed documents receive the `rewrite` phase and stay downloadable; their assessments keep the old shape and report a null score. Legacy `assessed` documents keep their status and can be rewritten, with a null score and no preview. Documents that were queued or processing under the old automatic flow are queued again for the initial assessment, their attempt state is reset, and their old reservations are released so nothing is stranded or charged. Stop workers before migrating in either direction. Rollback fails active attempts as interrupted, releases their reservations, clears assessments from failed rows, and drops the new columns.
