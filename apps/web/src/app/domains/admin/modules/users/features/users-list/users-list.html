@@ -1,168 +1,95 @@
-<section class="flex flex-col px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
-  <div class="mb-6 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+<section>
+  <header class="mb-8 flex flex-wrap items-end justify-between gap-5">
     <div>
-      <h1 class="text-2xl font-semibold tracking-tight">Users</h1>
-      <p class="mt-1 text-sm text-on-surface-variant">Users registered on the platform.</p>
+      <h1 class="text-[1.75rem] font-medium tracking-tight">Users</h1>
+      <p class="mt-2 text-[0.9375rem] text-muted">Account details, status, and change history.</p>
     </div>
-
-    <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-      <label class="sr-only" for="user-search">Search users</label>
-      <div class="relative w-full sm:w-72">
-        <mat-icon
-          class="pointer-events-none absolute top-1/2 left-3 z-10 size-5 -translate-y-1/2 text-on-surface-variant"
-          svgIcon="search" />
-        <input
-          class="h-10 w-full rounded-lg border border-outline bg-transparent pr-3 pl-10 text-sm text-on-surface outline-none placeholder:text-on-surface-variant focus:border-primary"
-          id="user-search"
-          type="search"
-          placeholder="Name or email address"
-          [(ngModel)]="data.query" />
-      </div>
-
-      <button matButton="outlined" type="button" [disabled]="store.isExporting()" (click)="store.exportUsers()">
-        <mat-icon svgIcon="download" />
-        {{ store.isExporting() ? 'Exporting...' : 'Export CSV' }}
-      </button>
-    </div>
+    <button class="ui-button ui-secondary" type="button" [disabled]="store.isExporting()" (click)="store.exportUsers()">
+      <mat-icon svgIcon="download" />{{ store.isExporting() ? 'Exporting...' : 'Export CSV' }}
+    </button>
+  </header>
+  <div class="mb-6 max-w-md">
+    <label class="mb-2 block text-[0.875rem] text-muted" for="user-search">Search users</label
+    ><input
+      class="ui-field"
+      id="user-search"
+      type="search"
+      placeholder="Name or email address"
+      [(ngModel)]="data.query" />
   </div>
-
   @if (data.error()) {
-    <div
-      class="mb-4 flex items-center justify-between gap-4 rounded-lg bg-error-container p-4 text-on-error-container"
-      role="alert">
-      <span class="whitespace-pre-line">{{ data.error() }}</span>
-      <button matButton type="button" (click)="data.reload()">Try again</button>
+    <div class="ui-alert mb-5" role="alert">
+      <p>{{ data.error() }}</p>
+      <button class="ui-button ui-secondary mt-3" type="button" (click)="data.reload()">Try again</button>
     </div>
   }
-
-  @if (store.error(); as error) {
-    <message class="mb-4" [message]="error" (dismissed)="store.clearError()" />
+  @if (store.error()) {
+    <p class="ui-alert mb-5" role="alert">{{ store.error() }}</p>
   }
-
   @if (data.list.isLoading()) {
-    <div class="flex min-h-64 items-center justify-center" aria-label="Loading users">
-      <span class="text-sm text-on-surface-variant">Loading...</span>
-    </div>
-  } @else {
-    <div class="flex flex-col overflow-hidden rounded-xl border border-outline-variant">
-      <div class="relative isolate overflow-x-auto">
-        <table class="w-full whitespace-nowrap" mat-table [dataSource]="data.users()">
-          <ng-container matColumnDef="name">
-            <th mat-header-cell *matHeaderCellDef>Name</th>
-            <td class="font-medium" mat-cell *matCellDef="let user">{{ user.name }}</td>
-          </ng-container>
-
-          <ng-container matColumnDef="email">
-            <th mat-header-cell *matHeaderCellDef>E-mail</th>
-            <td mat-cell *matCellDef="let user">
-              <a class="text-primary hover:underline" [href]="'mailto:' + user.email">{{ user.email }}</a>
-            </td>
-          </ng-container>
-
-          <ng-container matColumnDef="status">
-            <th mat-header-cell *matHeaderCellDef>Status</th>
-            <td mat-cell *matCellDef="let user">{{ user.status }}</td>
-          </ng-container>
-
-          <ng-container matColumnDef="actions">
-            <th mat-header-cell *matHeaderCellDef>Manage</th>
-            <td mat-cell *matCellDef="let user">
-              <button
-                matButton
-                type="button"
-                [disabled]="store.isUpdating()"
-                [attr.aria-label]="'Manage status for ' + user.email"
-                (click)="store.selectUser(user)">
-                Status and history
-              </button>
-            </td>
-          </ng-container>
-
-          <ng-container matColumnDef="createdAt">
-            <th mat-header-cell *matHeaderCellDef>Registered</th>
-            <td mat-cell *matCellDef="let user">{{ user.createdAt | date: 'dd/MM/yyyy' }}</td>
-          </ng-container>
-
-          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-          <tr
-            class="group relative hover:bg-on-surface-variant/4"
-            mat-row
-            *matRowDef="let row; columns: displayedColumns"></tr>
-
-          <tr class="h-32" *matNoDataRow>
-            <td class="text-center text-sm text-on-surface-variant" [attr.colspan]="displayedColumns.length">
-              No users found.
-            </td>
+    <p class="py-16 text-muted" role="status">Loading users...</p>
+  } @else if (!data.error()) {
+    <div class="overflow-x-auto rounded-xl border border-divider">
+      <table class="ui-table">
+        <caption class="sr-only">
+          Registered users
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Name</th>
+            <th scope="col">Email</th>
+            <th scope="col">Status</th>
+            <th scope="col">Registered</th>
+            <th scope="col"><span class="sr-only">Actions</span></th>
           </tr>
-        </table>
-      </div>
-
-      @if (data.hasPagination()) {
-        <mat-paginator
-          aria-label="Select a page of users"
-          [length]="data.usersCount()"
-          [pageIndex]="data.page() - 1"
-          [pageSize]="data.pageSize()"
-          [hidePageSize]="true"
-          (page)="onPageChange($event)" />
-      }
-    </div>
-  }
-  @if (data.selectedUser(); as user) {
-    <section class="mt-6 rounded-xl border border-outline-variant p-4 sm:p-6" aria-labelledby="status-heading">
-      <div class="flex items-start justify-between gap-4">
-        <div>
-          <h2 class="text-lg font-semibold" id="status-heading">Status for {{ user.name }}</h2>
-          <p class="text-sm text-on-surface-variant">{{ user.email }}</p>
-        </div>
-        <button matButton type="button" [disabled]="store.isUpdating()" (click)="data.selectedUser.set(null)">
-          Close
-        </button>
-      </div>
-      <form class="my-5 flex flex-wrap items-end gap-3" (submit)="saveStatus(); $event.preventDefault()">
-        <div class="flex flex-col gap-1">
-          <label class="text-sm font-medium" for="user-status">Status</label>
-          <select
-            class="rounded-lg border border-outline bg-surface p-2 text-on-surface"
-            id="user-status"
-            [formField]="statusForm.status">
-            <option value="FREE">FREE</option>
-            <option value="PREMIUM">PREMIUM</option>
-            <option value="GOLD">GOLD</option>
-          </select>
-        </div>
-        <button
-          matButton="filled"
-          type="submit"
-          [disabled]="store.isUpdating() || statusModel().status === user.status">
-          {{ store.isUpdating() ? 'Saving...' : 'Save status' }}
-        </button>
-      </form>
-      <p class="text-sm text-on-surface-variant" role="status">{{ store.statusMessage() }}</p>
-      <h3 class="mt-5 font-semibold">Status history</h3>
-      <p class="mt-1 text-sm text-on-surface-variant">Newest changes first. Dates are shown in your local time.</p>
-      @if (data.historyError(); as error) {
-        <div class="mt-3 rounded-lg bg-error-container p-3 text-on-error-container" role="alert">
-          {{ error }}
-          <button matButton type="button" (click)="data.history.reload()">Try again</button>
-        </div>
-      } @else if (data.history.isLoading()) {
-        <p class="mt-3 text-sm" role="status">Loading status history...</p>
-      } @else if (data.history.hasValue()) {
-        <ol class="mt-3 divide-y divide-outline-variant">
-          @for (change of data.history.value(); track change.id) {
-            <li class="py-3">
-              <p class="font-medium">{{ change.previousStatus }} → {{ change.newStatus }}</p>
-              <p class="mt-1 text-sm text-on-surface-variant">{{ change.adminEmail }}</p>
-              <time class="text-sm text-on-surface-variant" [attr.datetime]="change.createdAt">
-                {{ change.createdAt | date: 'medium' }}
-              </time>
-            </li>
+        </thead>
+        <tbody>
+          @for (user of data.users(); track user.id) {
+            <tr>
+              <td class="min-w-40 font-medium">
+                <a class="rounded underline-offset-4 hover:underline" [routerLink]="['/admin/users', user.id]">{{
+                  user.name
+                }}</a>
+              </td>
+              <td class="text-muted">{{ user.email }}</td>
+              <td>
+                <span class="ui-badge">{{ user.status }}</span>
+              </td>
+              <td class="whitespace-nowrap text-muted">{{ user.createdAt | date: 'MMM d, y' }}</td>
+              <td>
+                <a
+                  class="ui-button ui-ghost"
+                  [routerLink]="['/admin/users', user.id]"
+                  [attr.aria-label]="'View details for ' + user.email"
+                  >View details<mat-icon svgIcon="arrow-up-right"
+                /></a>
+              </td>
+            </tr>
           } @empty {
-            <li class="py-3 text-sm text-on-surface-variant">No status changes yet.</li>
+            <tr>
+              <td colspan="5" class="py-12 text-center text-muted">No users found.</td>
+            </tr>
           }
-        </ol>
-      }
-    </section>
+        </tbody>
+      </table>
+    </div>
+    @if (data.hasPagination()) {
+      <nav class="mt-5 flex items-center justify-between gap-3" aria-label="User pages">
+        <button
+          class="ui-button ui-secondary"
+          type="button"
+          [disabled]="data.page() <= 1"
+          (click)="data.page.set(data.page() - 1)">
+          Previous</button
+        ><span class="text-[0.875rem] text-muted">Page {{ data.page() }}</span
+        ><button
+          class="ui-button ui-secondary"
+          type="button"
+          [disabled]="data.page() * data.pageSize() >= data.usersCount()"
+          (click)="data.page.set(data.page() + 1)">
+          Next
+        </button>
+      </nav>
+    }
   }
 </section>

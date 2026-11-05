@@ -14,7 +14,7 @@ import { Roles } from '@api/modules/auth/enums';
 import { createDiskUploadOptions } from '@api/shared/helpers';
 import { Response } from 'express';
 import { UploadUserAvatar } from '../commands';
-import { ExportUsersCsv, FindUserByEmail, FindUsers } from '../queries';
+import { ExportUsersCsv, FindUserByEmail, FindUserById, FindUsers } from '../queries';
 
 @ApiTags('users')
 @Controller('users')
@@ -78,6 +78,14 @@ export class UsersController extends AbstractController {
   @ApiOkResponse({ type: [StatusChangeResponse] })
   findStatusChanges(@Param('id') id: string): Promise<StatusChangeResponse[]> {
     return this.queryHandler.execute(new FindStatusChanges(id));
+  }
+
+  @Get('by-id/:id')
+  @HasRoles([Roles.ADMIN])
+  @ApiOperation({ summary: 'Find a user by ID (admin only)' })
+  @ApiOkResponse({ type: UserResponse, description: 'User found' })
+  findOneById(@Param('id') id: string): Promise<IUserResponse> {
+    return this.queryHandler.execute(new FindUserById(id));
   }
 
   @Get(':email')

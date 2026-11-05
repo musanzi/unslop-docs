@@ -1,6 +1,6 @@
 # Issue #9 verification
 
-The implementation starts at `49b9e4343bea0f995725de21c3bb7bbbd0ab647d` on `integration/unslop-docs-v1`. Verification uses synthetic DOCX fixtures and fake providers. No real DeepSeek request, live application migration, or service restart is part of these checks.
+The implementation starts at `49b9e4343bea0f995725de21c3bb7bbbd0ab647d` on `integration/unslop-docs-v1`. The final branch also merges integration commit `de69b7815d4fc6c6a465deac43b12c2c66fbf8a9`, preserving the dashboard redesign. Verification uses synthetic DOCX fixtures and fake providers. No real DeepSeek request, live application migration, or service restart is part of these checks.
 
 ## Real PostgreSQL
 
@@ -29,13 +29,13 @@ HTTP specs cover the private allowance route, signed-out rejection, owner isolat
 
 ## Required checks
 
-All checks passed on 2026-11-05:
+All checks passed on 2026-11-05 after resolving the integration merge:
 
 - `pnpm generate:api` regenerated the allowance response and HTTP 409 contract.
 - `pnpm lint` passed for the API, web, and generated contract.
 - `pnpm typecheck` passed, including API and web specs and Angular template checks.
-- `pnpm test:api` passed 347 tests in 27 files.
-- `pnpm test:web` passed 16 tests in 2 files.
+- `pnpm test:api` passed 348 tests in 27 files.
+- `pnpm test:web` passed 30 tests in 5 files.
 - `git diff --check` passed.
 
 The lint, typecheck, and test commands used `--config.verify-deps-before-run=false` to reuse the prepared dependency installation. This flag disables pnpm's automatic install before scripts; it does not skip any check. No build ran.

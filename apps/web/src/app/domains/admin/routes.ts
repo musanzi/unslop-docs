@@ -11,7 +11,8 @@ const routes: Routes = [
     children: [
       {
         path: '',
-        title: 'Admin',
+        title: 'Overview',
+        pathMatch: 'full',
         loadComponent: () => import('./modules/stats/features/stats')
       },
       {
@@ -20,10 +21,12 @@ const routes: Routes = [
         loadComponent: () => import('./modules/users/features/users-list/users-list')
       },
       {
-        path: 'profile',
-        title: 'My profile',
-        loadComponent: () => import('../common/modules/profile/features/profile/profile')
-      }
+        path: 'users/:id',
+        title: 'User details',
+        loadComponent: () => import('./modules/users/features/user-detail/user-detail')
+      },
+      { path: 'profile', pathMatch: 'full', redirectTo: '' },
+      { path: '**', redirectTo: '' }
     ]
   }
 ];

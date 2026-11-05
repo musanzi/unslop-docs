@@ -1,28 +1,19 @@
-import { Component, computed, input, output } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { MatIcon } from '@angular/material/icon';
-import { MatDivider } from '@angular/material/list';
-import { MatMenu, MatMenuItem, MatMenuTrigger } from '@angular/material/menu';
-import { IUserSummary } from '@web/shared/interfaces';
+import { AuthStore } from '@web/domains/auth/shared/data-access';
+import { ProfileDialog } from '@web/domains/common/modules/profile/data-access/profile-dialog';
 import { environment } from '@web/environments/environment';
 
-@Component({
-  selector: 'user',
-  imports: [MatDivider, MatIcon, MatMenu, MatMenuItem, MatMenuTrigger],
-  templateUrl: './user.html'
-})
+@Component({ selector: 'user', imports: [MatIcon], templateUrl: './user.html' })
 export class User {
-  readonly compact = input(false);
-  readonly editProfile = output<void>();
-  readonly user = input.required<IUserSummary | null>();
-  readonly signedOut = output<void>();
-
+  protected readonly auth = inject(AuthStore);
+  protected readonly profile = inject(ProfileDialog);
   protected readonly avatarImageUrl = computed(() => {
-    const user = this.user();
-
-    return user?.avatar
-      ? /^https?:\/\//i.test(user.avatar)
-        ? user.avatar
-        : `${environment.apiUrl}/uploads/profiles/${user.avatar}`
+    const avatar = this.auth.user()?.avatar;
+    return avatar
+      ? /^https?:\/\//i.test(avatar)
+        ? avatar
+        : `${environment.apiUrl}/uploads/profiles/${avatar}`
       : '/images/avatar.webp';
   });
 }

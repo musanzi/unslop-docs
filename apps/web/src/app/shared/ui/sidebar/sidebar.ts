@@ -1,17 +1,11 @@
-import { Component, input, output } from '@angular/core';
-import { RouterLink } from '@angular/router';
-import { INavigationItem, IUserSummary } from '@web/shared/interfaces';
-import { Navigation } from '../navigation/navigation';
+import { Component } from '@angular/core';
+import { RouterLink, RouterLinkActive } from '@angular/router';
+import { MatIcon } from '@angular/material/icon';
 import { User } from '../user/user';
 
 @Component({
   selector: 'sidebar',
-  imports: [Navigation, User, RouterLink],
+  imports: [User, RouterLink, RouterLinkActive, MatIcon],
   templateUrl: './sidebar.html'
 })
-export class Sidebar {
-  readonly navigation = input.required<INavigationItem[]>();
-  readonly editProfile = output<void>();
-  readonly user = input.required<IUserSummary | null>();
-  readonly signedOut = output<void>();
-}
+export class Sidebar {}

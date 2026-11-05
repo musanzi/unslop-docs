@@ -5,7 +5,7 @@
   /* Enable keyword support for size interpolation */
   :root {
     interpolate-size: allow-keywords;
-    color-scheme: light;
+    color-scheme: dark;
   }
 
   /* Ensure root elements fill the viewport */
@@ -58,13 +58,14 @@
      to control the focus styles precisely by using the Focus Monitor. */
   *:focus-visible:not(.cdk-program-focused),
   .cdk-keyboard-focused {
-    outline: var(--color-primary-600) solid 2px;
+    outline: var(--color-ink) solid 2px;
     outline-offset: 0.125rem; /* 2px */
   }
 
   /* Base colors */
   body {
-    background-color: var(--color-neutral-100);
-    color: var(--color-neutral-950);
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
   }
 }

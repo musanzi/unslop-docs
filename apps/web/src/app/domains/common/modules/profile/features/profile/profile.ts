@@ -1,26 +1,22 @@
 import { Component, computed, effect, inject, signal } from '@angular/core';
 import { disabled, form, FormField, required, submit, validate } from '@angular/forms/signals';
-import { MatButtonModule } from '@angular/material/button';
 import { MatDialogRef } from '@angular/material/dialog';
-import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
-import { MatInputModule } from '@angular/material/input';
 import type { IUpdateProfileDto } from '@unslop-docs/api-contracts';
-import { Message } from '@web/shared/ui';
 import { AuthStore } from '@web/domains/auth/shared/data-access';
 import { environment } from '@web/environments/environment';
 import { ProfileStore } from '@web/domains/common/modules/profile/data-access';
 import { IProfileFormModel } from '@web/domains/common/modules/profile/interfaces';
 
 @Component({
-  imports: [FormField, MatButtonModule, MatFormFieldModule, MatIconModule, MatInputModule, Message],
+  imports: [FormField, MatIconModule],
   templateUrl: './profile.html',
   providers: [ProfileStore]
 })
 export default class Profile {
   protected readonly store = inject(ProfileStore);
-  protected readonly ref = inject(MatDialogRef<Profile>, { optional: true });
-  protected readonly profileFormId = `${this.ref?.id ?? 'profile-page'}-editor-form`;
+  protected readonly ref = inject(MatDialogRef<Profile>);
+  protected readonly profileFormId = `${this.ref.id}-editor-form`;
   private readonly auth = inject(AuthStore);
   protected readonly user = this.auth.user();
   readonly isSaving = computed(() => this.store.isUpdatingProfile() || this.store.isUpdatingProfileImage());
@@ -44,7 +40,7 @@ export default class Profile {
   });
   constructor() {
     effect(() => {
-      if (this.store.profileUpdated() && !this.isSaving()) this.ref?.close(true);
+      if (this.store.profileUpdated() && !this.isSaving()) this.ref.close(true);
     });
   }
 

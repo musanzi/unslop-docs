@@ -31,3 +31,5 @@
 @import './components/kbd.css';
 @import './components/material.css';
 @import './components/workspace-material.css';
+
+@import './components/controls.css';

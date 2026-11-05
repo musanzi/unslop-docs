@@ -646,6 +646,37 @@
         ]
       }
     },
+    "/users/by-id/{id}": {
+      "get": {
+        "operationId": "UsersController_findOneById",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Find a user by ID (admin only)",
+        "tags": [
+          "users"
+        ]
+      }
+    },
     "/users/{email}": {
       "get": {
         "operationId": "UsersController_findOneByEmail",
