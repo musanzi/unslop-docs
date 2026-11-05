@@ -1,0 +1,134 @@
+:host {
+  display: block;
+}
+
+.entry-page {
+  --entry-background: #191919;
+  --entry-panel: #202020;
+  --entry-border: #303030;
+  --entry-text: #ecebe8;
+  --entry-muted: #aaa9a5;
+
+  display: flex;
+  min-height: 100svh;
+  flex-direction: column;
+  color-scheme: dark;
+  background: var(--entry-background);
+  color: var(--entry-text);
+  font-size: 1rem;
+}
+
+header {
+  padding: 2rem 1.5rem 0;
+  text-align: center;
+}
+
+.wordmark {
+  display: inline-block;
+  color: inherit;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1.5rem;
+  line-height: 1.5;
+  text-decoration: none;
+}
+
+main {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  padding: 3rem 1.5rem 7rem;
+}
+
+.entry-content {
+  width: 100%;
+  max-width: 36rem;
+  text-align: center;
+}
+
+h1 {
+  margin: 0;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 400;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+  text-wrap: balance;
+}
+
+.description {
+  margin: 0.875rem 0 0;
+  color: var(--entry-muted);
+  line-height: 1.6;
+  text-wrap: balance;
+}
+
+.sign-in-panel {
+  max-width: 23rem;
+  margin: 1.75rem auto 0;
+  padding: 1.25rem;
+  border: 1px solid var(--entry-border);
+  border-radius: 1rem;
+  background: var(--entry-panel);
+}
+
+.sign-in-button {
+  display: flex;
+  min-height: 3rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  background: var(--entry-text);
+  color: var(--entry-background);
+  font-weight: 500;
+  line-height: 1.5;
+  text-decoration: none;
+}
+
+.sign-in-button:hover {
+  background: #fff;
+}
+
+.sign-in-button:active {
+  background: #d5d4d0;
+}
+
+a:focus-visible {
+  outline: 2px solid var(--entry-text);
+  outline-offset: 5px;
+}
+
+.sign-in-error {
+  margin: 0 0 1rem;
+  color: var(--entry-text);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  text-align: left;
+}
+
+.skip-link {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  z-index: 1;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  background: var(--entry-text);
+  color: var(--entry-background);
+  transform: translateY(-200%);
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+::selection {
+  background: #d5d4d0;
+  color: var(--entry-background);
+}
+
+@media (max-height: 32rem) {
+  main {
+    padding-block: 2rem;
+  }
+}

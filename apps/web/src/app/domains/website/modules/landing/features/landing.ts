@@ -1,16 +1,9 @@
-import { Component, inject } from '@angular/core';
-import { AuthStore } from '@web/domains/auth/shared/data-access';
-import { LandingCta, LandingFeatures, LandingHero } from '@web/domains/website/modules/landing/ui';
+import { Component } from '@angular/core';
+import { AuthSignIn } from '@web/domains/auth/modules/sign-in/features/sign-in/sign-in';
 
 @Component({
   selector: 'app-landing',
-  imports: [LandingHero, LandingFeatures, LandingCta],
+  imports: [AuthSignIn],
   templateUrl: './landing.html'
 })
-export class Landing {
-  protected readonly authStore = inject(AuthStore);
-
-  protected signOut(): void {
-    this.authStore.signOut();
-  }
-}
+export class Landing {}

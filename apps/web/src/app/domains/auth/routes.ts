@@ -10,13 +10,6 @@ const routes: Routes = [
       {
         path: 'sign-in',
         title: 'Sign In',
-        data: {
-          authContent: {
-            asideTitle: 'Welcome to unslop-docs',
-            asideDescription: 'Document editing for students, with your meaning and language at the center.',
-            asideFootnote: 'Google sign-in and profile management are available. Document processing is in development.'
-          }
-        },
         loadComponent: () => import('./modules/sign-in/features/sign-in/sign-in').then((c) => c.AuthSignIn)
       }
     ]

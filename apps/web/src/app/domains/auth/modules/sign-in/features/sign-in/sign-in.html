@@ -1,12 +1,22 @@
-<div class="mx-auto flex w-full max-w-96 flex-col sm:min-w-80">
-  <a href="/" class="mb-4 inline-flex items-center self-start text-sm font-medium text-primary-700 hover:underline">
-    <mat-icon class="mr-1 size-4" svgIcon="arrow-left" />
-    Back home
-  </a>
-  <h1 class="text-4xl leading-tight font-extrabold tracking-tight">Sign in</h1>
-  <p class="mt-3 text-on-surface-variant">Use your Google account to sign in or create an account.</p>
-  @if (message) {
-    <p role="alert" class="mt-4 rounded border p-3 text-sm">{{ message }}</p>
-  }
-  <a matButton="filled" class="mt-8 w-full" [href]="googleSignInUrl">Continue with Google</a>
+<div class="entry-page">
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+  <header>
+    <a routerLink="/" class="wordmark" aria-label="unslop-docs home">unslop-docs</a>
+  </header>
+  <main id="main-content" tabindex="-1">
+    <div class="entry-content">
+      <h1>Make your writing clearer.</h1>
+      <p class="description">Document editing for students. Coming soon.</p>
+      <div class="sign-in-panel">
+        @if (message) {
+          <p role="alert" class="sign-in-error">{{ message }}</p>
+        }
+        @if (authStore.user()) {
+          <a class="sign-in-button" routerLink="/auth/sign-in">Continue</a>
+        } @else {
+          <a class="sign-in-button" [href]="googleSignInUrl">Continue with Google</a>
+        }
+      </div>
+    </div>
+  </main>
 </div>
