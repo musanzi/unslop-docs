@@ -6,6 +6,10 @@
   --workspace-text: #ecebe8;
   --workspace-muted: #aaa9a5;
   --workspace-error: #ffb4a5;
+  --mat-sidenav-container-background-color: var(--workspace-bg);
+  --mat-sidenav-sidenav-background-color: var(--workspace-sidebar);
+  --mat-sidenav-content-background-color: var(--workspace-bg);
+  --mat-sidenav-container-text-color: var(--workspace-text);
   display: block;
   color-scheme: dark;
   color: var(--workspace-text);
@@ -27,6 +31,7 @@
 .history-content {
   display: flex;
   flex-direction: column;
+  width: 100%;
   height: 100%;
   padding: 1rem 0.75rem;
 }

@@ -10,7 +10,7 @@ RUN pnpm install --frozen-lockfile --ignore-scripts
 FROM dependencies AS api-development
 ENV UPLOADS_DIR=/app/apps/api/uploads
 COPY . .
-CMD ["pnpm", "dev:api"]
+CMD ["pnpm", "--dir", "apps/api", "exec", "nest", "start", "--watch"]
 
 FROM dependencies AS web-development
 COPY . .
