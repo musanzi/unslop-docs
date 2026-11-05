@@ -63,6 +63,17 @@ describe('Revision preservation corpus', () => {
       expect(revised.text).toContain(language === 'english' ? 'To compare the results' : 'Pour comparer les résultats');
       expect(revised.protectedParts).toEqual(source.protectedParts);
       await expect(validateRevisedDocx(source, result.revised)).resolves.toBeUndefined();
+      expect(result.notices).toEqual({
+        keptPassages: [],
+        uneditedElements: [
+          { reason: 'comment', count: 1 },
+          { reason: 'endnote', count: 1 },
+          { reason: 'equation', count: 1 },
+          { reason: 'footnote', count: 1 },
+          { reason: 'image', count: 1 },
+          { reason: 'reference-field', count: 1 }
+        ]
+      });
     }
   );
 

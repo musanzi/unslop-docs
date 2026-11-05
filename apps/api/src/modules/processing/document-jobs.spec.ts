@@ -1,4 +1,5 @@
 import { MonthlyAllowance1793880600000 } from '../database/migrations/1793880600000-MonthlyAllowance';
+import { RevisionNotices1793880800000 } from '../database/migrations/1793880800000-RevisionNotices';
 import { Logger } from '@nestjs/common';
 import { faithfulRevisionProvider } from '@api/shared/testing/revision-fixtures';
 import { DocumentRevision1793880400000 } from '../database/migrations/1793880400000-DocumentRevision';
@@ -16,6 +17,8 @@ import { DocumentAssessment1793880300000 } from '../database/migrations/17938803
 import { DocumentJobs } from './document-jobs';
 import { ProviderRetries1793880500000 } from '../database/migrations/1793880500000-ProviderRetries';
 
+const noNotices = { keptPassages: [], uneditedElements: [] };
+
 describe('Durable document jobs', () => {
   const database = new PGlite();
   const sql = {
@@ -27,6 +30,7 @@ describe('Durable document jobs', () => {
           processingStage: string;
           revisedKey: string;
           revisedSize: number;
+          revisionNotices: unknown;
         }>(query, values)
       ).rows
   };
@@ -40,6 +44,7 @@ describe('Durable document jobs', () => {
     await new DocumentRevision1793880400000().up(sql);
     await new ProviderRetries1793880500000().up(sql);
     await new MonthlyAllowance1793880600000().up(sql);
+    await new RevisionNotices1793880800000().up(sql);
     await database.query('INSERT INTO "user" (id) VALUES ($1)', [owner]);
   });
   beforeEach(async () => {
@@ -256,7 +261,7 @@ describe('Durable document jobs', () => {
     expect(await jobs.recover()).toBe(0);
     expect(await jobs.startRequest(first, 'assess:v1', 'input')).toBeNull();
     expect(await jobs.finishRequest(first, 'assess:v1', { ...request, state: 'succeeded', outcome: {} })).toBe(false);
-    expect(await jobs.complete(first, { patterns: [] }, { key: 'late.docx', size: 1 })).toBe(false);
+    expect(await jobs.complete(first, { patterns: [] }, { key: 'late.docx', size: 1 }, noNotices)).toBe(false);
     await database.query(`UPDATE document SET "nextRequestAt" = now() - interval '1 second' WHERE id = $1`, [id]);
     const claims = await Promise.all([jobs.claim(1000), new DocumentJobs(sql).claim(1000)]);
     expect(claims.filter(Boolean)).toHaveLength(1);
@@ -308,10 +313,12 @@ describe('Durable document jobs', () => {
     expect(claim.id).toBe(id);
     expect([first, second].filter(Boolean)).toHaveLength(1);
     expect(claim.processingDeadline.getTime() - claim.processingStartedAt.getTime()).toBeCloseTo(900000, -1);
-    expect(await jobs.complete(claim, { patterns: [] }, { key: `${randomUUID()}.docx`, size: 123 })).toBe(true);
-    expect(await restartedWorker.complete(claim, { patterns: [] }, { key: `${randomUUID()}.docx`, size: 123 })).toBe(
-      false
+    expect(await jobs.complete(claim, { patterns: [] }, { key: `${randomUUID()}.docx`, size: 123 }, noNotices)).toBe(
+      true
     );
+    expect(
+      await restartedWorker.complete(claim, { patterns: [] }, { key: `${randomUUID()}.docx`, size: 123 }, noNotices)
+    ).toBe(false);
     expect(await jobs.claim(900000)).toBeNull();
   });
   it('fails interrupted and expired work and rejects late publication or lease renewal', async () => {
@@ -322,13 +329,17 @@ describe('Durable document jobs', () => {
     ]);
     expect(await jobs.heartbeat(interrupted)).toBe(false);
     expect(await new DocumentJobs(sql).recover()).toBe(1);
-    expect(await jobs.complete(interrupted, { patterns: [] }, { key: `${randomUUID()}.docx`, size: 123 })).toBe(false);
+    expect(
+      await jobs.complete(interrupted, { patterns: [] }, { key: `${randomUUID()}.docx`, size: 123 }, noNotices)
+    ).toBe(false);
     await enqueue();
     const expired = await jobs.claim(900000);
     await database.query(`UPDATE document SET "processingDeadline" = now() - interval '1 second' WHERE id = $1`, [
       expired.id
     ]);
-    expect(await jobs.complete(expired, { patterns: [] }, { key: `${randomUUID()}.docx`, size: 123 })).toBe(false);
+    expect(await jobs.complete(expired, { patterns: [] }, { key: `${randomUUID()}.docx`, size: 123 }, noNotices)).toBe(
+      false
+    );
     expect(await jobs.recover()).toBe(1);
     expect(await jobs.recover()).toBe(0);
     expect(await jobs.claim(900000)).toBeNull();
@@ -546,6 +557,28 @@ describe('Durable document jobs', () => {
     expect(await storage.read()).toEqual(original);
   });
 
+  it('persists kept-passage and unedited-element notices with the published revision', async () => {
+    const id = await enqueue();
+    const storage = privateStorage(await assessmentDocxFixture());
+    const provider = faithfulRevisionProvider();
+    const edit = provider.edit;
+    provider.edit = async (system, chunk, signal) => {
+      const result = (await edit(system, chunk, signal)) as { edits: { id: string; text: string }[] };
+      return { edits: result.edits.map((span, index) => (index ? span : { ...span, text: `${span.text} (2031)` })) };
+    };
+    await new AssessmentWorker(jobs, storage, provider, 'rules', {
+      processingTimeoutMs: 900000,
+      providerTimeoutMs: 60000
+    }).runOnce();
+    const [row] = await sql.query('SELECT status, "revisionNotices" FROM document WHERE id = $1', [id]);
+    expect(row.status).toBe('completed');
+    expect(row.revisionNotices).toEqual({
+      keptPassages: [{ check: 'reference', span: expect.any(String), excerpt: expect.any(String) }],
+      uneditedElements: []
+    });
+    expect(JSON.stringify(vi.mocked(Logger.prototype.warn).mock.calls)).not.toContain('2031');
+  });
+
   it('does not save partial edits when a later chunk fails validation and does not retry', async () => {
     const id = await enqueue();
     const original = await readerFixture(textParagraph('word '.repeat(10000)));
@@ -568,10 +601,19 @@ describe('Durable document jobs', () => {
     expect(await storage.read()).toEqual(original);
     expect(
       await sql.query(
-        'SELECT status, assessment, "failureCode", "revisedKey", "revisedSize" FROM document WHERE id = $1',
+        'SELECT status, assessment, "failureCode", "revisedKey", "revisedSize", "revisionNotices" FROM document WHERE id = $1',
         [id]
       )
-    ).toEqual([{ status: 'failed', assessment: null, failureCode: 'structure', revisedKey: null, revisedSize: null }]);
+    ).toEqual([
+      {
+        status: 'failed',
+        assessment: null,
+        failureCode: 'structure',
+        revisedKey: null,
+        revisedSize: null,
+        revisionNotices: null
+      }
+    ]);
   });
 
   it('applies the provider wait per request instead of to the entire attempt', async () => {
@@ -670,12 +712,14 @@ describe('Durable document jobs', () => {
       processingTimeoutMs: 900000,
       providerTimeoutMs: 60000
     }).runOnce();
+    await new RevisionNotices1793880800000().down(sql);
     await new DocumentRevision1793880400000().down(sql);
     expect(await sql.query('SELECT status FROM document WHERE id = $1', [id])).toEqual([{ status: 'assessed' }]);
     await new DocumentRevision1793880400000().up(sql);
-    expect(await sql.query('SELECT status, "revisedKey", "revisedSize" FROM document WHERE id = $1', [id])).toEqual([
-      { status: 'assessed', revisedKey: null, revisedSize: null }
-    ]);
+    await new RevisionNotices1793880800000().up(sql);
+    expect(
+      await sql.query('SELECT status, "revisedKey", "revisedSize", "revisionNotices" FROM document WHERE id = $1', [id])
+    ).toEqual([{ status: 'assessed', revisedKey: null, revisedSize: null, revisionNotices: null }]);
     expect(await jobs.claim(900000)).toBeNull();
   });
 });

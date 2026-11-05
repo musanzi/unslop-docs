@@ -12,6 +12,7 @@ import { DocumentAssessment1793880300000 } from '../database/migrations/17938803
 import { DocumentRevision1793880400000 } from '../database/migrations/1793880400000-DocumentRevision';
 import { ProviderRetries1793880500000 } from '../database/migrations/1793880500000-ProviderRetries';
 import { MonthlyAllowance1793880600000 } from '../database/migrations/1793880600000-MonthlyAllowance';
+import { RevisionNotices1793880800000 } from '../database/migrations/1793880800000-RevisionNotices';
 import { MonthlyAllowance } from './monthly-allowance';
 import { UploadDocumentHandler } from './commands/upload-document.handler';
 import { Document } from './entities/document.entity';
@@ -77,6 +78,8 @@ async function allowanceHarness(database: PGlite, allowance: MonthlyAllowance) {
   };
 }
 
+const noNotices = { keptPassages: [], uneditedElements: [] };
+
 describe('Monthly allowance at upload and worker boundaries', () => {
   const database = new PGlite();
   let now = new Date('2026-11-05T12:00:00Z');
@@ -92,6 +95,7 @@ describe('Monthly allowance at upload and worker boundaries', () => {
     await new DocumentRevision1793880400000().up({ query });
     await new ProviderRetries1793880500000().up({ query });
     await new MonthlyAllowance1793880600000().up({ query });
+    await new RevisionNotices1793880800000().up({ query });
   });
   beforeEach(async () => {
     await database.exec('TRUNCATE document, allowance_reservation, "user" CASCADE');
@@ -158,7 +162,7 @@ describe('Monthly allowance at upload and worker boundaries', () => {
     const fresh = await harness.jobs.claim(900000);
     expect(await harness.jobs.startRequest(fresh, 'assess:v1', 'new-input')).toMatchObject({ attempts: 1 });
     expect(await harness.jobs.fail(old, 'provider')).toBe(false);
-    expect(await harness.jobs.complete(old, { patterns: [] }, { key: 'stale.docx', size: 42 })).toBe(false);
+    expect(await harness.jobs.complete(old, { patterns: [] }, { key: 'stale.docx', size: 42 }, noNotices)).toBe(false);
     expect(await allowance.read({ query }, owner)).toMatchObject({ used: 0, reserved: 1 });
   });
 
@@ -203,7 +207,8 @@ describe('Monthly allowance at upload and worker boundaries', () => {
       await harness.jobs.complete(
         await harness.jobs.claim(900000),
         { patterns: [] },
-        { key: `result-${index}.docx`, size: 42 }
+        { key: `result-${index}.docx`, size: 42 },
+        noNotices
       );
     }
     await expect(harness.retry.execute({ ownerId: owner, id: document.id })).rejects.toMatchObject({
@@ -231,7 +236,7 @@ describe('Monthly allowance at upload and worker boundaries', () => {
     expect(await allowance.read({ query }, owner)).toMatchObject({ used: 0, reserved: 1 });
     const claim = await harness.jobs.claim(900000);
     await expect(harness.retry.execute({ ownerId: owner, id: document.id })).rejects.toMatchObject({ status: 409 });
-    await harness.jobs.complete(claim, { patterns: [] }, { key: 'completed.docx', size: 42 });
+    await harness.jobs.complete(claim, { patterns: [] }, { key: 'completed.docx', size: 42 }, noNotices);
     await expect(harness.retry.execute({ ownerId: owner, id: document.id })).rejects.toMatchObject({ status: 409 });
     expect(await allowance.read({ query }, owner)).toMatchObject({ used: 1, reserved: 0 });
     expect(await harness.jobs.claim(900000)).toBeNull();
@@ -314,8 +319,12 @@ describe('Monthly allowance at upload and worker boundaries', () => {
     const document = await upload();
     const claim = await harness.jobs.claim(900000);
     expect(await allowance.read({ query }, owner)).toMatchObject({ used: 0, reserved: 1 });
-    expect(await harness.jobs.complete(claim, { patterns: [] }, { key: 'revised.docx', size: 42 })).toBe(true);
-    expect(await harness.jobs.complete(claim, { patterns: [] }, { key: 'other.docx', size: 42 })).toBe(false);
+    expect(await harness.jobs.complete(claim, { patterns: [] }, { key: 'revised.docx', size: 42 }, noNotices)).toBe(
+      true
+    );
+    expect(await harness.jobs.complete(claim, { patterns: [] }, { key: 'other.docx', size: 42 }, noNotices)).toBe(
+      false
+    );
     expect(await allowance.read({ query }, owner)).toMatchObject({ used: 1, reserved: 0, remaining: 2 });
     await query('DELETE FROM document WHERE id = $1', [document.id]);
     expect(await allowance.read({ query }, owner)).toMatchObject({ used: 1, reserved: 0, remaining: 2 });
@@ -358,7 +367,9 @@ describe('Monthly allowance at upload and worker boundaries', () => {
       resetsAt: reset
     });
     await upload();
-    expect(await harness.jobs.complete(claim, { patterns: [] }, { key: 'next-month.docx', size: 42 })).toBe(true);
+    expect(await harness.jobs.complete(claim, { patterns: [] }, { key: 'next-month.docx', size: 42 }, noNotices)).toBe(
+      true
+    );
     expect(await allowance.read({ query }, owner)).toMatchObject({ used: 0, reserved: 1, remaining: 2 });
     now = new Date(last);
     expect(await allowance.read({ query }, owner)).toMatchObject({ used: 1, reserved: 2, remaining: 0 });
@@ -379,7 +390,9 @@ describe('Monthly allowance at upload and worker boundaries', () => {
       await query(`UPDATE "user" SET status = 'FREE' WHERE id = $1`, [owner]);
       await expect(upload()).rejects.toMatchObject({ status: 409 });
       const claim = await harness.jobs.claim(900000);
-      expect(await harness.jobs.complete(claim, { patterns: [] }, { key: 'downgraded.docx', size: 42 })).toBe(true);
+      expect(
+        await harness.jobs.complete(claim, { patterns: [] }, { key: 'downgraded.docx', size: 42 }, noNotices)
+      ).toBe(true);
       expect(await allowance.read({ query }, owner)).toMatchObject({
         limit: 3,
         used: 1,
@@ -470,16 +483,18 @@ describe('Monthly allowance at upload and worker boundaries', () => {
     await query(`CREATE TRIGGER reject_fixture_charge BEFORE UPDATE ON allowance_reservation
       FOR EACH ROW WHEN (NEW.state = 'charged') EXECUTE FUNCTION reject_fixture_charge()`);
     try {
-      await expect(harness.jobs.complete(claim, { patterns: [] }, { key: 'atomic.docx', size: 42 })).rejects.toThrow(
-        'Fixture accounting write failed'
-      );
+      await expect(
+        harness.jobs.complete(claim, { patterns: [] }, { key: 'atomic.docx', size: 42 }, noNotices)
+      ).rejects.toThrow('Fixture accounting write failed');
       expect(await harness.jobs.isPublished(claim.id, 'atomic.docx')).toBe(false);
       expect(await allowance.read({ query }, owner)).toMatchObject({ used: 0, reserved: 1 });
     } finally {
       await query('DROP TRIGGER reject_fixture_charge ON allowance_reservation');
       await query('DROP FUNCTION reject_fixture_charge()');
     }
-    expect(await harness.jobs.complete(claim, { patterns: [] }, { key: 'atomic.docx', size: 42 })).toBe(true);
+    expect(await harness.jobs.complete(claim, { patterns: [] }, { key: 'atomic.docx', size: 42 }, noNotices)).toBe(
+      true
+    );
     expect(await allowance.read({ query }, owner)).toMatchObject({ used: 1, reserved: 0 });
   });
 });

@@ -3,6 +3,7 @@ import { ProcessingFailure } from '../documents/document-processing';
 import { randomUUID } from 'node:crypto';
 import { WritingAssessment } from '../documents/assessment-workflow';
 import { ProviderFailureCategory } from '../documents/provider-failure';
+import { RevisionNotices } from '../documents/revision-notices';
 
 export interface ProviderRequestCheckpoint {
   inputHash: string;
@@ -115,11 +116,12 @@ export class DocumentJobs {
   async complete(
     claim: JobClaim,
     assessment: WritingAssessment,
-    revised: { key: string; size: number }
+    revised: { key: string; size: number },
+    notices: RevisionNotices
   ): Promise<boolean> {
     const rows = await this.database.query(
       `WITH completed AS (
-      UPDATE document SET status = 'completed', assessment = $3::jsonb, "revisedKey" = $4, "revisedSize" = $5, "processingStage" = NULL, "claimToken" = NULL, "leaseExpiresAt" = NULL
+      UPDATE document SET status = 'completed', assessment = $3::jsonb, "revisedKey" = $4, "revisedSize" = $5, "revisionNotices" = $6::jsonb, "processingStage" = NULL, "claimToken" = NULL, "leaseExpiresAt" = NULL
       WHERE id = $1 AND "claimToken" = $2 AND status = 'processing'
         AND ${reserved}
         AND "processingDeadline" > clock_timestamp() AND "leaseExpiresAt" > clock_timestamp()
@@ -129,7 +131,7 @@ export class DocumentJobs {
       WHERE "documentId" IN (SELECT id FROM completed) AND state = 'active'
       RETURNING id
     ) SELECT id FROM completed`,
-      [claim.id, claim.claimToken, JSON.stringify(assessment), revised.key, revised.size]
+      [claim.id, claim.claimToken, JSON.stringify(assessment), revised.key, revised.size, JSON.stringify(notices)]
     );
     return rows.length === 1;
   }
@@ -171,7 +173,7 @@ export class DocumentJobs {
 
   async recover(): Promise<number> {
     const rows = await this.database.query(`WITH recovered AS (
-      UPDATE document SET status = 'failed', assessment = NULL, "processingStage" = NULL, "revisedKey" = NULL, "revisedSize" = NULL, "claimToken" = NULL, "leaseExpiresAt" = NULL,
+      UPDATE document SET status = 'failed', assessment = NULL, "processingStage" = NULL, "revisedKey" = NULL, "revisedSize" = NULL, "revisionNotices" = NULL, "claimToken" = NULL, "leaseExpiresAt" = NULL,
         "failureCode" = CASE WHEN "processingDeadline" <= clock_timestamp() THEN 'deadline' ELSE 'interrupted' END
       WHERE status = 'processing' AND ("processingDeadline" <= clock_timestamp() OR
         ("leaseExpiresAt" <= clock_timestamp() AND NOT (${resumable})))
@@ -187,7 +189,7 @@ export class DocumentJobs {
   async fail(claim: JobClaim, reason: ProcessingFailure): Promise<boolean> {
     const rows = await this.database.query(
       `WITH failed AS (
-      UPDATE document SET status = 'failed', assessment = NULL, "processingStage" = NULL, "revisedKey" = NULL, "revisedSize" = NULL, "claimToken" = NULL, "leaseExpiresAt" = NULL,
+      UPDATE document SET status = 'failed', assessment = NULL, "processingStage" = NULL, "revisedKey" = NULL, "revisedSize" = NULL, "revisionNotices" = NULL, "claimToken" = NULL, "leaseExpiresAt" = NULL,
         "failureCode" = CASE WHEN "processingDeadline" <= clock_timestamp() THEN 'deadline' ELSE $3 END
       WHERE id = $1 AND "claimToken" = $2 AND status = 'processing'
       RETURNING id

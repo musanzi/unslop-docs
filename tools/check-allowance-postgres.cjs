@@ -184,8 +184,24 @@ async function main() {
     await statuses.execute({ userId: owner, status: 'FREE', admin: adminUser });
     await assert.rejects(add(owner), (error) => error.getStatus() === 409);
     const claim = await jobs.claim(900000);
-    assert.equal(await jobs.complete(claim, { patterns: [] }, { key: `${randomUUID()}.docx`, size: 42 }), true);
-    assert.equal(await jobs.complete(claim, { patterns: [] }, { key: `${randomUUID()}.docx`, size: 42 }), false);
+    assert.equal(
+      await jobs.complete(
+        claim,
+        { patterns: [] },
+        { key: `${randomUUID()}.docx`, size: 42 },
+        { keptPassages: [], uneditedElements: [] }
+      ),
+      true
+    );
+    assert.equal(
+      await jobs.complete(
+        claim,
+        { patterns: [] },
+        { key: `${randomUUID()}.docx`, size: 42 },
+        { keptPassages: [], uneditedElements: [] }
+      ),
+      false
+    );
     assert.equal((await allowance.read(database, owner)).used, 2);
     const failing = await jobs.claim(900000);
     assert.equal(await jobs.fail(failing, 'provider'), true);

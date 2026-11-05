@@ -178,7 +178,12 @@ export class AssessmentWorker {
       written = true;
       await active();
       publicationAttempted = true;
-      published = await this.jobs.complete(claim, result.assessment, { key: revisedKey, size: result.revised.length });
+      published = await this.jobs.complete(
+        claim,
+        result.assessment,
+        { key: revisedKey, size: result.revised.length },
+        result.notices
+      );
       if (!published) await this.jobs.recover();
     } catch (error) {
       if (!(error instanceof RetryScheduled)) {

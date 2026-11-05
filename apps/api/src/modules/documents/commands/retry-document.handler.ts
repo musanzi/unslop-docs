@@ -35,7 +35,7 @@ export class RetryDocumentHandler implements ICommandHandler<RetryDocument, Docu
           `UPDATE document SET status = 'queued', "failureCode" = NULL, "processingStage" = NULL,
             "processingAttemptId" = NULL, "providerRequests" = '{}'::jsonb, "nextRequestAt" = NULL,
             "processingStartedAt" = NULL, "processingDeadline" = NULL, "leaseExpiresAt" = NULL,
-            "claimToken" = NULL, assessment = NULL, "revisedKey" = NULL, "revisedSize" = NULL
+            "claimToken" = NULL, assessment = NULL, "revisedKey" = NULL, "revisedSize" = NULL, "revisionNotices" = NULL
           WHERE id = $1 RETURNING *`,
           [id]
         );

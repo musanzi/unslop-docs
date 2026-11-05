@@ -4,6 +4,7 @@ import type { WritingAssessment } from '../assessment-workflow';
 import type { DocumentStatus, ProcessingFailure } from '../document-processing';
 import { User } from '../../users/entities';
 import type { ProviderRequestCheckpoint } from '../../processing/document-jobs';
+import type { RevisionNotices } from '../revision-notices';
 
 @Entity()
 @Index('IDX_document_owner_history', ['ownerId', 'createdAt', 'id'])
@@ -29,6 +30,9 @@ export class Document {
 
   @Column({ type: 'integer', nullable: true })
   revisedSize: number | null;
+
+  @Column({ type: 'jsonb', nullable: true, select: false })
+  revisionNotices: RevisionNotices | null;
 
   @Column({ type: 'varchar', nullable: true })
   processingStage: ProcessingStage | null;
