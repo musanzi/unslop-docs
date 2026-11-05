@@ -381,7 +381,11 @@ export interface paths {
         get: operations["DocumentsController_detail"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete your document and everything stored for it
+         * @description Removes the record, original, preview, assessments, revised DOCX, revision notices and processing checkpoints. Usage records stay unchanged, so deleting a completed document never restores allowance. Once the document is gone, repeating the request returns the same 404 as a document that never existed.
+         */
+        delete: operations["DocumentsController_remove"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1515,6 +1519,54 @@ export interface operations {
                 content?: never;
             };
             /** @description Document could not be loaded */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    DocumentsController_remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Document and its stored files are deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Sign-in required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Document does not exist, belongs to another user, or was already deleted */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Document is queued or processing; wait until it finishes or fails */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A stored file could not be removed; the record remains so the deletion can be repeated */
             503: {
                 headers: {
                     [name: string]: unknown;
