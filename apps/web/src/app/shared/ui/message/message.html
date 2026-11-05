@@ -1,0 +1,24 @@
+<div
+  class="flex items-start gap-3 rounded-md border p-4 shadow-sm"
+  [class]="styles().container"
+  [attr.role]="role()"
+  [attr.aria-live]="ariaLive()">
+  <span class="flex size-9 shrink-0 items-center justify-center rounded-md" [class]="styles().iconContainer">
+    <mat-icon class="size-5" [svgIcon]="styles().icon" />
+  </span>
+  <div class="min-w-0 flex-1">
+    <p class="font-semibold">{{ displayedTitle() }}</p>
+    <p class="mt-1 text-sm whitespace-pre-line" [class]="styles().message">{{ message() }}</p>
+  </div>
+  @if (dismissible()) {
+    <button
+      class="-mt-2 -mr-2 shrink-0"
+      [class]="styles().dismiss"
+      matIconButton
+      type="button"
+      aria-label="Close message"
+      (click)="dismissed.emit()">
+      <mat-icon class="size-4" svgIcon="x" />
+    </button>
+  }
+</div>

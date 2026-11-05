@@ -1,0 +1,93 @@
+name: unslop-docs
+services:
+  api:
+    build:
+      context: .
+      target: api-development
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      UPLOADS_DIR: /app/apps/api/uploads
+    ports:
+      - ${API_PORT}:${API_PORT}
+    volumes:
+      - ./apps/api/src/modules/database/migrations:/app/apps/api/src/modules/database/migrations
+      - uploads_data:/app/apps/api/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    develop:
+      watch:
+        - action: sync
+          path: ./apps/api/src
+          target: /app/apps/api/src
+          initial_sync: true
+          ignore:
+            - node_modules/
+  web:
+    build:
+      context: .
+      target: web-development
+    restart: unless-stopped
+    env_file: ./.env
+    ports:
+      - ${WEB_PORT}:${WEB_PORT}
+    develop:
+      watch:
+        - action: sync
+          path: ./apps/web/src
+          target: /app/apps/web/src
+          initial_sync: true
+          ignore:
+            - node_modules/
+        - action: sync
+          path: ./libs/api-contracts/src
+          target: /app/libs/api-contracts/src
+          initial_sync: true
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    environment:
+      MP_MAX_MESSAGES: 500
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    ports:
+      - '8025:8025'
+    healthcheck:
+      test: ['CMD', '/mailpit', 'readyz']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USERNAME:?DB_USERNAME is required}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      POSTGRES_DB: ${DB_NAME:?DB_NAME is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+volumes:
+  postgres_data:
+  redis_data:
+  uploads_data:

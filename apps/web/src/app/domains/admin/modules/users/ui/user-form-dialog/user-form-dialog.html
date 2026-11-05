@@ -1,0 +1,40 @@
+<h2 mat-dialog-title>{{ data.user ? 'Edit user' : 'Create user' }}</h2>
+
+<form (submit)="onSubmit(); $event.preventDefault()">
+  <mat-dialog-content class="flex flex-col gap-5">
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Name</mat-label>
+      <input matInput [formField]="userForm.name" autocomplete="name" />
+      @if (userForm.name().touched() && userForm.name().errors().length) {
+        <mat-error>{{ userForm.name().errors()[0].message }}</mat-error>
+      }
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Email address</mat-label>
+      <input matInput type="email" [formField]="userForm.email" autocomplete="email" />
+      @if (userForm.email().touched() && userForm.email().errors().length) {
+        <mat-error>{{ userForm.email().errors()[0].message }}</mat-error>
+      }
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Roles</mat-label>
+      <mat-select multiple [formField]="userForm.roles">
+        @for (role of data.roles; track role.id) {
+          <mat-option [value]="role.id">{{ role.name }}</mat-option>
+        }
+      </mat-select>
+      @if (userForm.roles().touched() && userForm.roles().errors().length) {
+        <mat-error>{{ userForm.roles().errors()[0].message }}</mat-error>
+      }
+    </mat-form-field>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button matButton type="button" [mat-dialog-close]="undefined">Cancel</button>
+    <button matButton="filled" type="submit" [disabled]="userForm().invalid()">
+      {{ data.user ? 'Save' : 'Create' }}
+    </button>
+  </mat-dialog-actions>
+</form>

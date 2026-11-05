@@ -1,0 +1,87 @@
+<section class="flex flex-col px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
+  <div class="mb-6 flex items-end justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-semibold tracking-tight">Roles</h1>
+      <p class="mt-1 text-sm text-on-surface-variant">Roles available on the platform.</p>
+    </div>
+
+    <button matButton="filled" type="button" [disabled]="store.isSaving()" (click)="openCreateDialog()">
+      <mat-icon svgIcon="plus" />
+      Create role
+    </button>
+  </div>
+
+  @if (data.error()) {
+    <div
+      class="mb-4 flex items-center justify-between gap-4 rounded-lg bg-error-container p-4 text-on-error-container"
+      role="alert">
+      <span class="whitespace-pre-line">{{ data.error() }}</span>
+      <button matButton type="button" (click)="data.roles.reload()">Try again</button>
+    </div>
+  }
+
+  @if (store.error(); as error) {
+    <message class="mb-4" [message]="error" (dismissed)="store.clearError()" />
+  }
+
+  @if (data.roles.isLoading()) {
+    <div class="flex min-h-64 items-center justify-center" aria-label="Loading roles">
+      <span class="text-sm text-on-surface-variant">Loading...</span>
+    </div>
+  } @else {
+    <div class="flex flex-col overflow-hidden rounded-xl border border-outline-variant">
+      <div class="relative isolate overflow-x-auto">
+        <table class="w-full whitespace-nowrap" mat-table [dataSource]="data.items()">
+          <ng-container matColumnDef="name">
+            <th mat-header-cell *matHeaderCellDef>Name</th>
+            <td class="font-medium" mat-cell *matCellDef="let role">{{ role.name }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="createdAt">
+            <th mat-header-cell *matHeaderCellDef>Created</th>
+            <td mat-cell *matCellDef="let role">{{ role.createdAt | date: 'dd/MM/yyyy' }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="updatedAt">
+            <th mat-header-cell *matHeaderCellDef>Updated</th>
+            <td mat-cell *matCellDef="let role">{{ role.updatedAt | date: 'dd/MM/yyyy' }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="actions">
+            <th class="text-right" mat-header-cell *matHeaderCellDef>Actions</th>
+            <td class="text-right" mat-cell *matCellDef="let role">
+              <button
+                matIconButton
+                type="button"
+                aria-label="Edit role"
+                [disabled]="store.isSaving() || store.removingRoleId() !== ''"
+                (click)="openUpdateDialog(role)">
+                <mat-icon svgIcon="pencil" />
+              </button>
+              <button
+                matIconButton
+                type="button"
+                aria-label="Delete role"
+                [disabled]="store.isSaving() || store.removingRoleId() !== ''"
+                (click)="openRemoveDialog(role)">
+                <mat-icon svgIcon="trash-2" />
+              </button>
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr
+            class="group relative hover:bg-on-surface-variant/4"
+            mat-row
+            *matRowDef="let row; columns: displayedColumns"></tr>
+
+          <tr class="h-32" *matNoDataRow>
+            <td class="text-center text-sm text-on-surface-variant" [attr.colspan]="displayedColumns.length">
+              No roles found.
+            </td>
+          </tr>
+        </table>
+      </div>
+    </div>
+  }
+</section>

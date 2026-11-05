@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.nx/
+.angular/
+out-tsc/
+libs/api-contracts/src/lib/schema.ts
+pnpm-lock.yaml

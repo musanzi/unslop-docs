@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "incremental": false,
+    "types": ["node", "passport", "multer", "express-session"]
+  },
+  "include": ["src/**/*.spec.ts", "vitest.config.mts", "test-setup.ts"],
+  "exclude": ["node_modules", "dist"]
+}

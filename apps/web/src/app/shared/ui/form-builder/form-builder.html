@@ -1,0 +1,179 @@
+<div class="flex flex-col gap-5">
+  <div class="flex items-center justify-between gap-4">
+    <p class="text-sm text-neutral-500">
+      {{ questionsCount() }} {{ questionsCount() === 1 ? 'question' : 'questions' }}
+    </p>
+    <button matButton="outlined" type="button" (click)="addSection()">
+      <mat-icon svgIcon="plus" />
+      Add section
+    </button>
+  </div>
+
+  @for (section of value(); track $index; let sectionIndex = $index) {
+    <mat-card appearance="outlined" class="overflow-hidden rounded-md">
+      <div class="p-5">
+        <div class="flex items-start gap-3">
+          <mat-form-field appearance="outline" class="flex-auto">
+            <mat-label>Section title</mat-label>
+            <input
+              matInput
+              type="text"
+              [value]="section.phase"
+              (input)="updateSection(sectionIndex, $any($event.target).value)" />
+            @if (!section.phase.trim()) {
+              <mat-hint class="text-red-600">The section title is required.</mat-hint>
+            }
+          </mat-form-field>
+          <button
+            matIconButton
+            type="button"
+            aria-label="Delete section"
+            matTooltip="Delete section"
+            [disabled]="value().length === 1"
+            (click)="deleteSection(sectionIndex)">
+            <mat-icon svgIcon="trash-2" />
+          </button>
+        </div>
+
+        <div
+          cdkDropList
+          class="mt-2 flex flex-col gap-4"
+          [cdkDropListData]="section.fields"
+          (cdkDropListDropped)="reorderQuestions(sectionIndex, $event)">
+          @for (question of section.fields; track $index; let questionIndex = $index) {
+            <mat-card cdkDrag appearance="outlined" class="flex flex-col gap-4 p-5 rounded-md">
+              <div class="-my-3 flex justify-center">
+                <button
+                  cdkDragHandle
+                  matIconButton
+                  type="button"
+                  class="cursor-grab active:cursor-grabbing"
+                  aria-label="Move question"
+                  matTooltip="Drag to reorder">
+                  <mat-icon svgIcon="grip-horizontal" />
+                </button>
+              </div>
+              <div class="grid gap-x-4 gap-y-6 lg:grid-cols-[minmax(0,1fr)_16rem]">
+                <mat-form-field appearance="outline">
+                  <mat-label>Question</mat-label>
+                  <input
+                    matInput
+                    type="text"
+                    [value]="question.label"
+                    (input)="updateQuestion(sectionIndex, questionIndex, { label: $any($event.target).value })" />
+                </mat-form-field>
+
+                <mat-form-field appearance="outline">
+                  <mat-label>Question type</mat-label>
+                  <mat-select
+                    [value]="question.type"
+                    (selectionChange)="updateQuestionType(sectionIndex, questionIndex, $event.value)">
+                    @for (type of questionTypes; track type.value) {
+                      <mat-option [value]="type.value">{{ type.label }}</mat-option>
+                    }
+                  </mat-select>
+                </mat-form-field>
+              </div>
+
+              <div class="grid gap-4 lg:grid-cols-2">
+                <mat-form-field appearance="outline">
+                  <mat-label>Technical name</mat-label>
+                  <input
+                    matInput
+                    type="text"
+                    [value]="question.name"
+                    (input)="updateQuestion(sectionIndex, questionIndex, { name: $any($event.target).value })" />
+                  <mat-hint>Key used in responses</mat-hint>
+                  @if (!question.name.trim()) {
+                    <mat-hint align="end" class="text-red-600">Required</mat-hint>
+                  }
+                </mat-form-field>
+              </div>
+
+              @if (hasOptions(question.type)) {
+                <div class="rounded-md bg-neutral-50 p-4">
+                  <p class="mb-3 text-sm font-medium">Answer options</p>
+                  <div class="flex flex-col gap-2">
+                    @for (option of question.options ?? []; track $index; let optionIndex = $index) {
+                      <div class="flex items-center gap-2">
+                        @if (question.type === 'checkbox') {
+                          <mat-checkbox disabled />
+                        } @else {
+                          <mat-radio-button disabled />
+                        }
+                        <mat-form-field appearance="outline" class="flex-auto">
+                          <input
+                            matInput
+                            type="text"
+                            [value]="option.label"
+                            (input)="
+                              updateOption(sectionIndex, questionIndex, optionIndex, $any($event.target).value)
+                            " />
+                          @if (!option.label.trim()) {
+                            <mat-hint class="text-red-600">The label is required.</mat-hint>
+                          }
+                        </mat-form-field>
+                        <button
+                          matIconButton
+                          type="button"
+                          aria-label="Delete option"
+                          matTooltip="Delete option"
+                          (click)="deleteOption(sectionIndex, questionIndex, optionIndex)">
+                          <mat-icon svgIcon="x" />
+                        </button>
+                      </div>
+                    }
+                  </div>
+                  <button matButton type="button" class="mt-2" (click)="addOption(sectionIndex, questionIndex)">
+                    <mat-icon svgIcon="plus" />
+                    Add option
+                  </button>
+                </div>
+              }
+
+              <mat-divider />
+              <div class="flex items-center justify-end gap-2">
+                <button
+                  matIconButton
+                  type="button"
+                  aria-label="Duplicate question"
+                  matTooltip="Duplicate"
+                  (click)="duplicateQuestion(sectionIndex, questionIndex)">
+                  <mat-icon svgIcon="copy" />
+                </button>
+                <button
+                  matIconButton
+                  type="button"
+                  aria-label="Delete question"
+                  matTooltip="Delete"
+                  (click)="deleteQuestion(sectionIndex, questionIndex)">
+                  <mat-icon svgIcon="trash-2" />
+                </button>
+                <mat-divider vertical class="mx-2 h-8" />
+                <mat-slide-toggle
+                  [checked]="question.required ?? false"
+                  (change)="updateQuestion(sectionIndex, questionIndex, { required: $event.checked })">
+                  Obligatoire
+                </mat-slide-toggle>
+              </div>
+            </mat-card>
+          } @empty {
+            <div class="rounded-md border border-dashed border-neutral-300 px-4 py-10 text-center">
+              <p class="text-sm text-neutral-500">This section contains no questions.</p>
+            </div>
+          }
+        </div>
+
+        <button matButton="filled" class="mt-4" type="button" (click)="addQuestion(sectionIndex)">
+          <mat-icon svgIcon="plus" />
+          Add question
+        </button>
+      </div>
+    </mat-card>
+  } @empty {
+    <div class="rounded-xl border border-dashed border-neutral-300 px-5 py-12 text-center">
+      <p class="text-sm text-neutral-500">Start by adding a section.</p>
+      <button matButton="filled" class="mt-4" type="button" (click)="addSection()">Add section</button>
+    </div>
+  }
+</div>

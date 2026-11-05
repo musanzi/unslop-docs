@@ -1,0 +1,89 @@
+@for (section of renderedSections(); track section.phase) {
+  <fieldset class="space-y-6">
+    <legend class="mb-4 text-base font-bold text-gray-950">{{ section.phase }}</legend>
+
+    @for (question of section.questions; track question.field.name) {
+      @let answer = answerForm.answers[question.answerIndex];
+      <div class="mb-6">
+        @switch (question.field.type) {
+          @case ('textarea') {
+            <mat-form-field appearance="outline" class="w-full">
+              <mat-label>{{ question.field.label }}</mat-label>
+              <textarea matInput rows="5" [id]="question.field.name" [formField]="answer.value"></textarea>
+              @if (answer.value().touched() && answer.value().errors().length) {
+                <mat-error class="mt-2 text-sm">{{ answer.value().errors()[0].message }}</mat-error>
+              }
+            </mat-form-field>
+          }
+          @case ('select') {
+            <mat-form-field appearance="outline" class="w-full">
+              <mat-label>{{ question.field.label }}</mat-label>
+              <mat-select [id]="question.field.name" [formField]="answer.value">
+                <mat-option value="">Select an option</mat-option>
+                @for (option of question.field.options ?? []; track option.value) {
+                  <mat-option [value]="option.value">{{ option.label }}</mat-option>
+                }
+              </mat-select>
+              @if (answer.value().touched() && answer.value().errors().length) {
+                <mat-error class="mt-2 text-sm">{{ answer.value().errors()[0].message }}</mat-error>
+              }
+            </mat-form-field>
+          }
+          @case ('radio') {
+            <fieldset>
+              <legend class="mb-3 font-semibold text-gray-800">
+                {{ question.field.label }}
+                @if (question.field.required) {
+                  <span class="text-red-600" aria-label="required">*</span>
+                }
+              </legend>
+              <mat-radio-group class="flex flex-col gap-3" [id]="question.field.name" [formField]="answer.value">
+                @for (option of question.field.options ?? []; track option.value) {
+                  <mat-radio-button [value]="option.value">{{ option.label }}</mat-radio-button>
+                }
+              </mat-radio-group>
+              @if (answer.value().touched() && answer.value().errors().length) {
+                <mat-error class="mt-2 text-sm">{{ answer.value().errors()[0].message }}</mat-error>
+              }
+            </fieldset>
+          }
+          @case ('checkbox') {
+            <fieldset [id]="question.field.name">
+              <legend class="mb-3 font-semibold text-gray-800">
+                {{ question.field.label }}
+                @if (question.field.required) {
+                  <span class="text-red-600" aria-label="required">*</span>
+                }
+              </legend>
+              <div class="flex flex-col gap-3">
+                @for (option of answer.options; track $index) {
+                  <mat-checkbox [formField]="option.checked">
+                    {{ option.label().value() }}
+                  </mat-checkbox>
+                }
+              </div>
+              @if (answer.options().touched() && answer.options().errors().length) {
+                <mat-error class="mt-2 text-sm">{{ answer.options().errors()[0].message }}</mat-error>
+              }
+            </fieldset>
+          }
+          @default {
+            <mat-form-field appearance="outline" class="w-full">
+              <mat-label>{{ question.field.label }}</mat-label>
+              <input
+                matInput
+                [id]="question.field.name"
+                [type]="fieldInputType(question.field.type)"
+                [formField]="answer.value" />
+              @if (answer.value().touched() && answer.value().errors().length) {
+                <mat-error class="mt-2 text-sm">{{ answer.value().errors()[0].message }}</mat-error>
+              }
+            </mat-form-field>
+          }
+        }
+      </div>
+    }
+  </fieldset>
+} @empty {
+  <p class="rounded-md bg-gray-50 px-4 py-5 text-gray-600">This application contains no additional questions.</p>
+}

@@ -1,0 +1,5 @@
+<div class="min-h-screen bg-white text-neutral-950">
+  <landing-hero [isAuthenticated]="!!authStore.user()" (signOut)="signOut()" />
+  <landing-features />
+  <landing-cta [isAuthenticated]="!!authStore.user()" />
+</div>

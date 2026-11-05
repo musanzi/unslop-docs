@@ -1,0 +1,85 @@
+<div class="mx-auto flex w-full max-w-96 flex-col sm:min-w-80">
+  <a
+    href="/"
+    class="mb-4 inline-flex items-center cursor-pointer text-primary-700 self-start text-sm font-medium underline-offset-4 hover:underline">
+    <mat-icon class="mr-1 size-4" svgIcon="arrow-left"></mat-icon>
+    Back home
+  </a>
+  <div class="text-4xl leading-tight font-extrabold tracking-tight">Sign in</div>
+  <div class="mt-0.5 flex items-baseline font-medium">
+    <div class="text-neutral-500">Do not have an account?</div>
+    <a class="ml-1 underline underline-offset-4 hover:underline text-primary-600" routerLink="/auth/sign-up">
+      Sign up
+    </a>
+  </div>
+
+  <form class="mt-8" (submit)="signIn($event)">
+    <div class="flex flex-col gap-y-4">
+      <mat-form-field class="w-full">
+        <mat-label>Email address</mat-label>
+        <input id="email" matInput [formField]="signInForm.email" />
+        @if ((signInForm.email().touched() || signInForm.email().dirty()) && signInForm.email().errors()[0]; as error) {
+          <mat-error>{{ error.message }}</mat-error>
+        }
+      </mat-form-field>
+
+      <mat-form-field appearance="fill" class="w-full">
+        <mat-label>Password</mat-label>
+        <input id="password" matInput type="password" [formField]="signInForm.password" #passwordField />
+        <button
+          matIconButton
+          type="button"
+          (click)="
+            passwordField.type === 'password' ? (passwordField.type = 'text') : (passwordField.type = 'password')
+          "
+          matSuffix>
+          @if (passwordField.type === 'password') {
+            <mat-icon class="size-5" svgIcon="eye"></mat-icon>
+          }
+          @if (passwordField.type === 'text') {
+            <mat-icon class="size-5" svgIcon="eye-off"></mat-icon>
+          }
+        </button>
+        @if (
+          (signInForm.password().touched() || signInForm.password().dirty()) && signInForm.password().errors()[0];
+          as error
+        ) {
+          <mat-error>{{ error.message }}</mat-error>
+        }
+      </mat-form-field>
+    </div>
+
+    <div class="mt-4 text-right text-sm font-medium">
+      <a class="underline underline-offset-4 hover:underline text-primary-600" routerLink="/auth/forgot-password">
+        Forgot password?
+      </a>
+    </div>
+
+    @if (successMessage(); as message) {
+      <div class="mt-4 rounded border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
+        {{ message }}
+      </div>
+    }
+    @if (authStore.error(); as error) {
+      <message class="mt-4" [message]="error" (dismissed)="authStore.clearError()" />
+    }
+
+    <button
+      type="submit"
+      matButton="filled"
+      class="mt-6 w-full"
+      [disabled]="signInForm().invalid() || authStore.isLoading()">
+      {{ authStore.isLoading() ? 'Signing in...' : 'Sign in' }}
+    </button>
+
+    <div class="mt-8 flex items-center gap-x-4">
+      <mat-divider class="flex-auto" />
+      <div class="text-neutral-500">Or continue with</div>
+      <mat-divider class="flex-auto" />
+    </div>
+
+    <div class="mt-8 flex items-center space-x-4">
+      <a matButton="outlined" class="flex-auto" [href]="googleSignInUrl">Google</a>
+    </div>
+  </form>
+</div>

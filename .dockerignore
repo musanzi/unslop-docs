@@ -1,0 +1,16 @@
+**/node_modules
+.pnpm-store
+dist
+out-tsc
+.angular
+.nx
+.git
+.husky
+**/.env
+**/.env.*
+!**/.env.example
+**/uploads
+**/*.log
+.DS_Store
+.idea
+.vscode

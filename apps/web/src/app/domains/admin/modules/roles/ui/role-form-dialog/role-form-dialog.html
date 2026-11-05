@@ -1,0 +1,20 @@
+<h2 mat-dialog-title>{{ data.role ? 'Edit role' : 'Create role' }}</h2>
+
+<form (submit)="onSubmit(); $event.preventDefault()">
+  <mat-dialog-content>
+    <mat-form-field appearance="outline" class="w-full" subscriptSizing="dynamic">
+      <mat-label>Name</mat-label>
+      <input matInput [formField]="roleForm.name" autocomplete="off" />
+      @if (roleForm.name().touched() && roleForm.name().errors().length) {
+        <mat-error>{{ roleForm.name().errors()[0].message }}</mat-error>
+      }
+    </mat-form-field>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button matButton type="button" [mat-dialog-close]="undefined">Cancel</button>
+    <button matButton="filled" type="submit" [disabled]="roleForm().invalid()">
+      {{ data.role ? 'Save' : 'Create' }}
+    </button>
+  </mat-dialog-actions>
+</form>

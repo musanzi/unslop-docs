@@ -1,0 +1,56 @@
+name: unslop-docs
+services:
+  api:
+    build:
+      context: .
+      target: api-production
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      UPLOADS_DIR: /app/apps/api/uploads
+    ports:
+      - ${API_PORT:-8000}:${API_PORT}
+    volumes:
+      - uploads_data:/app/apps/api/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+  web:
+    build:
+      context: .
+      target: web-production
+    restart: unless-stopped
+    env_file: ./.env
+    ports:
+      - ${WEB_PORT:-4200}:${WEB_PORT}
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USERNAME:?DB_USERNAME is required}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      POSTGRES_DB: ${DB_NAME:?DB_NAME is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+volumes:
+  postgres_data:
+  redis_data:
+  uploads_data:

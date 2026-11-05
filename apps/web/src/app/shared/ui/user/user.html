@@ -1,0 +1,58 @@
+<button
+  class="flex cursor-pointer items-center gap-x-3 p-2 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+  [class]="compact() ? 'rounded-full text-neutral-950' : 'w-full rounded-md bg-on-primary/15 text-on-primary'"
+  type="button"
+  aria-label="Ouvrir le menu utilisateur"
+  [matMenuTriggerFor]="userMenu"
+  #menuTrigger="matMenuTrigger">
+  <img
+    class="rounded-full object-cover ring-2 ring-primary"
+    [class]="compact() ? 'size-8' : 'size-9'"
+    [src]="avatarImageUrl()"
+    alt="Photo de profil" />
+  @if (!compact()) {
+    <div class="flex min-w-0 flex-auto flex-col select-none">
+      <div class="truncate font-medium text-white">
+        {{ user()?.name }}
+      </div>
+      <div class="truncate text-on-primary/90">
+        {{ user()?.email }}
+      </div>
+    </div>
+  }
+  <mat-icon
+    class="size-4 transition-transform"
+    [class.rotate-180]="compact() && menuTrigger.menuOpen"
+    [svgIcon]="compact() ? 'chevron-down' : 'ellipsis-vertical'" />
+</button>
+
+<mat-menu
+  class="min-w-60 rounded-md bg-white text-neutral-950"
+  xPosition="before"
+  [yPosition]="compact() ? 'below' : 'above'"
+  [overlapTrigger]="false"
+  #userMenu="matMenu">
+  <button
+    class="py-2 text-neutral-950 [&>span]:flex [&>span]:items-center"
+    mat-menu-item
+    type="button"
+    (click)="editProfile.emit()">
+    <img class="size-9 rounded-full object-cover ring-2 ring-primary" [src]="avatarImageUrl()" alt="Photo de profil" />
+    <div class="ml-3 flex min-w-0 flex-auto flex-col select-none">
+      <div class="truncate font-medium text-neutral-950">
+        {{ user()?.name }}
+      </div>
+      <div class="truncate text-xs text-neutral-600">{{ user()?.email }}</div>
+    </div>
+  </button>
+  <mat-divider />
+  <button class="text-neutral-950" mat-menu-item type="button" (click)="editProfile.emit()">
+    <mat-icon svgIcon="user-round" />
+    Mon profil
+  </button>
+  <mat-divider />
+  <button class="text-neutral-950" mat-menu-item (click)="signedOut.emit()">
+    <mat-icon svgIcon="log-out" />
+    Se déconnecter
+  </button>
+</mat-menu>

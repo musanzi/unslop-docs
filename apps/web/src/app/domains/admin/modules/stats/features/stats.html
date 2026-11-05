@@ -1,0 +1,41 @@
+<div class="px-10 py-16">
+  @if (statsResource.isLoading()) {
+    <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3" aria-label="Loading statistics">
+      @for (item of [1, 2, 3, 4, 5]; track item) {
+        <mat-card appearance="filled" class="animate-pulse">
+          <mat-card-header>
+            <div class="h-4 w-28 rounded bg-surface-container-high"></div>
+          </mat-card-header>
+          <mat-card-content>
+            <div class="h-12 w-20 rounded bg-surface-container-high"></div>
+            <div class="mt-2 h-4 w-40 rounded bg-surface-container"></div>
+          </mat-card-content>
+        </mat-card>
+      }
+    </div>
+  } @else if (statsResource.hasValue()) {
+    <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+      @for (stat of statsResource.value(); track stat.label) {
+        <mat-card appearance="filled">
+          <mat-card-header>
+            <div class="font-medium tracking-tight">{{ stat.label }}</div>
+          </mat-card-header>
+          <mat-card-content>
+            <div class="text-5xl font-semibold">
+              {{ stat.total | number }}
+            </div>
+          </mat-card-content>
+        </mat-card>
+      }
+    </div>
+  } @else {
+    <div class="flex min-h-64 flex-col items-center justify-center gap-4 text-center">
+      <mat-icon class="text-on-surface-variant" svgIcon="triangle-alert" />
+      <div>
+        <div class="font-medium">Unable to load statistics</div>
+        <div class="mt-1 text-sm whitespace-pre-line text-on-surface-variant">{{ errorMessage() }}</div>
+      </div>
+      <button matButton="outlined" type="button" (click)="statsResource.reload()">Try again</button>
+    </div>
+  }
+</div>

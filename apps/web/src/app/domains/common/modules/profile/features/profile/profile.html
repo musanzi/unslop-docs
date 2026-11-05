@@ -1,0 +1,158 @@
+<section
+  class="flex max-h-[calc(100dvh-2rem)] min-h-0 flex-col overflow-hidden bg-surface"
+  [class]="ref ? '' : 'mx-auto my-6 w-[calc(100%-2rem)] max-w-xl rounded-md border'">
+  <header class="flex shrink-0 items-center justify-between gap-4 border-b p-4 sm:p-6">
+    @if (ref) {
+      <h2 id="profile-dialog-heading" tabindex="-1" class="text-xl font-semibold">Mon profil</h2>
+    } @else {
+      <h1 class="text-xl font-semibold">Mon profil</h1>
+    }
+    @if (ref) {
+      <button matIconButton type="button" aria-label="Fermer le profil" (click)="ref.close()" [disabled]="isSaving()">
+        <mat-icon svgIcon="x" />
+      </button>
+    }
+  </header>
+  <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
+    <mat-tab-group
+      animationDuration="0ms"
+      mat-align-tabs="start"
+      [mat-stretch-tabs]="false"
+      [disableRipple]="true"
+      [selectedIndex]="selectedTabIndex()"
+      (selectedIndexChange)="onTabChange($event)">
+      <mat-tab [disabled]="isSaving()">
+        <ng-template mat-tab-label>
+          <mat-icon svgIcon="user-round" />
+          Profil
+        </ng-template>
+        <div class="px-1 pt-6 pb-1">
+          <div class="relative mb-6 size-24">
+            <img
+              class="size-full rounded-full object-cover ring-2 ring-primary"
+              [src]="profileImageUrl()"
+              alt="Photo de profil" />
+            <input
+              #profileImageInput
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              (change)="onProfileImageSelected($event)"
+              [disabled]="isSaving()"
+              hidden />
+            <button
+              matIconButton
+              type="button"
+              class="absolute -right-1 -bottom-1 rounded-full bg-surface text-primary shadow-sm ring-2 ring-surface transition-transform duration-200 [--mat-icon-button-hover-state-layer-opacity:0] enabled:hover:scale-105 motion-reduce:transform-none motion-reduce:transition-none"
+              aria-label="Changer la photo de profil"
+              (click)="profileImageInput.click()"
+              [disabled]="isSaving()">
+              <mat-icon
+                [svgIcon]="store.isUpdatingProfileImage() ? 'loader-circle' : 'camera'"
+                [class.animate-spin]="store.isUpdatingProfileImage()" />
+            </button>
+          </div>
+          @if (store.isUpdatingProfileImage()) {
+            <p role="status" class="sr-only">Envoi de la photo de profil…</p>
+          }
+          @if (store.profileImageError()) {
+            <message
+              class="mb-4"
+              [message]="store.profileImageError()"
+              (dismissed)="store.clearProfileImageMessage()" />
+          }
+          <form [id]="profileFormId" class="flex flex-col gap-4" (submit)="onUpdateProfile($event)">
+            <mat-form-field subscriptSizing="dynamic">
+              <mat-label>Nom</mat-label>
+              <input matInput [formField]="profileForm.name" autocomplete="name" />
+              @if (profileForm.name().touched() && profileForm.name().errors()[0]; as error) {
+                <mat-error>{{ error.message }}</mat-error>
+              }
+            </mat-form-field>
+            <mat-form-field subscriptSizing="dynamic">
+              <mat-label>Adresse e-mail</mat-label>
+              <input matInput type="email" [formField]="profileForm.email" autocomplete="email" />
+              @if (profileForm.email().touched() && profileForm.email().errors()[0]; as error) {
+                <mat-error>{{ error.message }}</mat-error>
+              }
+            </mat-form-field>
+            @if (!ref && store.profileUpdated()) {
+              <p role="status" class="text-sm text-primary">Vos informations ont bien été enregistrées.</p>
+            }
+            @if (store.profileError()) {
+              <message [message]="store.profileError()" (dismissed)="store.clearProfileMessage()" />
+            }
+          </form>
+        </div>
+      </mat-tab>
+      <mat-tab [disabled]="isSaving()">
+        <ng-template mat-tab-label>
+          <mat-icon svgIcon="lock-keyhole" />
+          Mot de passe
+        </ng-template>
+        <div class="px-1 pt-6 pb-1">
+          <form [id]="passwordFormId" class="flex flex-col gap-4" (submit)="onUpdatePassword($event)">
+            <mat-form-field subscriptSizing="dynamic">
+              <mat-label>Nouveau mot de passe</mat-label>
+              <input
+                matInput
+                [type]="hidePassword ? 'password' : 'text'"
+                [formField]="passwordForm.password"
+                autocomplete="new-password" />
+              <button
+                matIconButton
+                matSuffix
+                type="button"
+                [attr.aria-label]="hidePassword ? 'Afficher le mot de passe' : 'Masquer le mot de passe'"
+                (click)="hidePassword = !hidePassword">
+                <mat-icon [svgIcon]="hidePassword ? 'eye' : 'eye-off'" />
+              </button>
+              @if (passwordForm.password().touched() && passwordForm.password().errors()[0]; as error) {
+                <mat-error>{{ error.message }}</mat-error>
+              }
+            </mat-form-field>
+            <mat-form-field subscriptSizing="dynamic">
+              <mat-label>Confirmer le mot de passe</mat-label>
+              <input
+                matInput
+                [type]="hidePasswordConfirmation ? 'password' : 'text'"
+                [formField]="passwordForm.confirmPassword"
+                autocomplete="new-password" />
+              <button
+                matIconButton
+                matSuffix
+                type="button"
+                [attr.aria-label]="hidePasswordConfirmation ? 'Afficher la confirmation' : 'Masquer la confirmation'"
+                (click)="hidePasswordConfirmation = !hidePasswordConfirmation">
+                <mat-icon [svgIcon]="hidePasswordConfirmation ? 'eye' : 'eye-off'" />
+              </button>
+              @if (passwordForm.confirmPassword().touched() && passwordForm.confirmPassword().errors()[0]; as error) {
+                <mat-error>{{ error.message }}</mat-error>
+              }
+            </mat-form-field>
+            @if (!ref && store.passwordUpdated()) {
+              <p role="status" class="text-sm text-primary">Votre nouveau mot de passe est maintenant actif.</p>
+            }
+            @if (store.passwordError()) {
+              <message [message]="store.passwordError()" (dismissed)="store.clearPasswordMessage()" />
+            }
+          </form>
+        </div>
+      </mat-tab>
+    </mat-tab-group>
+  </div>
+  <footer class="admin-actions shrink-0 justify-end border-t p-4 sm:p-6">
+    @if (ref) {
+      <button matButton="outlined" type="button" class="admin-action" [disabled]="isSaving()" (click)="ref.close()">
+        Annuler
+      </button>
+    }
+    <button
+      matButton="filled"
+      class="admin-action"
+      type="submit"
+      [attr.form]="editingPassword() ? passwordFormId : profileFormId"
+      [disabled]="isSaving() || (editingPassword() ? passwordForm().invalid() : profileForm().invalid())">
+      {{ isSaving() ? 'Enregistrement…' : 'Enregistrer' }}
+    </button>
+  </footer>
+</section>
