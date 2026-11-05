@@ -1,4 +1,4 @@
-import { ConflictException, HttpException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { HttpException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { isUUID } from 'class-validator';
 import { DataSource } from 'typeorm';
@@ -11,9 +11,6 @@ export class DeleteDocument {
     public readonly id: string
   ) {}
 }
-
-export const activeDeletionRefusal =
-  'This document is still being processed. Wait until it finishes or fails before deleting it.';
 
 @CommandHandler(DeleteDocument)
 export class DeleteDocumentHandler implements ICommandHandler<DeleteDocument, void> {
@@ -31,8 +28,6 @@ export class DeleteDocumentHandler implements ICommandHandler<DeleteDocument, vo
           [id, ownerId]
         );
         if (!document) throw new NotFoundException('Document not found.');
-        if (document.status === 'queued' || document.status === 'processing')
-          throw new ConflictException(activeDeletionRefusal);
         for (const key of [document.originalKey, document.revisedKey]) if (key) await this.storage.remove(key);
         await manager.query('DELETE FROM document WHERE id = $1', [id]);
       });

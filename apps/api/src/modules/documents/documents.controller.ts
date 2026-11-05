@@ -163,11 +163,10 @@ export class DocumentsController extends AbstractController {
   @ApiOperation({
     summary: 'Delete your document and everything stored for it',
     description:
-      'Removes the record, original, preview, assessments, revised DOCX, revision notices and processing checkpoints. Usage records stay unchanged, so deleting a completed document never restores allowance. Once the document is gone, repeating the request returns the same 404 as a document that never existed.'
+      'Removes the record, original, preview, assessments, revised DOCX, revision notices and processing checkpoints in any state. A queued or processing document stops: no later result is saved, an active rewrite reservation is released once, and the worker sends no further requests for it, but text already sent to DeepSeek may still be processed there and its answer is discarded. Usage records stay unchanged, so deleting a completed document never restores allowance. Once the document is gone, repeating the request returns the same 404 as a document that never existed.'
   })
   @ApiNoContentResponse({ description: 'Document and its stored files are deleted' })
   @ApiNotFoundResponse({ description: 'Document does not exist, belongs to another user, or was already deleted' })
-  @ApiConflictResponse({ description: 'Document is queued or processing; wait until it finishes or fails' })
   @ApiServiceUnavailableResponse({
     description: 'A stored file could not be removed; the record remains so the deletion can be repeated'
   })

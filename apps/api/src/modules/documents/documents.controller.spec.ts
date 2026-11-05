@@ -415,23 +415,31 @@ describe('Private documents HTTP', () => {
     });
   }
 
-  it('deletes an owned idle document with every stored file and refuses strangers, repeats and active work', async () => {
-    const { data } = await (await upload(await docxFixture())).json();
-    expect((await remove(data.id, '')).status).toBe(401);
-    const active = await remove(data.id);
-    expect(active.status).toBe(409);
-    expect(await active.json()).toMatchObject({
-      message: 'This document is still being processed. Wait until it finishes or fails before deleting it.'
-    });
+  it('deletes a queued or processing document at once with every stored file', async () => {
+    const { data: queued } = await (await upload(await docxFixture())).json();
+    expect((await remove(queued.id, '')).status).toBe(401);
+    expect((await remove(queued.id)).status).toBe(204);
+    expect(await readdir(join(root, 'private'))).toEqual([]);
+    const { data: active } = await (await upload(await docxFixture())).json();
+    const revisedKey = `${randomUUID()}.docx`;
+    await writeFile(join(root, 'private', revisedKey), 'revised bytes');
     Object.assign(records[0], {
       status: 'processing',
       phase: 'rewrite',
       assessment,
       preview,
       strength: 50,
-      processingStage: 'editing'
+      processingStage: 'final-assessment',
+      revisedKey,
+      revisedSize: 13
     });
-    expect((await remove(data.id)).status).toBe(409);
+    expect((await remove(active.id)).status).toBe(204);
+    expect(await readdir(join(root, 'private'))).toEqual([]);
+    expect(await (await list()).json()).toMatchObject({ data: { items: [], total: 0 } });
+  });
+
+  it('deletes an owned idle document with every stored file and refuses strangers and repeats', async () => {
+    const { data } = await (await upload(await docxFixture())).json();
     const revisedKey = `${randomUUID()}.docx`;
     await writeFile(join(root, 'private', revisedKey), 'revised bytes');
     Object.assign(records[0], { status: 'completed', processingStage: null, revisedKey, revisedSize: 13 });

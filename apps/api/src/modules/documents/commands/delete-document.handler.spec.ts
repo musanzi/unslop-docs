@@ -188,13 +188,13 @@ describe('Delete a stored document', () => {
     ['processing', 'assessment'],
     ['queued', 'rewrite'],
     ['processing', 'rewrite']
-  ])('refuses to delete a %s %s document until active deletion lands', async (status, phase) => {
+  ])('deletes a %s %s document, releasing its rewrite reservation once', async (status, phase) => {
     const document = await stored('queued', phase);
     if (status === 'processing')
       await query(
         `UPDATE document SET status = 'processing', "claimToken" = $2, "processingDeadline" = now() + interval '1 hour',
-          "leaseExpiresAt" = now() + interval '30 seconds' WHERE id = $1`,
-        [document.id, randomUUID()]
+          "leaseExpiresAt" = now() + interval '30 seconds', "processingStage" = $3 WHERE id = $1`,
+        [document.id, randomUUID(), phase === 'assessment' ? 'assessing' : 'editing']
       );
     if (phase === 'rewrite')
       await query(
@@ -202,14 +202,34 @@ describe('Delete a stored document', () => {
         VALUES ($1, $2, $3, now(), date_trunc('month', now() AT TIME ZONE 'UTC')::date, 'active')`,
         [randomUUID(), owner, document.id]
       );
-    await expect(remove(document.id)).rejects.toMatchObject({
-      status: 409,
-      message: 'This document is still being processed. Wait until it finishes or fails before deleting it.'
-    });
-    expect(await rows()).toEqual([{ id: document.id }]);
-    expect(files.has(document.originalKey)).toBe(true);
+    await remove(document.id);
+    await expect(remove(document.id)).rejects.toMatchObject({ status: 404 });
+    expect(await rows()).toEqual([]);
+    expect(files.size).toBe(0);
     expect(await query('SELECT state FROM allowance_reservation')).toEqual(
-      phase === 'rewrite' ? [{ state: 'active' }] : []
+      phase === 'rewrite' ? [{ state: 'released' }] : []
     );
+    expect(await allowance.read({ query }, owner)).toMatchObject({ used: 0, reserved: 0, remaining: 3 });
+  });
+
+  it('removes the intermediate revision saved before a final assessment and releases the slot', async () => {
+    const document = await stored('queued', 'rewrite');
+    const revisedKey = `${randomUUID()}.docx`;
+    files.set(revisedKey, Buffer.from('revised'));
+    await query(
+      `UPDATE document SET status = 'processing', "claimToken" = $2, "processingDeadline" = now() + interval '1 hour',
+        "leaseExpiresAt" = now() + interval '30 seconds', "processingStage" = 'final-assessment',
+        "revisedKey" = $3, "revisedSize" = 7, "revisionNotices" = $4::jsonb WHERE id = $1`,
+      [document.id, randomUUID(), revisedKey, JSON.stringify(notices)]
+    );
+    await query(
+      `INSERT INTO allowance_reservation (id, "ownerId", "documentId", "reservedAt", month, state)
+      VALUES ($1, $2, $3, now(), date_trunc('month', now() AT TIME ZONE 'UTC')::date, 'active')`,
+      [randomUUID(), owner, document.id]
+    );
+    await remove(document.id);
+    expect(await rows()).toEqual([]);
+    expect(files.size).toBe(0);
+    expect(await query('SELECT state FROM allowance_reservation')).toEqual([{ state: 'released' }]);
   });
 });
