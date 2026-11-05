@@ -10,6 +10,7 @@ import {
   validateChunkResult,
   validateRevisedDocx
 } from './revise-docx';
+import { RevisionNotices } from './revision-notices';
 
 export type DocumentProvider = AssessmentProvider & EditProvider;
 export type ProcessingStage = 'assessing' | 'editing' | 'validating';
@@ -18,7 +19,8 @@ const DocumentState = Annotation.Root({
   source: Annotation<DocxDocument>(),
   assessment: Annotation<WritingAssessment>(),
   results: Annotation<ReadonlyMap<string, readonly EditSpan[]>>(),
-  revised: Annotation<Buffer>()
+  revised: Annotation<Buffer>(),
+  notices: Annotation<RevisionNotices>()
 });
 
 export function createDocumentWorkflow(
@@ -52,7 +54,8 @@ ${skill}`;
     .addNode('construct', async (state, config: RunnableConfig) => {
       config.signal?.throwIfAborted();
       await stage('validating');
-      return { revised: await constructRevisedDocx(state.source, state.results) };
+      const { bytes, notices } = await constructRevisedDocx(state.source, state.results);
+      return { revised: bytes, notices };
     })
     .addNode('validate', async (state, config: RunnableConfig) => {
       await validateRevisedDocx(state.source, state.revised);

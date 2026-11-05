@@ -1,10 +1,12 @@
 import { createHash } from 'node:crypto';
 import { ZipFile } from 'yazl';
 import { DocxDocument, DocxSource } from './docx-model';
+import { isValidationCheck, KeptPassage, passageExcerpt, RevisionNotices, uneditedElements } from './revision-notices';
 import {
   paragraphs,
   requirePreserved,
   RevisionValidationError,
+  ValidationCheck,
   validateRevisionModels,
   validateTextPreservation
 } from './revision-validation';
@@ -13,6 +15,13 @@ import { readDocx } from './validate-docx';
 export interface EditSpan {
   readonly id: string;
   readonly text: string;
+}
+export interface RevisedSpan extends EditSpan {
+  readonly kept?: ValidationCheck;
+}
+export interface RevisedDocx {
+  readonly bytes: Buffer;
+  readonly notices: RevisionNotices;
 }
 export interface EditChunk {
   readonly id: string;
@@ -80,7 +89,36 @@ export function planDocxEdits(document: DocxDocument): readonly EditChunk[] {
   return chunks;
 }
 
-export function validateChunkResult(chunk: EditChunk, raw: unknown): readonly EditSpan[] {
+function usableText(source: string, text: string) {
+  return (
+    text.length <= source.length * 2 + 200 &&
+    (!source.trim() || !!text.trim()) &&
+    [...text].every((character) => {
+      const code = character.codePointAt(0);
+      return (code >= 32 || [9, 10, 13].includes(code)) && ![65534, 65535].includes(code);
+    }) &&
+    !/[\uD800-\uDFFF]/u.test(text)
+  );
+}
+
+function restoreSurroundingWhitespace(source: string, text: string) {
+  return /^\s*/.exec(source)[0] + text.trim() + /\s*$/.exec(source)[0];
+}
+
+function revisedSpan(source: EditSpan, text: string, kept: unknown): RevisedSpan {
+  if (text === source.text) return isValidationCheck(kept) ? { id: source.id, text, kept } : { id: source.id, text };
+  if (!usableText(source.text, text)) return { id: source.id, text: source.text, kept: 'response' };
+  const restored = restoreSurroundingWhitespace(source.text, text);
+  try {
+    validateTextPreservation(source.text, restored);
+  } catch (error) {
+    if (error instanceof RevisionValidationError) return { id: source.id, text: source.text, kept: error.check };
+    throw error;
+  }
+  return { id: source.id, text: restored };
+}
+
+export function validateChunkResult(chunk: EditChunk, raw: unknown): readonly RevisedSpan[] {
   requirePreserved(!!raw && typeof raw === 'object' && 'edits' in raw && Array.isArray(raw.edits), 'response');
   const edits: unknown[] = raw.edits;
   requirePreserved(edits.length === chunk.spans.length, 'structure');
@@ -91,36 +129,21 @@ export function validateChunkResult(chunk: EditChunk, raw: unknown): readonly Ed
     );
     const source = chunk.spans[index];
     requirePreserved(edit.id === source.id, 'structure');
-    const text = edit.text;
-    requirePreserved(
-      text.length <= source.text.length * 2 + 200 &&
-        [...text].every((character) => {
-          const code = character.codePointAt(0);
-          return (code >= 32 || [9, 10, 13].includes(code)) && ![65534, 65535].includes(code);
-        }) &&
-        !/[\uD800-\uDFFF]/u.test(text),
-      'response'
-    );
-    requirePreserved(
-      /^\s*/.exec(text)[0] === /^\s*/.exec(source.text)[0] && /\s*$/.exec(text)[0] === /\s*$/.exec(source.text)[0],
-      'formatting'
-    );
-    validateTextPreservation(source.text, text);
-    return { id: source.id, text };
+    return revisedSpan(source, edit.text, 'kept' in edit ? edit.kept : undefined);
   });
 }
 
 export async function constructRevisedDocx(
   document: DocxDocument,
   results: ReadonlyMap<string, readonly EditSpan[]>
-): Promise<Buffer> {
+): Promise<RevisedDocx> {
   const plan = planDocxEdits(document);
   requirePreserved(results.size === plan.length, 'response');
-  const edits = new Map(
-    plan
-      .flatMap((chunk) => validateChunkResult(chunk, { edits: results.get(chunk.id) }))
-      .map((span) => [span.id, span.text])
-  );
+  const spans = plan.flatMap((chunk) => validateChunkResult(chunk, { edits: results.get(chunk.id) }));
+  const edits = new Map(spans.map((span) => [span.id, span.text]));
+  const keptPassages: KeptPassage[] = spans
+    .filter((span) => span.kept)
+    .map((span) => ({ check: span.kept, span: span.id, excerpt: passageExcerpt(span.text) }));
   const nodes = new Map<number, { source: DocxSource; contentStart: number; text: string }>();
   for (const span of sourceSpans(document)) {
     const node = nodes.get(span.source.start) ?? { source: span.source, contentStart: span.contentStart, text: '' };
@@ -152,7 +175,7 @@ export async function constructRevisedDocx(
     else zip.addBuffer(document.readPart(part.name), part.name);
   }
   zip.end();
-  return bytes;
+  return { bytes: await bytes, notices: { keptPassages, uneditedElements: uneditedElements(document) } };
 }
 
 export async function validateRevisedDocx(source: DocxDocument, bytes: Buffer): Promise<void> {

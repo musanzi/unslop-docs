@@ -33,7 +33,7 @@ describe('Validated revised DOCX', () => {
 });
 
 import { revisionFixture, faithfulRevisionProvider, revisionPassages } from '@api/shared/testing/revision-fixtures';
-import { constructRevisedDocx, planDocxEdits, validateRevisedDocx } from './revise-docx';
+import { constructRevisedDocx, planDocxEdits, validateChunkResult, validateRevisedDocx } from './revise-docx';
 import { RevisionValidationError } from './revision-validation';
 import { ZipFile } from 'yazl';
 
@@ -97,15 +97,76 @@ describe('Revision preservation corpus', () => {
     ['fact', '5 March', '5 April'],
     ['fact', 'https://example.org/study', 'https://example.org/other'],
     ['language', languageSamples.english, languageSamples.french]
-  ])('rejects a provider edit that fails %s preservation', async (check, before, after) => {
+  ])('keeps the original passage with a notice when an edit fails %s preservation', async (check, before, after) => {
+    const passage = check === 'language' ? languageSamples.english : revisionPassages.english;
+    const source = await readDocx(await readerFixture(textParagraph(passage) + textParagraph(revisionPassages.french)));
+    const provider = faithfulRevisionProvider();
+    provider.edit = async (_system, chunk) => ({
+      edits: chunk.spans.map(({ id, text }, index) => ({
+        id,
+        text: index === 0 ? text.replace(before, after) : text.replace('Dans le but de', 'Pour')
+      }))
+    });
+    const result = await createDocumentWorkflow(provider, 'rules').invoke({ source });
+    expect((await readDocx(result.revised)).text).toBe(
+      `${passage}\n${revisionPassages.french.replace('Dans le but de', 'Pour')}`
+    );
+    expect(result.notices).toEqual({
+      keptPassages: [{ check, span: planDocxEdits(source)[0].spans[0].id, excerpt: `${passage.slice(0, 120)}…` }],
+      uneditedElements: []
+    });
+  });
+
+  it('keeps a passage whose edit is empty, oversized or garbled and edits the rest', async () => {
     const source = await readDocx(
-      await readerFixture(textParagraph(check === 'language' ? languageSamples.english : revisionPassages.english))
+      await readerFixture(
+        textParagraph('In order to begin, the first paragraph stays.') +
+          textParagraph('In order to continue, the second paragraph changes.') +
+          textParagraph('In order to end, the third paragraph stays.')
+      )
     );
     const provider = faithfulRevisionProvider();
     provider.edit = async (_system, chunk) => ({
-      edits: chunk.spans.map(({ id, text }) => ({ id, text: text.replace(before, after) }))
+      edits: chunk.spans.map(({ id, text }, index) => ({
+        id,
+        text: index === 0 ? '' : index === 2 ? `${text}\u0000` : text.replace('In order to', 'To')
+      }))
     });
-    await expect(createDocumentWorkflow(provider, 'rules').invoke({ source })).rejects.toMatchObject({ check });
+    const result = await createDocumentWorkflow(provider, 'rules').invoke({ source });
+    expect((await readDocx(result.revised)).text).toBe(
+      'In order to begin, the first paragraph stays.\nTo continue, the second paragraph changes.\nIn order to end, the third paragraph stays.'
+    );
+    expect(result.notices.keptPassages.map((notice) => notice.check)).toEqual(['response', 'response']);
+  });
+
+  it('restores the original surrounding whitespace instead of failing formatting', async () => {
+    const source = await readDocx(
+      await readerFixture(
+        '<w:p><w:r><w:t xml:space="preserve">In order to begin </w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t>boldly</w:t></w:r></w:p>'
+      )
+    );
+    const provider = faithfulRevisionProvider();
+    provider.edit = async (_system, chunk) => ({
+      edits: chunk.spans.map(({ id, text }) => ({ id, text: text.replace('In order to', 'To').trim() }))
+    });
+    const result = await createDocumentWorkflow(provider, 'rules').invoke({ source });
+    expect((await readDocx(result.revised)).text).toBe('To begin boldly');
+    expect(result.notices.keptPassages).toEqual([]);
+  });
+
+  it('carries kept-passage notices through revalidation of a stored chunk result', async () => {
+    const source = await readDocx(await readerFixture(textParagraph(revisionPassages.english)));
+    const [chunk] = planDocxEdits(source);
+    const validated = validateChunkResult(chunk, {
+      edits: chunk.spans.map(({ id, text }) => ({ id, text: text.replace('(2024)', '(2025)') }))
+    });
+    expect(validated).toEqual([{ id: chunk.spans[0].id, text: chunk.spans[0].text, kept: 'citation' }]);
+    expect(validateChunkResult(chunk, { edits: validated })).toEqual(validated);
+    expect(
+      validateChunkResult(chunk, {
+        edits: [{ id: chunk.spans[0].id, text: `${chunk.spans[0].text}!`, kept: 'citation' }]
+      })
+    ).toEqual([{ id: chunk.spans[0].id, text: `${chunk.spans[0].text}!` }]);
   });
 
   it.each([
