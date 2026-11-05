@@ -38,11 +38,11 @@ When a rewritten passage fails checks for quotations, citations, numbers, or ref
 
 ## Assessment and editing
 
-An accepted upload automatically starts a writing assessment. Publish its estimated AI-style score and examples beside a read-only document preview, then wait for the user. Explain that the score measures writing patterns and does not prove AI authorship. Users can edit documents regardless of the score.
+An accepted upload automatically starts a writing assessment. Publish its estimated AI-style score beside a read-only document preview, then wait for the user. Show only the score as the assessment result, with a one-line explanation that it measures writing patterns and does not prove AI authorship; the interface does not list writing-pattern examples. Users can edit documents regardless of the score.
 
 The user chooses rewrite strength, from light edits to thorough rewriting, and clicks **Unslopify**. The slider controls editing extent, not a promised score reduction. Save the chosen strength with the attempt so retries use the same instructions.
 
-After rewriting, assess the revised document automatically using the same scoring method. Show the before and after scores and make the revised DOCX available. There is no second confirmation, assess button, or automatic rewrite loop. A score that stays the same or increases does not block download. If the final assessment fails after bounded retries, retain the usable DOCX and state that its final score is unavailable.
+After rewriting, assess the revised document automatically using the same scoring method. Show the before and after scores only and make the revised DOCX available. There is no second confirmation, assess button, or automatic rewrite loop. A score that stays the same or increases does not block download. If the final assessment fails after bounded retries, retain the usable DOCX and state that its final score is unavailable.
 
 Implementation defaults are a 0–100 estimated AI-style score and a rewrite-strength slider from 1 to 100, initially 50. Show Light, Balanced, and Thorough labels; do not label strength as a percentage reduction. Use a versioned scoring rubric for document-wide assessment. Do not derive a percentage from the existing capped example list or invent a lower result from the selected strength.
 

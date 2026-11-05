@@ -1,6 +1,6 @@
 # Document workflow revision
 
-This document records the accepted workflow from the November 5, 2026 design interview. The interview is complete. Issue #15 implemented the document-support changes; see the [DOCX support reference](document-support.md). Issue #16 implemented the API lifecycle: automatic initial and final assessments with a scored rubric, the Unslopify request with rewrite strength, reservation at Unslopify, phase-aware retries, and progress data; see the [worker reference](assessment-worker.md). Issues #11–#13 remain open.
+This document records the accepted workflow from the November 5, 2026 design interview. The interview is complete. Issue #15 implemented the document-support changes; see the [DOCX support reference](document-support.md). Issue #16 implemented the API lifecycle: automatic initial and final assessments with a scored rubric, the Unslopify request with rewrite strength, reservation at Unslopify, phase-aware retries, and progress data; see the [worker reference](assessment-worker.md). Issues #11 and #12 implemented deletion, and issue #13 implemented the workspace flow.
 
 ## Requested behavior
 
@@ -12,7 +12,7 @@ The owner confirms that the app is live. [Deployment issue #14](https://github.c
 
 ## Confirmed decisions
 
-The displayed rate is an estimated **AI-style score**. The interface explains that it measures writing patterns rather than proving who wrote the document. It does not use an external AI-authorship detector.
+The displayed rate is an estimated **AI-style score**. The interface explains that it measures writing patterns rather than proving who wrote the document. It does not use an external AI-authorship detector. The owner decided on November 6, 2026 that the score is the only assessment result shown: the workspace lists no writing-pattern examples, and after rewriting it shows the before and after scores only. The API may keep returning pattern examples; the interface ignores them.
 
 The document preview is read-only and appears alongside the score. Users download the revised DOCX and adjust it outside the app.
 
@@ -44,7 +44,7 @@ Keep one revision per document entry. An editing retry retains the initial asses
 
 ## Issue impact
 
-[Issue #13](https://github.com/musanzi/unslop-docs/issues/13) covers upload, assessment, the preview and slider, awaiting-user-action, editing, final assessment, and download-ready states. Progress indicators distinguish actual upload progress from processing progress.
+[Issue #13](https://github.com/musanzi/unslop-docs/issues/13) covers upload, assessment, the preview and slider, awaiting-user-action, editing, final assessment, and download-ready states. Progress indicators distinguish actual upload progress from processing progress. It is implemented: the workspace shows upload bytes, named phases with editing progress from the API, the score-only assessment, the rewrite-strength slider, Unslopify, before and after scores, revision notices, retries per phase, compact history rows, and a one-time completion animation that respects reduced motion.
 
 [Issue #11](https://github.com/musanzi/unslop-docs/issues/11) covers deletion after assessment while the document waits for the user, and of stored, failed, and completed documents. [Issue #12](https://github.com/musanzi/unslop-docs/issues/12) covers deletion during either assessment or editing, including automatic-retry waits and the final assessment. Both are implemented. Deleting an assessment or its preview releases no document allowance because neither holds a reservation. Deleting active editing releases its reservation unless completion has already charged it.
 
