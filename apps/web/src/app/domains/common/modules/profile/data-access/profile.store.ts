@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { patchState, signalStore, withMethods, withProps, withState } from '@ngrx/signals';
 import { rxMethod } from '@ngrx/signals/rxjs-interop';
-import type { IUpdatePasswordDto, IUpdateProfileDto, IUserResponse } from '@unslop-docs/api-contracts';
+import type { IUpdateProfileDto, IUserResponse } from '@unslop-docs/api-contracts';
 import { catchError, concatMap, EMPTY, finalize, pipe, tap } from 'rxjs';
 
 import { getApiErrorMessage } from '@/app/core/api';
@@ -13,13 +13,10 @@ import { IProfileState } from '@web/domains/common/modules/profile/interfaces';
 const initialState: IProfileState = {
   isUpdatingProfile: false,
   isUpdatingProfileImage: false,
-  isUpdatingPassword: false,
   profileUpdated: false,
   profileImageUpdated: false,
-  passwordUpdated: false,
   profileError: '',
-  profileImageError: '',
-  passwordError: ''
+  profileImageError: ''
 };
 
 export const ProfileStore = signalStore(
@@ -75,37 +72,11 @@ export const ProfileStore = signalStore(
         })
       )
     ),
-    updatePassword: rxMethod<IUpdatePasswordDto>(
-      pipe(
-        concatMap((payload) => {
-          patchState(store, { isUpdatingPassword: true, passwordUpdated: false, passwordError: '' });
-          return _http.patch<IUserResponse>('/auth/password/update', payload).pipe(
-            tap((user) => {
-              _authStore.setUser(user);
-              patchState(store, { passwordUpdated: true });
-            }),
-            catchError((error: unknown) => {
-              patchState(store, {
-                passwordError: getApiErrorMessage(
-                  error,
-                  'Impossible de mettre à jour le mot de passe. Veuillez réessayer.'
-                )
-              });
-              return EMPTY;
-            }),
-            finalize(() => patchState(store, { isUpdatingPassword: false }))
-          );
-        })
-      )
-    ),
     clearProfileMessage(): void {
       patchState(store, { profileUpdated: false, profileError: '' });
     },
     clearProfileImageMessage(): void {
       patchState(store, { profileImageUpdated: false, profileImageError: '' });
-    },
-    clearPasswordMessage(): void {
-      patchState(store, { passwordUpdated: false, passwordError: '' });
     }
   }))
 );

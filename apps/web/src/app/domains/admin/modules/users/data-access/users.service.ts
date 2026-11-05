@@ -1,6 +1,6 @@
 import { httpResource } from '@angular/common/http';
 import { computed, debounced, effect, linkedSignal, Service, signal } from '@angular/core';
-import type { IRoleResponse, IUserResponse } from '@unslop-docs/api-contracts';
+import type { IUserResponse } from '@unslop-docs/api-contracts';
 
 import { getApiErrorMessage } from '@web/core/api';
 import type { IPage } from '@web/domains/admin/shared/interfaces';
@@ -15,14 +15,11 @@ export class UsersService {
     url: '/users',
     params: { page: this.page(), limit: this.pageSize(), q: this.debouncedQuery.value().trim() }
   }));
-  readonly roles = httpResource<IPage<IRoleResponse>>(() => '/roles');
   readonly users = computed(() => (this.list.hasValue() ? this.list.value()[0] : []));
   readonly usersCount = computed(() => (this.list.hasValue() ? this.list.value()[1] : 0));
-  readonly roleOptions = computed(() => (this.roles.hasValue() ? this.roles.value()[0] : []));
   readonly hasPagination = computed(() => this.usersCount() > this.pageSize() || this.page() > 1);
   readonly error = computed(() => {
     if (this.list.error()) return getApiErrorMessage(this.list.error(), 'Unable to load users. Please try again.');
-    if (this.roles.error()) return getApiErrorMessage(this.roles.error(), 'Unable to load roles.');
     return '';
   });
 
@@ -36,6 +33,5 @@ export class UsersService {
 
   reload(): void {
     this.list.reload();
-    this.roles.reload();
   }
 }

@@ -20,40 +20,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/auth/signup": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Register a new user */
-        post: operations["AuthController_signUp"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/auth/signin": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Sign in with email and password */
-        post: operations["AuthController_signIn"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/auth/signin/google": {
         parameters: {
             query?: never;
@@ -139,57 +105,6 @@ export interface paths {
         patch: operations["AuthController_updateProfile"];
         trace?: never;
     };
-    "/auth/password/update": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** Update the current user password */
-        patch: operations["AuthController_updatePassword"];
-        trace?: never;
-    };
-    "/auth/password/forgot": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Request a password reset email */
-        post: operations["AuthController_forgotPassword"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/auth/password/reset": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Reset password with a token */
-        post: operations["AuthController_resetPassword"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/users": {
         parameters: {
             query?: never;
@@ -200,25 +115,7 @@ export interface paths {
         /** List users with pagination (admin only) */
         get: operations["UsersController_findAll"];
         put?: never;
-        /** Create a user (admin only) */
-        post: operations["UsersController_create"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/users/import/csv": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Import users from a CSV file (admin only) */
-        post: operations["UsersController_importCsv"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -276,24 +173,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/users/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Delete a user (admin only) */
-        delete: operations["UsersController_remove"];
-        options?: never;
-        head?: never;
-        /** Update a user (admin only) */
-        patch: operations["UsersController_update"];
-        trace?: never;
-    };
     "/roles": {
         parameters: {
             query?: never;
@@ -304,8 +183,7 @@ export interface paths {
         /** List roles with pagination (admin only) */
         get: operations["RolesController_findAll"];
         put?: never;
-        /** Create a role (admin only) */
-        post: operations["RolesController_create"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -323,12 +201,10 @@ export interface paths {
         get: operations["RolesController_findOne"];
         put?: never;
         post?: never;
-        /** Delete a role (admin only) */
-        delete: operations["RolesController_remove"];
+        delete?: never;
         options?: never;
         head?: never;
-        /** Update a role (admin only) */
-        patch: operations["RolesController_update"];
+        patch?: never;
         trace?: never;
     };
     "/stats": {
@@ -352,18 +228,12 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        SignUpDto: {
-            /** @example John Doe */
-            name: string;
-            /**
-             * Format: email
-             * @example john.doe@example.com
-             */
-            email: string;
-            /** @example secret123 */
-            password: string;
-        };
         UserResponse: {
+            /**
+             * @description Admin access derived from the verified Google account and ADMIN_EMAIL
+             * @example false
+             */
+            isAdmin: boolean;
             /** @example b7f2c1e0-4a5d-4c8e-9f1a-2b3c4d5e6f7a */
             id: string;
             /**
@@ -389,79 +259,9 @@ export interface components {
              */
             roles: string[];
         };
-        SignInDto: {
-            /** @example john.doe@example.com */
-            email: string;
-            /** @example secret123 */
-            password: string;
-        };
         UpdateProfileDto: {
-            /**
-             * Format: email
-             * @example john.doe@example.com
-             */
-            email?: string;
-            /** @example John Doe */
+            /** @example Alice Student */
             name?: string;
-        };
-        UpdatePasswordDto: {
-            /** @example newSecret123 */
-            password: string;
-        };
-        ForgotPasswordDto: {
-            /**
-             * Format: email
-             * @example john.doe@example.com
-             */
-            email: string;
-        };
-        ResetPasswordDto: {
-            /** @example reset-token */
-            token: string;
-            /** @example newSecret123 */
-            password: string;
-        };
-        CreateUserDto: {
-            /**
-             * Format: email
-             * @example john.doe@example.com
-             */
-            email: string;
-            /** @example John Doe */
-            name: string;
-            /** @example secret123 */
-            password?: string;
-            /** @example https://example.com/avatar.png */
-            avatar?: string;
-            /**
-             * @example [
-             *       "b7f2c1e0-4a5d-4c8e-9f1a-2b3c4d5e6f7a"
-             *     ]
-             */
-            roles?: string[];
-        };
-        UpdateUserDto: {
-            /**
-             * Format: email
-             * @example john.doe@example.com
-             */
-            email?: string;
-            /** @example John Doe */
-            name?: string;
-            /** @example newSecret123 */
-            password?: string;
-            /** @example https://example.com/avatar.png */
-            avatar?: string;
-            /**
-             * @example [
-             *       "b7f2c1e0-4a5d-4c8e-9f1a-2b3c4d5e6f7a"
-             *     ]
-             */
-            roles?: string[];
-        };
-        CreateRoleDto: {
-            /** @example editor */
-            name: string;
         };
         RoleResponse: {
             /** @example b7f2c1e0-4a5d-4c8e-9f1a-2b3c4d5e6f7a */
@@ -478,10 +278,6 @@ export interface components {
             updatedAt: string;
             /** @example admin */
             name: string;
-        };
-        UpdateRoleDto: {
-            /** @example editor */
-            name?: string;
         };
         StatItem: {
             /** @example users */
@@ -650,54 +446,6 @@ export interface operations {
             };
         };
     };
-    AuthController_signUp: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SignUpDto"];
-            };
-        };
-        responses: {
-            /** @description User registered */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UserResponse"];
-                };
-            };
-        };
-    };
-    AuthController_signIn: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SignInDto"];
-            };
-        };
-        responses: {
-            /** @description Signed in */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UserResponse"];
-                };
-            };
-        };
-    };
     AuthController_googleAuth: {
         parameters: {
             query?: never;
@@ -794,76 +542,6 @@ export interface operations {
             };
         };
     };
-    AuthController_updatePassword: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdatePasswordDto"];
-            };
-        };
-        responses: {
-            /** @description Password updated */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UserResponse"];
-                };
-            };
-        };
-    };
-    AuthController_forgotPassword: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ForgotPasswordDto"];
-            };
-        };
-        responses: {
-            /** @description Password reset email sent */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    AuthController_resetPassword: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ResetPasswordDto"];
-            };
-        };
-        responses: {
-            /** @description Password reset */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UserResponse"];
-                };
-            };
-        };
-    };
     UsersController_findAll: {
         parameters: {
             query?: {
@@ -915,55 +593,6 @@ export interface operations {
                         error: string;
                     };
                 };
-            };
-        };
-    };
-    UsersController_create: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateUserDto"];
-            };
-        };
-        responses: {
-            /** @description User created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UserResponse"];
-                };
-            };
-        };
-    };
-    UsersController_importCsv: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "multipart/form-data": {
-                    /** Format: binary */
-                    file?: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Users imported */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
         };
     };
@@ -1038,52 +667,6 @@ export interface operations {
             };
         };
     };
-    UsersController_remove: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description User deleted */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    UsersController_update: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateUserDto"];
-            };
-        };
-        responses: {
-            /** @description User updated */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UserResponse"];
-                };
-            };
-        };
-    };
     RolesController_findAll: {
         parameters: {
             query?: {
@@ -1138,30 +721,6 @@ export interface operations {
             };
         };
     };
-    RolesController_create: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateRoleDto"];
-            };
-        };
-        responses: {
-            /** @description Role created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RoleResponse"];
-                };
-            };
-        };
-    };
     RolesController_findOne: {
         parameters: {
             query?: never;
@@ -1174,52 +733,6 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Role found */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RoleResponse"];
-                };
-            };
-        };
-    };
-    RolesController_remove: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Role deleted */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    RolesController_update: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateRoleDto"];
-            };
-        };
-        responses: {
-            /** @description Role updated */
             200: {
                 headers: {
                     [name: string]: unknown;

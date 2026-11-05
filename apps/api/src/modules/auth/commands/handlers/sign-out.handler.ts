@@ -4,6 +4,8 @@ import { SignOut } from '../impl';
 @CommandHandler(SignOut)
 export class SignOutHandler implements ICommandHandler<SignOut, void> {
   async execute(command: SignOut): Promise<void> {
-    command.request.session.destroy(() => {});
+    await new Promise<void>((resolve, reject) => {
+      command.request.session.destroy((error) => (error ? reject(error) : resolve()));
+    });
   }
 }

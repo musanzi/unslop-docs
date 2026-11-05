@@ -17,20 +17,7 @@ describe('SendWelcomeEmailHandler', () => {
     handler = module.get(SendWelcomeEmailHandler);
   });
 
-  it('sends generated credentials to the intended recipient with escaped HTML and plain text', async () => {
-    await handler.handle(new WelcomeUserEvent(user, '000007'));
-    expect(sendMail).toHaveBeenCalledWith(
-      expect.objectContaining({
-        to: user.email,
-        subject: 'Bienvenue sur unslop-docs',
-        html: expect.stringContaining('&lt;Alice&gt;'),
-        text: expect.stringContaining('000007')
-      })
-    );
-    expect(sendMail.mock.calls[0][0].html).toContain('Mot de passe temporaire');
-  });
-
-  it('omits temporary credentials when the user chose their own password', async () => {
+  it('welcomes a Google user without sending credentials', async () => {
     await handler.handle(new WelcomeUserEvent(user));
     const content = sendMail.mock.calls[0][0];
     expect(content.html).not.toContain('Mot de passe temporaire');

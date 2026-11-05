@@ -1,48 +1,42 @@
-import { BadRequestException, Logger } from '@nestjs/common';
-import { CommandBus, CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import { IUserResponse } from '../../interfaces';
-import { CreateUser, FindOrCreateUser, UpdateUser } from '../impl';
-import { Repository } from 'typeorm';
-import { User } from '../../entities';
+import { UnauthorizedException } from '@nestjs/common';
+import { CommandHandler, EventBus, ICommandHandler } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { WelcomeUserEvent } from '../../events';
+import { Role } from '@api/modules/roles/entities';
+import { User } from '../../entities';
+import { mapUserRoles } from '../../helpers';
+import { IUserResponse } from '../../interfaces';
+import { FindOrCreateUser } from '../impl';
 
 @CommandHandler(FindOrCreateUser)
 export class FindOrCreateUserHandler implements ICommandHandler<FindOrCreateUser, IUserResponse> {
-  private readonly logger = new Logger(FindOrCreateUserHandler.name);
-
   constructor(
-    @InjectRepository(User)
-    private readonly repository: Repository<User>,
-    private readonly commandBus: CommandBus
+    @InjectRepository(User) private readonly repository: Repository<User>,
+    @InjectRepository(Role) private readonly roles: Repository<Role>,
+    private readonly eventBus: EventBus
   ) {}
 
-  async execute(command: FindOrCreateUser): Promise<IUserResponse> {
-    const { email, name, password, avatar, roles } = command.createUserDto;
-
-    try {
-      const existingUser = await this.repository.findOne({
-        where: { email },
-        relations: { roles: true }
-      });
-
-      if (existingUser) {
-        return await this.commandBus.execute(
-          new UpdateUser(existingUser.id, {
-            email,
-            name,
-            password,
-            avatar: existingUser.avatar ? undefined : avatar,
-            roles
-          })
-        );
-      }
-
-      return await this.commandBus.execute(new CreateUser(command.createUserDto));
-    } catch (error) {
-      this.logger.error(
-        `Find or create user failed email="${email}": ${error instanceof Error ? error.message : String(error)}`
-      );
-      throw new BadRequestException('Requête invalide');
+  async execute({ identity }: FindOrCreateUser): Promise<IUserResponse> {
+    if (!identity.subject || !identity.email || identity.emailVerified !== true) {
+      throw new UnauthorizedException('A verified Google email and subject are required');
     }
+    const existing = await this.repository.findOne({
+      where: { googleSubject: identity.subject },
+      relations: { roles: true }
+    });
+    const user =
+      existing ??
+      this.repository.create({
+        googleSubject: identity.subject,
+        name: identity.name,
+        roles: [await this.roles.findOneByOrFail({ name: 'user' })]
+      });
+    user.email = identity.email.toLowerCase();
+    user.googleEmailVerified = true;
+    user.avatar ||= identity.avatar;
+    const saved = await this.repository.save(user);
+    if (!existing) this.eventBus.publish(new WelcomeUserEvent(saved));
+    return mapUserRoles(saved);
   }
 }

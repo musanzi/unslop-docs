@@ -1,6 +1,6 @@
 # unslop-docs
 
-unslop-docs is an Angular and NestJS starter with public pages, authentication, and profile management. Its administration dashboard manages users and roles and displays statistics. The apps share API types and run in Docker for development and production.
+unslop-docs is an Angular and NestJS starter with public pages, authentication, and profile management. Its administration dashboard lists users and displays statistics. The apps share API types and run in Docker for development and production.
 
 ## Stack and structure
 
@@ -12,7 +12,7 @@ This TypeScript monorepo uses pnpm and Nx to manage three projects:
 | `apps/web`           | Public pages, accounts, and administration      | Angular 22 with SSR, Angular Material, Tailwind CSS 4, NgRx Signal Store |
 | `libs/api-contracts` | Generated API types consumed by the web app     | OpenAPI, `openapi-typescript`                                            |
 
-Authentication uses JWT, Redis-backed sessions, and Google sign-in. The API sends email through SMTP and uses Scalar for API documentation.
+Authentication uses Google-only sign-in and Redis-backed sessions. The API sends email through SMTP and uses Scalar for API documentation.
 
 ## Getting started
 
@@ -33,14 +33,16 @@ MAIL_HOST=mailhog
 MAIL_PORT=1025
 SESSION_SECRET=local-session-secret
 SESSION_MAX_AGE=86400000
-JWT_SECRET=local-jwt-secret
-GOOGLE_CLIENT_ID=development-client
-GOOGLE_SECRET=development-secret
+ADMIN_EMAIL=your-verified-google-email@example.com
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_SECRET=your-google-client-secret
 GOOGLE_REDIRECT_URI=http://localhost:8000/auth/google/redirect
 FRONTEND_URI=http://localhost:4200
 ```
 
-The Google OAuth placeholders let the API start locally. To use Google sign-in, replace them with real credentials. Leave SMTP credentials empty for MailHog.
+Create a Google OAuth web client and register the exact `GOOGLE_REDIRECT_URI` shown above. Replace the example values with real credentials, and add your Google account as a test user if the consent screen is in testing mode. Local interactive sign-in uses Google OAuth. Leave SMTP credentials empty for MailHog.
+
+Set `ADMIN_EMAIL` to the verified Google email of the administrator. The API refuses to start if this setting is missing or blank. Email matching ignores letter case. After changing `ADMIN_EMAIL`, restart the API to load the new setting. The previous admin loses access on their next request, including requests from an existing session. The admin portal refreshes authorization when you enter it or navigate between its pages.
 
 ```sh
 docker compose -f compose.dev.yml up -d --build
@@ -51,14 +53,22 @@ docker compose -f compose.dev.yml watch
 
 Open the [web app](http://localhost:4200), [API docs](http://localhost:8000/docs), or [MailHog inbox](http://localhost:8025). The API runs at `http://localhost:8000` and exposes its schema at `/openapi.json`.
 
-The seed creates two accounts:
+The seed creates only the `user` role. Accounts are created on the first Google sign-in, with that role. Google subjects identify accounts; editable roles never grant admin access. Profile edits change the display name and avatar, while Google controls the email address.
 
-| Email             | Password    |
-| ----------------- | ----------- |
-| `admin@admin.com` | `admin1234` |
-| `user@user.com`   | `user1234`  |
+The Google-only migration deletes stored password hashes and removes legacy role assignments. Existing accounts remain in the database, but cannot authenticate without a Google identity. The application never links accounts by email. A Google sign-in with a legacy email creates a separate account. Existing starter sessions must sign in again. Back up the database before applying the migration: the deleted credentials cannot be recovered by a rollback.
 
-Run the seed only with development data. Each run resets these accounts' passwords and roles.
+Password endpoints and admin account creation, CSV import, deletion, and role mutations return 404. User listing and CSV export remain available to the configured admin. Status management is implemented separately in issue #3.
+
+### Verify Google sign-in locally
+
+1. Apply the migrations, then open **Sign in** and choose **Continue with Google**.
+2. Cancel Google consent. Confirm that the sign-in page explains the cancellation.
+3. Sign in with a verified account that differs from `ADMIN_EMAIL`. Confirm that the admin portal is unavailable and `/users` returns 403.
+4. Sign in with the configured admin account. Confirm that the user list opens.
+5. Change `ADMIN_EMAIL` and restart the API. Confirm that the previous admin's existing session loses admin access.
+6. Sign out. Confirm that the old session can no longer request `/auth/me`.
+
+Automated specs use fake Google transport, repositories, and isolated in-memory sessions. They do not add an application login bypass. Real consent, Redis persistence, and migration execution require the owner's running stack. Production deployments need HTTPS, secure session cookies, and reverse-proxy settings before launch.
 
 ### Running on the host
 
@@ -82,7 +92,7 @@ pnpm dev
 | `pnpm lint`                                       | Lint both apps and type-check shared contracts  |
 | `pnpm start:api` / `WEB_PORT=4200 pnpm start:web` | Run existing production builds                  |
 | `pnpm db:up` / `pnpm db:down`                     | Apply migrations or revert the latest migration |
-| `pnpm db:seed`                                    | Create or reset development accounts            |
+| `pnpm db:seed`                                    | Ensure the user role exists                     |
 | `pnpm generate:api`                               | Regenerate contracts from the API source        |
 | `pnpm sync:api`                                   | Regenerate contracts and build the web app      |
 
@@ -90,14 +100,14 @@ pnpm dev
 
 ## API unit tests
 
-Install the locked dependencies with `pnpm install --frozen-lockfile`. Tests run without a database, Redis, SMTP, an HTTP server, or a private environment file.
+Install the locked dependencies with `pnpm install --frozen-lockfile`. Tests run without a database, Redis, SMTP, or a private environment file. HTTP specs start an isolated test application on an ephemeral loopback port.
 
-| Command                                     | Purpose                                |
-| ------------------------------------------- | -------------------------------------- |
-| `pnpm test` or `pnpm test:api`              | Run the API unit suite once            |
-| `pnpm test:api:watch`                       | Rerun tests while editing              |
-| `pnpm test:api --args=validate-credentials` | Run specs whose paths match the filter |
-| `pnpm typecheck:api:tests`                  | Check test, fixture, and runner types  |
+| Command                        | Purpose                                |
+| ------------------------------ | -------------------------------------- |
+| `pnpm test` or `pnpm test:api` | Run the API unit suite once            |
+| `pnpm test:api:watch`          | Rerun tests while editing              |
+| `pnpm test:api --args=google`  | Run specs whose paths match the filter |
+| `pnpm typecheck:api:tests`     | Check test, fixture, and runner types  |
 
 After API behavior changes, run `pnpm test:api` and `pnpm typecheck:api:tests`.
 `pnpm typecheck` also checks API specs. CI runs lint, type checks, unit tests, and builds.
@@ -113,10 +123,10 @@ There is no numeric coverage threshold.
 
 ## Maintenance and deployment
 
-- Follow [AGENTS.md](AGENTS.md). API modules use CQRS and expose their own queries and commands. Web code separates data access, features, interfaces, and presentational UI.
-- After API changes, run `pnpm generate:api`. The command builds the API, exports `libs/api-contracts/openapi.json` in Nest preview mode, and generates the shared types. It does not need a running API, database, Redis, or SMTP server. The web app's build, serve, and typecheck targets also run these steps. To use another schema, set `OPENAPI_INPUT` to a schema URL or a local JSON or YAML file.
+- Follow [CLAUDE.md](CLAUDE.md). API modules use CQRS and expose their own queries and commands. Web code separates data access, features, interfaces, and presentational UI.
+- After API changes, run `pnpm generate:api`. The command runs the API source in Nest preview mode, exports `libs/api-contracts/openapi.json` and generates the shared types. It does not need a running API, database, Redis, or SMTP server. The web app's build, serve, and typecheck targets also run these steps. Contract generation and type checks do not build either app. To use another schema, set `OPENAPI_INPUT` to a schema URL or a local JSON or YAML file.
 - Import types from `@unslop-docs/api-contracts` and commit the OpenAPI document and generated types. Never edit generated files manually.
-- Before you commit application changes, run `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build`. Git hooks run linting and enforce Conventional Commit messages. GitHub Actions runs the same four checks.
+- Before you commit application changes, run `pnpm lint`, `pnpm typecheck`, and `pnpm test:api`. The owner manages builds and the development stack. Git hooks run linting and enforce Conventional Commit messages. GitHub Actions also runs builds.
 - When you adapt the starter, update its branding. Set the web app's API URLs in `apps/web/src/environments`. The production configuration uses `https://api.unslop-docs.com`. Before deployment, configure real secrets, Google OAuth, SMTP, `MAIL_FROM`, and `FRONTEND_URI`. Keep `.env` private.
 
 ```sh

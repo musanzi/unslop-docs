@@ -1,12 +1,18 @@
-import { IUserResponse } from '@api/modules/users/interfaces';
-import { FindUserById } from '@api/modules/users/queries';
 import { Injectable } from '@nestjs/common';
-import { QueryBus } from '@nestjs/cqrs';
+import { ConfigService } from '@nestjs/config';
 import { PassportSerializer } from '@nestjs/passport';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { User } from '@api/modules/users/entities';
+import { mapUserRoles } from '@api/modules/users/helpers';
+import { IUserResponse } from '@api/modules/users/interfaces';
 
 @Injectable()
 export class SessionSerializer extends PassportSerializer {
-  constructor(private readonly queryBus: QueryBus) {
+  constructor(
+    @InjectRepository(User) private readonly repository: Repository<User>,
+    private readonly config: ConfigService
+  ) {
     super();
   }
 
@@ -14,10 +20,15 @@ export class SessionSerializer extends PassportSerializer {
     done(null, user.id);
   }
 
-  async deserializeUser(id: string, done: (err: Error | null, user?: IUserResponse) => void) {
+  async deserializeUser(id: string, done: (err: Error | null, user?: IUserResponse | false) => void) {
     try {
-      const user = await this.queryBus.execute(new FindUserById(id));
-      done(null, user);
+      const user = await this.repository.findOne({ where: { id }, relations: { roles: true } });
+      if (!user?.googleSubject || user.googleEmailVerified !== true) {
+        done(null, false);
+        return;
+      }
+      const adminEmail = this.config.getOrThrow<string>('ADMIN_EMAIL').trim().toLowerCase();
+      done(null, { ...mapUserRoles(user), isAdmin: user.email.toLowerCase() === adminEmail });
     } catch (error) {
       done(error as Error);
     }

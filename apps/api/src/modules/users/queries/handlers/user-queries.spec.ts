@@ -10,8 +10,18 @@ import { FindUserByIdHandler } from './find-user-by-id.handler';
 import { FindUsersHandler } from './find-users.handler';
 
 describe('User queries', () => {
-  const user = userFixture({ password: undefined });
-  const publicUser = { ...user, roles: ['user'] };
+  const user = userFixture();
+  const publicUser = {
+    id: user.id,
+    name: 'Alice',
+    email: 'alice@example.com',
+    avatar: null,
+    roles: ['user'],
+    isAdmin: false,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+    deletedAt: undefined
+  };
   const builder = {
     where: vi.fn().mockReturnThis(),
     innerJoinAndSelect: vi.fn().mockReturnThis(),
@@ -50,23 +60,14 @@ describe('User queries', () => {
     await expect(byId.execute(new FindUserById(user.id))).resolves.toEqual(publicUser);
   });
 
-  it('returns an empty role list for a user without loaded roles', async () => {
-    repository.findOneOrFail.mockResolvedValue(userFixture({ roles: undefined, password: undefined }));
-    await expect(byId.execute(new FindUserById(user.id))).resolves.toMatchObject({ roles: [] });
+  it('returns the user role without relying on legacy role assignments', async () => {
+    repository.findOneOrFail.mockResolvedValue(userFixture({ roles: undefined }));
+    await expect(byId.execute(new FindUserById(user.id))).resolves.toMatchObject({ roles: ['user'] });
   });
 
-  it('does not request private password data for a normal email lookup', async () => {
+  it('returns a public profile without provider identity fields', async () => {
     await expect(byEmail.execute(new FindUserByEmail(user.email))).resolves.toEqual(publicUser);
     expect(builder.addSelect).not.toHaveBeenCalled();
-  });
-
-  it('includes password data only when explicitly requested for credential validation', async () => {
-    builder.getOneOrFail.mockResolvedValue({ ...user, password: 'stored-hash' });
-    await expect(byEmail.execute(new FindUserByEmail(user.email, true))).resolves.toMatchObject({
-      password: 'stored-hash',
-      roles: ['user']
-    });
-    expect(builder.addSelect).toHaveBeenCalledWith('u.password');
   });
 
   it('reports failed ID and email lookups as not found', async () => {

@@ -4,14 +4,17 @@ import { AbstractEntity } from '@api/shared/abstracts';
 
 @Entity()
 export class User extends AbstractEntity {
-  @Column({ unique: true })
+  @Column()
   email: string;
 
   @Column()
   name: string;
 
-  @Column({ nullable: true, select: false })
-  password: string;
+  @Column({ nullable: true, unique: true })
+  googleSubject: string;
+
+  @Column({ default: false })
+  googleEmailVerified: boolean;
 
   @Column({ nullable: true })
   avatar: string;

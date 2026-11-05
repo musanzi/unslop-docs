@@ -2,7 +2,6 @@ import { BadRequestException, Logger } from '@nestjs/common';
 import { CommandHandler, ICommandHandler, QueryBus } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { mapRoleIds } from '../../helpers';
 import { User } from '../../entities';
 import { IUserResponse } from '../../interfaces';
 import { FindUserById } from '../../queries';
@@ -19,7 +18,7 @@ export class UpdateUserHandler implements ICommandHandler<UpdateUser, IUserRespo
   ) {}
 
   async execute(command: UpdateUser): Promise<IUserResponse> {
-    const { email, name, password, avatar, roles } = command.updateUserDto;
+    const { name, avatar } = command.updateUserDto;
 
     try {
       if (!command.id) throw new BadRequestException('Utilisateur introuvable');
@@ -27,11 +26,8 @@ export class UpdateUserHandler implements ICommandHandler<UpdateUser, IUserRespo
       const user = await this.repository.findOneOrFail({ where: { id: command.id } });
 
       const newUser = this.repository.merge(user, {
-        email,
         name,
-        password,
-        avatar,
-        roles: roles ? mapRoleIds(roles) : undefined
+        avatar
       });
 
       const updatedUser = await this.repository.save(newUser);

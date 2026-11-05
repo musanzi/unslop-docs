@@ -16,11 +16,17 @@
                   "properties": {
                     "status": {
                       "type": "string",
-                      "enum": ["ok", "degraded"],
+                      "enum": [
+                        "ok",
+                        "degraded"
+                      ],
                       "example": "ok"
                     },
                     "info": {
-                      "type": ["object", "null"],
+                      "type": [
+                        "object",
+                        "null"
+                      ],
                       "example": {
                         "database": {
                           "status": "up",
@@ -29,11 +35,17 @@
                       },
                       "additionalProperties": {
                         "type": "object",
-                        "required": ["status"],
+                        "required": [
+                          "status"
+                        ],
                         "properties": {
                           "status": {
                             "type": "string",
-                            "enum": ["up", "degraded", "down"]
+                            "enum": [
+                              "up",
+                              "degraded",
+                              "down"
+                            ]
                           },
                           "responseTime": {
                             "type": "number",
@@ -44,15 +56,24 @@
                       }
                     },
                     "error": {
-                      "type": ["object", "null"],
+                      "type": [
+                        "object",
+                        "null"
+                      ],
                       "example": {},
                       "additionalProperties": {
                         "type": "object",
-                        "required": ["status"],
+                        "required": [
+                          "status"
+                        ],
                         "properties": {
                           "status": {
                             "type": "string",
-                            "enum": ["up", "degraded", "down"]
+                            "enum": [
+                              "up",
+                              "degraded",
+                              "down"
+                            ]
                           },
                           "responseTime": {
                             "type": "number",
@@ -72,11 +93,17 @@
                       },
                       "additionalProperties": {
                         "type": "object",
-                        "required": ["status"],
+                        "required": [
+                          "status"
+                        ],
                         "properties": {
                           "status": {
                             "type": "string",
-                            "enum": ["up", "degraded", "down"]
+                            "enum": [
+                              "up",
+                              "degraded",
+                              "down"
+                            ]
                           },
                           "responseTime": {
                             "type": "number",
@@ -100,11 +127,17 @@
                   "properties": {
                     "status": {
                       "type": "string",
-                      "enum": ["error", "shutting_down"],
+                      "enum": [
+                        "error",
+                        "shutting_down"
+                      ],
                       "example": "error"
                     },
                     "info": {
-                      "type": ["object", "null"],
+                      "type": [
+                        "object",
+                        "null"
+                      ],
                       "example": {
                         "database": {
                           "status": "up",
@@ -113,11 +146,17 @@
                       },
                       "additionalProperties": {
                         "type": "object",
-                        "required": ["status"],
+                        "required": [
+                          "status"
+                        ],
                         "properties": {
                           "status": {
                             "type": "string",
-                            "enum": ["up", "degraded", "down"]
+                            "enum": [
+                              "up",
+                              "degraded",
+                              "down"
+                            ]
                           },
                           "responseTime": {
                             "type": "number",
@@ -128,7 +167,10 @@
                       }
                     },
                     "error": {
-                      "type": ["object", "null"],
+                      "type": [
+                        "object",
+                        "null"
+                      ],
                       "example": {
                         "redis": {
                           "status": "down",
@@ -138,11 +180,17 @@
                       },
                       "additionalProperties": {
                         "type": "object",
-                        "required": ["status"],
+                        "required": [
+                          "status"
+                        ],
                         "properties": {
                           "status": {
                             "type": "string",
-                            "enum": ["up", "degraded", "down"]
+                            "enum": [
+                              "up",
+                              "degraded",
+                              "down"
+                            ]
                           },
                           "responseTime": {
                             "type": "number",
@@ -167,11 +215,17 @@
                       },
                       "additionalProperties": {
                         "type": "object",
-                        "required": ["status"],
+                        "required": [
+                          "status"
+                        ],
                         "properties": {
                           "status": {
                             "type": "string",
-                            "enum": ["up", "degraded", "down"]
+                            "enum": [
+                              "up",
+                              "degraded",
+                              "down"
+                            ]
                           },
                           "responseTime": {
                             "type": "number",
@@ -188,67 +242,9 @@
           }
         },
         "summary": "Check service health",
-        "tags": ["health"]
-      }
-    },
-    "/auth/signup": {
-      "post": {
-        "operationId": "AuthController_signUp",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SignUpDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "User registered",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UserResponse"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Register a new user",
-        "tags": ["auth"]
-      }
-    },
-    "/auth/signin": {
-      "post": {
-        "operationId": "AuthController_signIn",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SignInDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Signed in",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UserResponse"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Sign in with email and password",
-        "tags": ["auth"]
+        "tags": [
+          "health"
+        ]
       }
     },
     "/auth/signin/google": {
@@ -261,7 +257,9 @@
           }
         },
         "summary": "Start Google OAuth sign in",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/auth/google/redirect": {
@@ -274,7 +272,9 @@
           }
         },
         "summary": "Google OAuth redirect callback",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/auth/signout": {
@@ -287,7 +287,9 @@
           }
         },
         "summary": "Sign out the current user",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/auth/me": {
@@ -307,7 +309,9 @@
           }
         },
         "summary": "Get the current user profile",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/auth/me/update": {
@@ -337,121 +341,12 @@
           }
         },
         "summary": "Update the current user profile",
-        "tags": ["auth"]
-      }
-    },
-    "/auth/password/update": {
-      "patch": {
-        "operationId": "AuthController_updatePassword",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdatePasswordDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Password updated",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UserResponse"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Update the current user password",
-        "tags": ["auth"]
-      }
-    },
-    "/auth/password/forgot": {
-      "post": {
-        "operationId": "AuthController_forgotPassword",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ForgotPasswordDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Password reset email sent"
-          }
-        },
-        "summary": "Request a password reset email",
-        "tags": ["auth"]
-      }
-    },
-    "/auth/password/reset": {
-      "post": {
-        "operationId": "AuthController_resetPassword",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ResetPasswordDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Password reset",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UserResponse"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Reset password with a token",
-        "tags": ["auth"]
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/users": {
-      "post": {
-        "operationId": "UsersController_create",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateUserDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "User created",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UserResponse"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Create a user (admin only)",
-        "tags": ["users"]
-      },
       "get": {
         "operationId": "UsersController_findAll",
         "parameters": [
@@ -509,15 +404,23 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": ["success", "statusCode", "data"],
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "data"
+                  ],
                   "properties": {
                     "success": {
                       "type": "boolean",
-                      "enum": [true]
+                      "enum": [
+                        true
+                      ]
                     },
                     "statusCode": {
                       "type": "integer",
-                      "enum": [200]
+                      "enum": [
+                        200
+                      ]
                     },
                     "data": {
                       "type": "array",
@@ -549,15 +452,24 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": ["success", "statusCode", "message", "error"],
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "message",
+                    "error"
+                  ],
                   "properties": {
                     "success": {
                       "type": "boolean",
-                      "enum": [false]
+                      "enum": [
+                        false
+                      ]
                     },
                     "statusCode": {
                       "type": "integer",
-                      "enum": [400]
+                      "enum": [
+                        400
+                      ]
                     },
                     "message": {
                       "oneOf": [
@@ -583,36 +495,9 @@
           }
         },
         "summary": "List users with pagination (admin only)",
-        "tags": ["users"]
-      }
-    },
-    "/users/import/csv": {
-      "post": {
-        "operationId": "UsersController_importCsv",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "file": {
-                    "type": "string",
-                    "format": "binary"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Users imported"
-          }
-        },
-        "summary": "Import users from a CSV file (admin only)",
-        "tags": ["users"]
+        "tags": [
+          "users"
+        ]
       }
     },
     "/users/export/csv": {
@@ -643,7 +528,9 @@
           }
         },
         "summary": "Export users as a CSV file (admin only)",
-        "tags": ["users"]
+        "tags": [
+          "users"
+        ]
       }
     },
     "/users/profile/avatar": {
@@ -679,7 +566,9 @@
           }
         },
         "summary": "Upload the current user avatar",
-        "tags": ["users"]
+        "tags": [
+          "users"
+        ]
       }
     },
     "/users/{email}": {
@@ -708,97 +597,12 @@
           }
         },
         "summary": "Find a user by email (admin only)",
-        "tags": ["users"]
-      }
-    },
-    "/users/{id}": {
-      "patch": {
-        "operationId": "UsersController_update",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateUserDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "User updated",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UserResponse"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Update a user (admin only)",
-        "tags": ["users"]
-      },
-      "delete": {
-        "operationId": "UsersController_remove",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "User deleted"
-          }
-        },
-        "summary": "Delete a user (admin only)",
-        "tags": ["users"]
+        "tags": [
+          "users"
+        ]
       }
     },
     "/roles": {
-      "post": {
-        "operationId": "RolesController_create",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateRoleDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Role created",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RoleResponse"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Create a role (admin only)",
-        "tags": ["roles"]
-      },
       "get": {
         "operationId": "RolesController_findAll",
         "parameters": [
@@ -856,15 +660,23 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": ["success", "statusCode", "data"],
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "data"
+                  ],
                   "properties": {
                     "success": {
                       "type": "boolean",
-                      "enum": [true]
+                      "enum": [
+                        true
+                      ]
                     },
                     "statusCode": {
                       "type": "integer",
-                      "enum": [200]
+                      "enum": [
+                        200
+                      ]
                     },
                     "data": {
                       "type": "array",
@@ -896,15 +708,24 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": ["success", "statusCode", "message", "error"],
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "message",
+                    "error"
+                  ],
                   "properties": {
                     "success": {
                       "type": "boolean",
-                      "enum": [false]
+                      "enum": [
+                        false
+                      ]
                     },
                     "statusCode": {
                       "type": "integer",
-                      "enum": [400]
+                      "enum": [
+                        400
+                      ]
                     },
                     "message": {
                       "oneOf": [
@@ -930,7 +751,9 @@
           }
         },
         "summary": "List roles with pagination (admin only)",
-        "tags": ["roles"]
+        "tags": [
+          "roles"
+        ]
       }
     },
     "/roles/{id}": {
@@ -959,64 +782,9 @@
           }
         },
         "summary": "Find a role by id (admin only)",
-        "tags": ["roles"]
-      },
-      "patch": {
-        "operationId": "RolesController_update",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateRoleDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Role updated",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RoleResponse"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Update a role (admin only)",
-        "tags": ["roles"]
-      },
-      "delete": {
-        "operationId": "RolesController_remove",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Role deleted"
-          }
-        },
-        "summary": "Delete a role (admin only)",
-        "tags": ["roles"]
+        "tags": [
+          "roles"
+        ]
       }
     },
     "/stats": {
@@ -1039,13 +807,15 @@
           }
         },
         "summary": "Get statistics (admin only)",
-        "tags": ["stats"]
+        "tags": [
+          "stats"
+        ]
       }
     }
   },
   "info": {
     "title": "unslop-docs API DOC",
-    "description": "The unslop-docs API documentation",
+    "description": "Google-only sign-in with Redis sessions. Admin access requires the verified Google account configured by ADMIN_EMAIL.",
     "version": "1.0.0",
     "contact": {}
   },
@@ -1053,29 +823,14 @@
   "servers": [],
   "components": {
     "schemas": {
-      "SignUpDto": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "example": "John Doe"
-          },
-          "email": {
-            "type": "string",
-            "format": "email",
-            "example": "john.doe@example.com"
-          },
-          "password": {
-            "type": "string",
-            "minLength": 6,
-            "example": "secret123"
-          }
-        },
-        "required": ["name", "email", "password"]
-      },
       "UserResponse": {
         "type": "object",
         "properties": {
+          "isAdmin": {
+            "type": "boolean",
+            "description": "Admin access derived from the verified Google account and ADMIN_EMAIL",
+            "example": false
+          },
           "id": {
             "type": "string",
             "example": "b7f2c1e0-4a5d-4c8e-9f1a-2b3c4d5e6f7a"
@@ -1110,150 +865,33 @@
             ]
           },
           "roles": {
-            "example": ["user"],
+            "example": [
+              "user"
+            ],
             "type": "array",
             "items": {
               "type": "string"
             }
           }
         },
-        "required": ["id", "createdAt", "updatedAt", "email", "name", "roles"]
-      },
-      "SignInDto": {
-        "type": "object",
-        "properties": {
-          "email": {
-            "type": "string",
-            "example": "john.doe@example.com"
-          },
-          "password": {
-            "type": "string",
-            "example": "secret123"
-          }
-        },
-        "required": ["email", "password"]
+        "required": [
+          "isAdmin",
+          "id",
+          "createdAt",
+          "updatedAt",
+          "email",
+          "name",
+          "roles"
+        ]
       },
       "UpdateProfileDto": {
         "type": "object",
         "properties": {
-          "email": {
-            "type": "string",
-            "format": "email",
-            "example": "john.doe@example.com"
-          },
           "name": {
             "type": "string",
-            "example": "John Doe"
+            "example": "Alice Student"
           }
         }
-      },
-      "UpdatePasswordDto": {
-        "type": "object",
-        "properties": {
-          "password": {
-            "type": "string",
-            "minLength": 6,
-            "example": "newSecret123"
-          }
-        },
-        "required": ["password"]
-      },
-      "ForgotPasswordDto": {
-        "type": "object",
-        "properties": {
-          "email": {
-            "type": "string",
-            "format": "email",
-            "example": "john.doe@example.com"
-          }
-        },
-        "required": ["email"]
-      },
-      "ResetPasswordDto": {
-        "type": "object",
-        "properties": {
-          "token": {
-            "type": "string",
-            "example": "reset-token"
-          },
-          "password": {
-            "type": "string",
-            "minLength": 6,
-            "example": "newSecret123"
-          }
-        },
-        "required": ["token", "password"]
-      },
-      "CreateUserDto": {
-        "type": "object",
-        "properties": {
-          "email": {
-            "type": "string",
-            "format": "email",
-            "example": "john.doe@example.com"
-          },
-          "name": {
-            "type": "string",
-            "example": "John Doe"
-          },
-          "password": {
-            "type": "string",
-            "example": "secret123"
-          },
-          "avatar": {
-            "type": "string",
-            "example": "https://example.com/avatar.png"
-          },
-          "roles": {
-            "example": ["b7f2c1e0-4a5d-4c8e-9f1a-2b3c4d5e6f7a"],
-            "type": "array",
-            "items": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        },
-        "required": ["email", "name"]
-      },
-      "UpdateUserDto": {
-        "type": "object",
-        "properties": {
-          "email": {
-            "type": "string",
-            "format": "email",
-            "example": "john.doe@example.com"
-          },
-          "name": {
-            "type": "string",
-            "example": "John Doe"
-          },
-          "password": {
-            "type": "string",
-            "example": "newSecret123"
-          },
-          "avatar": {
-            "type": "string",
-            "example": "https://example.com/avatar.png"
-          },
-          "roles": {
-            "example": ["b7f2c1e0-4a5d-4c8e-9f1a-2b3c4d5e6f7a"],
-            "type": "array",
-            "items": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        }
-      },
-      "CreateRoleDto": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "example": "editor"
-          }
-        },
-        "required": ["name"]
       },
       "RoleResponse": {
         "type": "object",
@@ -1277,16 +915,12 @@
             "example": "admin"
           }
         },
-        "required": ["id", "createdAt", "updatedAt", "name"]
-      },
-      "UpdateRoleDto": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "example": "editor"
-          }
-        }
+        "required": [
+          "id",
+          "createdAt",
+          "updatedAt",
+          "name"
+        ]
       },
       "StatItem": {
         "type": "object",
@@ -1300,7 +934,10 @@
             "example": 42
           }
         },
-        "required": ["label", "total"]
+        "required": [
+          "label",
+          "total"
+        ]
       }
     }
   }

@@ -1,60 +1,50 @@
-import { CommandBus } from '@nestjs/cqrs';
+import { ConfigService } from '@nestjs/config';
+import { CqrsModule } from '@nestjs/cqrs';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { userFixture } from '@api/shared/testing/fixtures';
+import { Role } from '@api/modules/roles/entities';
 import { User } from '../../entities';
-import { CreateUser, FindOrCreateUser, UpdateUser } from '../impl';
+import { FindOrCreateUser } from '../impl';
 import { FindOrCreateUserHandler } from './find-or-create-user.handler';
 
-describe('FindOrCreateUserHandler', () => {
-  let handler: FindOrCreateUserHandler;
-  const execute = vi.fn();
-  const findOne = vi.fn();
-  const dto = { email: 'alice@example.com', name: 'Alice', avatar: 'provider-avatar.png' };
-  const user = userFixture();
+const identity = {
+  subject: 'google-subject-1',
+  email: 'alice@example.com',
+  emailVerified: true,
+  name: 'Alice',
+  avatar: 'google.png'
+};
 
-  beforeEach(async () => {
-    execute.mockReset().mockResolvedValue(user);
-    findOne.mockReset().mockResolvedValue(null);
+describe('Google account creation', () => {
+  it('keeps the account ID when the same Google subject changes email', async () => {
+    let saved = userFixture({ googleSubject: identity.subject, googleEmailVerified: true });
+    const repository = {
+      findOne: vi.fn(async ({ where }) => (where.googleSubject === saved.googleSubject ? saved : null)),
+      create: vi.fn((data) => userFixture(data)),
+      save: vi.fn(async (data) => {
+        saved = data;
+        return saved;
+      })
+    };
     const module = await Test.createTestingModule({
+      imports: [CqrsModule.forRoot()],
       providers: [
         FindOrCreateUserHandler,
-        { provide: CommandBus, useValue: { execute } },
-        { provide: getRepositoryToken(User), useValue: { findOne } }
+        { provide: ConfigService, useValue: new ConfigService({ ADMIN_EMAIL: 'admin@example.com' }) },
+        { provide: getRepositoryToken(User), useValue: repository },
+        {
+          provide: getRepositoryToken(Role),
+          useValue: { findOneByOrFail: vi.fn().mockResolvedValue({ id: 'role-user', name: 'user' }) }
+        }
       ]
     }).compile();
-    handler = module.get(FindOrCreateUserHandler);
-  });
-
-  it('creates an account when no matching user exists', async () => {
-    await expect(handler.execute(new FindOrCreateUser(dto))).resolves.toEqual(user);
-    expect(execute).toHaveBeenCalledWith(new CreateUser(dto));
-  });
-
-  it.each(['custom-avatar.png', null])('preserves an existing avatar when updating: %s', async (avatar) => {
-    findOne.mockResolvedValue(userFixture({ avatar }));
-    await expect(handler.execute(new FindOrCreateUser(dto))).resolves.toEqual(user);
-    expect(execute).toHaveBeenCalledWith(
-      new UpdateUser(user.id, {
-        email: dto.email,
-        name: dto.name,
-        password: undefined,
-        avatar: avatar ? undefined : dto.avatar,
-        roles: undefined
-      })
-    );
-  });
-
-  it('does not dispatch a write after a lookup failure', async () => {
-    findOne.mockRejectedValue(new Error('lookup failed'));
-    await expect(handler.execute(new FindOrCreateUser(dto))).rejects.toThrow('Requête invalide');
-    expect(execute).not.toHaveBeenCalled();
-  });
-
-  it.each([null, user])('translates failed creation and failed updates: %j', async (existing) => {
-    findOne.mockResolvedValue(existing);
-    execute.mockRejectedValue(new Error('write failed'));
-    await expect(handler.execute(new FindOrCreateUser(dto))).rejects.toThrow('Requête invalide');
+    const result = await module
+      .get(FindOrCreateUserHandler)
+      .execute(new FindOrCreateUser({ ...identity, email: 'changed@example.com' }));
+    expect(result).toMatchObject({ id: 'user-1', email: 'changed@example.com', roles: ['user'] });
+    expect(repository.create).not.toHaveBeenCalled();
+    await module.close();
   });
 });

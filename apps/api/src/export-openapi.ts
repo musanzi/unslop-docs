@@ -5,7 +5,6 @@ import { AppModule } from './app.module';
 import { createOpenApiDocument } from './shared/helpers/create-openapi-document';
 
 async function exportOpenApi(): Promise<void> {
-  // Preview mode scans metadata without opening database, Redis, or SMTP connections.
   const app = await NestFactory.create(AppModule, { preview: true, logger: false });
 
   try {

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy } from 'passport-google-oauth20';
@@ -17,17 +17,23 @@ export class GoogleStrategy extends PassportStrategy(Strategy) {
       clientID: configService.get('GOOGLE_CLIENT_ID'),
       clientSecret: configService.get('GOOGLE_SECRET'),
       callbackURL: configService.get('GOOGLE_REDIRECT_URI'),
-      scope: ['profile', 'email']
+      scope: ['profile', 'email'],
+      state: true
     });
   }
 
   async validate(_accessToken: string, _refreshToken: string, profile: IGoogleProfile): Promise<IUserResponse> {
     const { emails, name, photos } = profile;
+    if (!profile.id || !emails?.[0]?.value || emails[0].verified !== true) {
+      throw new UnauthorizedException('A verified Google email is required');
+    }
     return await this.commandBus.execute(
       new FindOrCreateUser({
+        subject: profile.id,
+        emailVerified: true,
         email: emails[0]['value'],
-        name: `${name['givenName']} ${name['familyName']}`,
-        avatar: photos[0]['value']
+        name: [name?.givenName, name?.familyName].filter(Boolean).join(' ') || emails[0].value,
+        avatar: photos?.[0]?.value
       })
     );
   }

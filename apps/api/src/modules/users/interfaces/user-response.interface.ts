@@ -1,11 +1,15 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { User } from '../entities';
 
-export type IUserResponse = Omit<User, 'roles'> & {
+export type IUserResponse = Omit<User, 'roles' | 'googleSubject' | 'googleEmailVerified'> & {
   roles: string[];
+  isAdmin: boolean;
 };
 
 export class UserResponse {
+  @ApiProperty({ description: 'Admin access derived from the verified Google account and ADMIN_EMAIL', example: false })
+  isAdmin: boolean;
+
   @ApiProperty({ example: 'b7f2c1e0-4a5d-4c8e-9f1a-2b3c4d5e6f7a' })
   id: string;
 

@@ -19,7 +19,7 @@ describe('RolesGuard', () => {
     guard = module.get(RolesGuard);
   });
 
-  function context(user?: { roles?: string[] }) {
+  function context(user?: { roles?: string[]; isAdmin?: boolean }) {
     return new ExecutionContextHost([{ user }], Controller, Controller.prototype.action);
   }
 
@@ -35,9 +35,9 @@ describe('RolesGuard', () => {
     }
   );
 
-  it.each([Roles.USER, Roles.ADMIN])('allows a matching role or administrator: %s', (role) => {
+  it('allows the user role', () => {
     Reflect.defineMetadata(ROLES_KEY, [Roles.USER], Controller);
-    expect(guard.canActivate(context({ roles: [role] }))).toBe(true);
+    expect(guard.canActivate(context({ roles: [Roles.USER] }))).toBe(true);
   });
 
   it('uses method requirements before controller requirements', () => {

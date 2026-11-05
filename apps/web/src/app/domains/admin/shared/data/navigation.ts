@@ -26,13 +26,6 @@ export const NAVIGATION: INavigationItem[] = [
         icon: 'users',
         route: 'users',
         activeOptions: { exact: false }
-      },
-      {
-        id: 'roles',
-        label: 'Roles',
-        icon: 'shield-check',
-        route: 'roles',
-        activeOptions: { exact: false }
       }
     ]
   }

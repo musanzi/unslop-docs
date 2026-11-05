@@ -14,16 +14,7 @@ export class SendWelcomeEmailHandler implements IEventHandler<WelcomeUserEvent> 
         title: 'Bienvenue sur unslop-docs',
         greetingName: event.user.name,
         intro:
-          'Votre compte a bien été créé. Vous pouvez maintenant vous connecter et commencer à utiliser unslop-docs.',
-        highlight: event.defaultPassword
-          ? {
-              label: 'Mot de passe temporaire',
-              value: event.defaultPassword
-            }
-          : undefined,
-        note: event.defaultPassword
-          ? 'Pour votre sécurité, changez ce mot de passe après votre première connexion.'
-          : undefined
+          'Votre compte a bien été créé. Vous pouvez maintenant vous connecter et commencer à utiliser unslop-docs.'
       });
 
       await this.mailerService.sendMail({

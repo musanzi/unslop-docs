@@ -74,9 +74,8 @@
     "openapi": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "node dist/apps/api/src/export-openapi.js"
+        "command": "node tools/export-openapi.cjs"
       },
-      "dependsOn": ["build"],
       "cache": false,
       "outputs": ["{workspaceRoot}/libs/api-contracts/openapi.json"]
     },

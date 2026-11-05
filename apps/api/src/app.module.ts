@@ -1,10 +1,10 @@
+import { validateAuthConfig } from './modules/auth/auth-config';
 import { Module } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { AuthModule } from './modules/auth';
 import { DatabaseModule } from './modules/database';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { getUploadsPath } from './shared/config';
-import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthGuard, RolesGuard } from './modules/auth/guards';
 import { LoggerModule } from 'nestjs-pino';
@@ -27,6 +27,7 @@ import { ApiResponseInterceptor } from './shared/interceptors';
     CqrsModule.forRoot(),
     ConfigModule.forRoot({
       envFilePath: '../../.env',
+      validate: validateAuthConfig,
       isGlobal: true
     }),
     ThrottlerModule.forRoot({
@@ -59,14 +60,6 @@ import { ApiResponseInterceptor } from './shared/interceptors';
     ServeStaticModule.forRoot({
       rootPath: getUploadsPath(),
       serveRoot: '/uploads'
-    }),
-    JwtModule.registerAsync({
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        global: true,
-        secret: configService.getOrThrow('JWT_SECRET'),
-        signOptions: { expiresIn: '1d' }
-      })
     }),
     MailerModule.forRootAsync({
       inject: [ConfigService],

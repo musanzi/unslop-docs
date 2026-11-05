@@ -4,7 +4,6 @@ export * from './controllers';
 export * from './decorators';
 export * from './dto';
 export * from './enums';
-export * from './events';
 export * from './guards';
 export * from './interfaces';
 export * from './queries';

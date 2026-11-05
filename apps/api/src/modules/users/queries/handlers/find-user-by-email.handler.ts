@@ -17,17 +17,13 @@ export class FindUserByEmailHandler implements IQueryHandler<FindUserByEmail, IU
   ) {}
 
   async execute(query: FindUserByEmail): Promise<IUserResponse> {
-    const { email, includePassword } = query;
+    const { email } = query;
 
     try {
       const query = this.repository
         .createQueryBuilder('u')
         .where('u.email = :email', { email })
         .innerJoinAndSelect('u.roles', 'roles');
-
-      if (includePassword) {
-        query.addSelect('u.password');
-      }
 
       const user = await query.getOneOrFail();
 
