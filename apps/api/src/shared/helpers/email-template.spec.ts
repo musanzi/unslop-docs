@@ -15,7 +15,7 @@ describe('buildEmailBody', () => {
     expect(content.html).toContain('Don&#39;t &lt;script&gt;run()&lt;/script&gt;');
     expect(content.html).not.toContain('<script>');
     expect(content.html).toContain('&lt;private&gt;');
-    expect(content.text).toContain('Bonjour <Alice & "Bob">,');
+    expect(content.text).toContain('Hello <Alice & "Bob">,');
     expect(content.text).toContain("Don't <script>run()</script>");
     expect(content.text).toContain('Details & more');
   });
@@ -30,6 +30,7 @@ describe('buildEmailBody', () => {
     expect(content.html).toContain('href="https://web.example/reset?a=1&amp;b=&quot;2&quot;"');
     expect(content.html).toContain('Reset &lt;now&gt;');
     expect(content.text).toContain('https://web.example/reset?a=1&b="2"');
+    expect(content.text).toContain('If the link does not work, copy this address into your browser:');
   });
 
   it('includes temporary credentials when explicitly provided', () => {

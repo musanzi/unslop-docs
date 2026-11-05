@@ -69,9 +69,7 @@ describe('Role queries', () => {
   });
 
   it('rejects invalid pagination before querying', async () => {
-    await expect(list.execute(new FindRoles({ limit: 101 }))).rejects.toThrow(
-      'Les paramètres de pagination sont invalides'
-    );
+    await expect(list.execute(new FindRoles({ limit: 101 }))).rejects.toThrow('Invalid pagination parameters');
     expect(repository.createQueryBuilder).not.toHaveBeenCalled();
   });
 
@@ -79,6 +77,6 @@ describe('Role queries', () => {
     repository.findAndCount.mockRejectedValue(new Error('query failed'));
     builder.getManyAndCount.mockRejectedValue(new Error('query failed'));
     await expect(list.execute(new FindRoles({}))).rejects.toThrow(BadRequestException);
-    await expect(list.execute(new FindRoles({ page: 1 }))).rejects.toThrow('Rôles introuvables');
+    await expect(list.execute(new FindRoles({ page: 1 }))).rejects.toThrow('Roles not found');
   });
 });

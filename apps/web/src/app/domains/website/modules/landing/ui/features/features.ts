@@ -1,27 +1,29 @@
 import { Component } from '@angular/core';
-import { MatIconModule } from '@angular/material/icon';
 
 @Component({
   selector: 'landing-features',
-  imports: [MatIconModule],
   templateUrl: './features.html'
 })
 export class LandingFeatures {
   protected readonly features = [
     {
-      icon: 'route',
-      title: 'Consistent application flow',
-      description: 'Public pages, authentication, and dashboard follow a clear structure from the start.'
+      title: 'Upload a DOCX',
+      description: 'The planned first release accepts English and French DOCX files up to 10 MB and 10,000 words.'
     },
     {
-      icon: 'palette',
-      title: 'Clean Material interface',
-      description: 'Angular Material and Tailwind are already combined in a simple styling base.'
+      title: 'Read the writing assessment',
+      description:
+        'See writing patterns with examples from your document. Assessment and editing start automatically after validation, whatever the assessment finds.'
     },
     {
-      icon: 'layers',
-      title: 'Readable architecture',
-      description: 'Pages compose UI sections while services and stores stay in data-access.'
+      title: 'Edit with your meaning intact',
+      description:
+        'Editing is designed to preserve your meaning, language, citations, quotations, and factual claims, without inventing evidence or references.'
+    },
+    {
+      title: 'Download and review',
+      description:
+        'Download the revised DOCX and your original, then review the changes before submitting your work. Exact page layout preservation is outside the first release.'
     }
   ];
 }

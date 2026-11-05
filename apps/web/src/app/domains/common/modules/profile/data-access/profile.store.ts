@@ -37,7 +37,7 @@ export const ProfileStore = signalStore(
             }),
             catchError((error: unknown) => {
               patchState(store, {
-                profileError: getApiErrorMessage(error, 'Impossible de mettre à jour le profil. Veuillez réessayer.')
+                profileError: getApiErrorMessage(error, 'Unable to update your profile. Please try again.')
               });
               return EMPTY;
             }),
@@ -60,10 +60,7 @@ export const ProfileStore = signalStore(
             }),
             catchError((error: unknown) => {
               patchState(store, {
-                profileImageError: getApiErrorMessage(
-                  error,
-                  'Impossible de modifier la photo de profil. Veuillez réessayer.'
-                )
+                profileImageError: getApiErrorMessage(error, 'Unable to update your profile photo. Please try again.')
               });
               return EMPTY;
             }),

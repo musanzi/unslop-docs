@@ -38,7 +38,7 @@ describe('User mutations', () => {
 
   it('does not save when the account lookup fails', async () => {
     repository.findOneOrFail.mockRejectedValue(new Error('missing'));
-    await expect(update.execute(new UpdateUser(user.id, {}))).rejects.toThrow('Mise à jour impossible');
+    await expect(update.execute(new UpdateUser(user.id, {}))).rejects.toThrow('Unable to update user');
     expect(repository.save).not.toHaveBeenCalled();
   });
 

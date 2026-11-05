@@ -45,7 +45,7 @@ describe('UploadUserAvatarHandler', () => {
   });
 
   it('rejects an absent file before starting a transaction', async () => {
-    await expect(handler.execute(new UploadUserAvatar(user.id, undefined))).rejects.toThrow(BadRequestException);
+    await expect(handler.execute(new UploadUserAvatar(user.id, undefined))).rejects.toThrow('An image is required');
     expect(transaction).not.toHaveBeenCalled();
     expect(promises.rm).not.toHaveBeenCalled();
   });
@@ -66,7 +66,7 @@ describe('UploadUserAvatarHandler', () => {
 
   it('removes only the new file after a failed write', async () => {
     update.mockRejectedValue(new Error('write failed'));
-    await expect(handler.execute(new UploadUserAvatar(user.id, file))).rejects.toThrow("Ajout d'image impossible");
+    await expect(handler.execute(new UploadUserAvatar(user.id, file))).rejects.toThrow('Unable to upload image');
     expect(promises.rm).toHaveBeenCalledExactlyOnceWith('/test/uploads/profiles/new.png', { force: true });
     expect(execute).not.toHaveBeenCalled();
   });

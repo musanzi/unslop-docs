@@ -29,7 +29,7 @@ import { NAVIGATION } from '@web/domains/user/shared/data';
     User
   ],
   template: `
-    <a href="#user-content" class="sr-only focus:not-sr-only focus:p-3">Aller au contenu principal</a>
+    <a href="#user-content" class="sr-only focus:not-sr-only focus:p-3">Skip to main content</a>
     @defer (on immediate) {
       <mat-sidenav-container>
         <mat-sidenav
@@ -49,12 +49,12 @@ import { NAVIGATION } from '@web/domains/user/shared/data';
 
         <mat-sidenav-content class="flex flex-col lg:h-dvh lg:overflow-hidden">
           <div class="flex items-center border-b bg-white px-4 py-2.5 text-neutral-950">
-            <button matIconButton aria-label="Ouvrir ou fermer le menu" (click)="sidenav.toggle()">
+            <button matIconButton aria-label="Toggle navigation" (click)="sidenav.toggle()">
               <mat-icon svgIcon="panel-left" />
             </button>
 
             <div class="mx-3 h-5 border-l"></div>
-            <div class="min-w-0 flex-auto truncate pr-3 text-sm font-medium">Mon compte</div>
+            <div class="min-w-0 flex-auto truncate pr-3 text-sm font-medium">My account</div>
             <user
               class="shrink-0"
               [compact]="true"

@@ -25,10 +25,10 @@ describe('ApiExceptionFilter', () => {
   });
 
   it('returns the status and message of an expected exception', () => {
-    filter.catch(new NotFoundException('Utilisateur introuvable'), host);
+    filter.catch(new NotFoundException('User not found'), host);
     expect(reply).toHaveBeenCalledWith(
       response,
-      { success: false, statusCode: 404, message: 'Utilisateur introuvable', error: 'Not Found' },
+      { success: false, statusCode: 404, message: 'User not found', error: 'Not Found' },
       404
     );
   });

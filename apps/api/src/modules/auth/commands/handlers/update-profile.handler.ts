@@ -20,7 +20,7 @@ export class UpdateProfileHandler implements ICommandHandler<UpdateProfile, IUse
       this.logger.error(
         `Update profile failed id="${currentUser?.id ?? ''}": ${error instanceof Error ? error.message : String(error)}`
       );
-      throw new BadRequestException('Requête invalide');
+      throw new BadRequestException('Invalid request');
     }
   }
 }

@@ -37,6 +37,6 @@ describe('Account workflows', () => {
     executeCommand.mockRejectedValue(new Error('write failed'));
     await expect(
       update.execute(new UpdateProfile({ ...user, roles: ['user'], isAdmin: false }, { name: 'Updated' }))
-    ).rejects.toThrow('Requête invalide');
+    ).rejects.toThrow('Invalid request');
   });
 });

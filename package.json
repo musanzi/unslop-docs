@@ -1,7 +1,7 @@
 {
   "name": "unslop-docs",
   "version": "0.0.0",
-  "description": "Angular web and NestJS API Nx workspace",
+  "description": "Document editing for students with an Angular web app and NestJS API",
   "author": {
     "name": "Wilfried Musanzi",
     "url": "https://musanzi.me"

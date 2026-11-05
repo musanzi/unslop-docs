@@ -20,12 +20,12 @@ export class FindStatsHandler implements IQueryHandler<FindStats, IStatItem[]> {
       ]);
 
       return [
-        { label: 'Utilisateurs', total: usersTotal },
-        { label: 'Rôles', total: rolesTotal }
+        { label: 'Users', total: usersTotal },
+        { label: 'Roles', total: rolesTotal }
       ];
     } catch (error) {
       this.logger.error(`Find stats failed: ${error instanceof Error ? error.message : String(error)}`);
-      throw new BadRequestException('Statistiques introuvables');
+      throw new BadRequestException('Statistics not found');
     }
   }
 }

@@ -7,13 +7,12 @@
   [class.shadow-sm]="solidHeader()"
   [class.backdrop-blur-xl]="solidHeader()">
   <nav class="mx-auto flex max-w-screen-2xl items-center py-4 justify-between px-6 sm:px-8 lg:px-16 xl:px-24 2xl:px-32">
-    <a routerLink="/" class="flex items-center gap-2" aria-label="FIF 2026, accueil" (click)="closeMenu()">
-      <!-- <img src="/images/favicon.png" alt="" class="size-6 object-contain md:size-8" /> -->
+    <a routerLink="/" class="flex items-center gap-2" aria-label="unslop-docs home" (click)="closeMenu()">
       <span
         class="text-xl font-bold tracking-tight transition-colors md:text-2xl"
         [class.text-white]="!isScrolled()"
         [class.text-gray-950]="solidHeader()">
-        unslop-docs <span class="text-primary-400">2026</span>
+        unslop-docs
       </span>
     </a>
 
@@ -34,13 +33,16 @@
 
     <div class="hidden items-center gap-2 sm:flex">
       <a matButton="filled" routerLink="/auth/sign-in" class="rounded-md px-4 py-2.5 font-semibold">
-        Join the community
+        Sign in with Google
       </a>
     </div>
 
     <button
       type="button"
-      class="flex size-8 items-center justify-center rounded-full border shadow-sm transition-colors sm:hidden"
+      class="flex size-11 items-center justify-center rounded-full border shadow-sm transition-colors lg:hidden"
+      [attr.aria-expanded]="isMenuOpen()"
+      aria-controls="mobile-navigation"
+      [attr.aria-label]="isMenuOpen() ? 'Close navigation' : 'Open navigation'"
       [class]="!isScrolled() ? 'border-white/25 bg-white/10 text-white' : 'border-gray-200 bg-white text-gray-900'"
       (click)="toggleMenu()">
       <mat-icon [svgIcon]="isMenuOpen() ? 'x' : 'menu'" />
@@ -48,7 +50,7 @@
   </nav>
 
   @if (isMenuOpen()) {
-    <div id="mobile-navigation" class="border-t border-gray-100 bg-white px-6 py-6 shadow-xl sm:hidden">
+    <div id="mobile-navigation" class="border-t border-gray-100 bg-white px-6 py-6 shadow-xl lg:hidden">
       <div class="flex flex-col gap-1">
         @for (link of links; track link.label) {
           <a
@@ -72,7 +74,7 @@
           class="flex items-center justify-center gap-2 rounded-md border border-gray-200 px-4 py-3 text-center font-semibold"
           (click)="closeMenu()">
           <mat-icon class="size-5" svgIcon="log-in" />
-          Connexion
+          Sign in
         </a>
       </div>
     </div>

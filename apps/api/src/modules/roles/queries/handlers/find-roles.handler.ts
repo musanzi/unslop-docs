@@ -39,7 +39,7 @@ export class FindRolesHandler implements IQueryHandler<FindRoles, [Role[], numbe
       this.logger.error(
         `Find roles failed params="${JSON.stringify(query.params)}": ${error instanceof Error ? error.message : String(error)}`
       );
-      throw new BadRequestException('Rôles introuvables');
+      throw new BadRequestException('Roles not found');
     }
   }
 }

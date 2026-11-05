@@ -12,9 +12,9 @@ export class AuthLayout {
   private readonly route = inject(ActivatedRoute);
 
   protected readonly content = signal({
-    asideTitle: 'Return to your workspace',
-    asideDescription: 'Sign in to a clear, modular application base that is ready to grow with your features.',
-    asideFootnote: 'Keep a consistent authentication flow while you build the rest of your product.'
+    asideTitle: 'Welcome to unslop-docs',
+    asideDescription: 'Document editing for students, with your meaning and language at the center.',
+    asideFootnote: 'Google sign-in and profile management are available. Document processing is in development.'
   });
 
   protected updateContent(): void {

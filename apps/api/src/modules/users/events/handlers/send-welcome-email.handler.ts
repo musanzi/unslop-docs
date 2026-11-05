@@ -11,19 +11,18 @@ export class SendWelcomeEmailHandler implements IEventHandler<WelcomeUserEvent> 
   async handle(event: WelcomeUserEvent): Promise<void> {
     try {
       const content = buildEmailBody({
-        title: 'Bienvenue sur unslop-docs',
+        title: 'Welcome to unslop-docs',
         greetingName: event.user.name,
-        intro:
-          'Votre compte a bien été créé. Vous pouvez maintenant vous connecter et commencer à utiliser unslop-docs.'
+        intro: 'Your account is ready. You can sign in with Google and manage your profile.'
       });
 
       await this.mailerService.sendMail({
         to: event.user.email,
-        subject: 'Bienvenue sur unslop-docs',
+        subject: 'Welcome to unslop-docs',
         ...content
       });
     } catch {
-      throw new BadRequestException("Envoi d'email impossible");
+      throw new BadRequestException('Unable to send email');
     }
   }
 }

@@ -17,15 +17,21 @@ describe('SendWelcomeEmailHandler', () => {
     handler = module.get(SendWelcomeEmailHandler);
   });
 
-  it('welcomes a Google user without sending credentials', async () => {
+  it('welcomes a Google user in English without sending credentials', async () => {
     await handler.handle(new WelcomeUserEvent(user));
     const content = sendMail.mock.calls[0][0];
-    expect(content.html).not.toContain('Mot de passe temporaire');
-    expect(content.text).not.toContain('Mot de passe temporaire');
+    expect(content.subject).toBe('Welcome to unslop-docs');
+    expect(content.html).toContain('<html lang="en">');
+    expect(content.html).toContain('Hello &lt;Alice&gt;,');
+    expect(content.text).toContain('Hello <Alice>,');
+    expect(content.text).toContain('Your account is ready. You can sign in with Google and manage your profile.');
+    expect(content.text).toContain('The unslop-docs team');
+    expect(content.html).not.toMatch(/password|credential/i);
+    expect(content.text).not.toMatch(/password|credential/i);
   });
 
   it('translates mail delivery failures', async () => {
     sendMail.mockRejectedValue(new Error('SMTP details'));
-    await expect(handler.handle(new WelcomeUserEvent(user))).rejects.toThrow("Envoi d'email impossible");
+    await expect(handler.handle(new WelcomeUserEvent(user))).rejects.toThrow('Unable to send email');
   });
 });

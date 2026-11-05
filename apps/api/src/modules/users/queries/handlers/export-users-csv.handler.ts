@@ -38,7 +38,7 @@ export class ExportUsersCsvHandler implements IQueryHandler<ExportUsersCsv, void
       this.logger.error(
         `Export users csv failed q="${q ?? ''}": ${error instanceof Error ? error.message : String(error)}`
       );
-      throw new BadRequestException('Export des utilisateurs impossible');
+      throw new BadRequestException('Unable to export users');
     }
   }
 }

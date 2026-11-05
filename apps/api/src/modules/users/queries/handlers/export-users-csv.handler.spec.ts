@@ -60,7 +60,7 @@ describe('ExportUsersCsvHandler', () => {
     const write = vi.fn((_chunk, _encoding, callback) => callback());
     const response = new Writable({ write });
     await expect(handler.execute(new ExportUsersCsv({}, response as unknown as Response))).rejects.toThrow(
-      'Export des utilisateurs impossible'
+      'Unable to export users'
     );
     expect(write).not.toHaveBeenCalled();
     response.destroy();

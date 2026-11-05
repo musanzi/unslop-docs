@@ -92,9 +92,7 @@ describe('User queries', () => {
   });
 
   it('rejects invalid pagination before querying', async () => {
-    await expect(list.execute(new FindUsers({ page: 0 }))).rejects.toThrow(
-      'Les paramètres de pagination sont invalides'
-    );
+    await expect(list.execute(new FindUsers({ page: 0 }))).rejects.toThrow('Invalid pagination parameters');
     expect(repository.createQueryBuilder).not.toHaveBeenCalled();
   });
 

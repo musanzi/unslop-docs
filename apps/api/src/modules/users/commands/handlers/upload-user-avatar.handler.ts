@@ -22,12 +22,12 @@ export class UploadUserAvatarHandler implements ICommandHandler<UploadUserAvatar
 
   async execute(command: UploadUserAvatar): Promise<IUserResponse> {
     const { userId, file } = command;
-    if (!file?.filename) throw new BadRequestException('Image requise');
+    if (!file?.filename) throw new BadRequestException('An image is required');
 
     let avatarSaved = false;
 
     try {
-      if (!userId) throw new NotFoundException('Utilisateur introuvable');
+      if (!userId) throw new NotFoundException('User not found');
 
       const previousAvatar = await this.repository.manager.transaction(async (manager) => {
         const repository = manager.getRepository(User);
@@ -36,7 +36,7 @@ export class UploadUserAvatarHandler implements ICommandHandler<UploadUserAvatar
           lock: { mode: 'pessimistic_write' }
         });
 
-        if (!user) throw new NotFoundException('Utilisateur introuvable');
+        if (!user) throw new NotFoundException('User not found');
 
         await repository.update(user.id, { avatar: file.filename });
         return user.avatar;
@@ -54,7 +54,7 @@ export class UploadUserAvatarHandler implements ICommandHandler<UploadUserAvatar
       this.logger.error(
         `Upload user avatar failed id="${userId}": ${error instanceof Error ? error.message : String(error)}`
       );
-      throw new BadRequestException("Ajout d'image impossible");
+      throw new BadRequestException('Unable to upload image');
     }
   }
 

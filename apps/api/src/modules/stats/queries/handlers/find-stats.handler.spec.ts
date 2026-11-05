@@ -26,8 +26,8 @@ describe('FindStatsHandler', () => {
 
   it('labels the independent user and role totals correctly', async () => {
     await expect(handler.execute()).resolves.toEqual([
-      { label: 'Utilisateurs', total: 23 },
-      { label: 'Rôles', total: 4 }
+      { label: 'Users', total: 23 },
+      { label: 'Roles', total: 4 }
     ]);
   });
 
@@ -35,13 +35,13 @@ describe('FindStatsHandler', () => {
     userCount.mockResolvedValue(0);
     roleCount.mockResolvedValue(0);
     await expect(handler.execute()).resolves.toEqual([
-      { label: 'Utilisateurs', total: 0 },
-      { label: 'Rôles', total: 0 }
+      { label: 'Users', total: 0 },
+      { label: 'Roles', total: 0 }
     ]);
   });
 
   it.each(['users', 'roles'])('fails without returning partial statistics when counting %s fails', async (entity) => {
     (entity === 'users' ? userCount : roleCount).mockRejectedValue(new Error('count failed'));
-    await expect(handler.execute()).rejects.toThrow('Statistiques introuvables');
+    await expect(handler.execute()).rejects.toThrow('Statistics not found');
   });
 });

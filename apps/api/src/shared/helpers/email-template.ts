@@ -43,7 +43,7 @@ export const buildEmailBody = (options: EmailTemplateOptions): EmailContent => {
           </td>
         </tr>
       </table>
-      <p style="margin:0 0 8px;color:#64748b;font-size:13px;line-height:20px;">Si le lien ne fonctionne pas, copiez cette adresse dans votre navigateur :</p>
+      <p style="margin:0 0 8px;color:#64748b;font-size:13px;line-height:20px;">If the link does not work, copy this address into your browser:</p>
       <p style="margin:0 0 24px;font-size:13px;line-height:20px;word-break:break-all;overflow-wrap:anywhere;">
         <a href="${escapeHtml(options.action.url)}" style="color:#2563eb;text-decoration:underline;">${escapeHtml(options.action.url)}</a>
       </p>`
@@ -65,7 +65,7 @@ export const buildEmailBody = (options: EmailTemplateOptions): EmailContent => {
     : '';
 
   const html = `<!doctype html>
-<html lang="fr">
+<html lang="en">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -95,7 +95,7 @@ export const buildEmailBody = (options: EmailTemplateOptions): EmailContent => {
                 <p style="margin:0 0 28px;color:#64748b;font-size:14px;font-weight:700;line-height:20px;letter-spacing:1px;">unslop-docs</p>
                 <h1 class="email-title" style="margin:0 0 28px;color:#0f172a;font-size:28px;font-weight:700;line-height:36px;overflow-wrap:break-word;">${escapeHtml(options.title)}</h1>
 
-                ${paragraph(`Bonjour ${options.greetingName},`)}
+                ${paragraph(`Hello ${options.greetingName},`)}
 
                 ${paragraph(options.intro)}
 
@@ -110,7 +110,7 @@ export const buildEmailBody = (options: EmailTemplateOptions): EmailContent => {
                 <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top:8px;">
                   <tr>
                     <td style="padding-top:24px;border-top:1px solid #e2e8f0;">
-                      <p style="margin:0;color:#64748b;font-size:14px;line-height:22px;">L'équipe <strong style="color:#334155;">unslop-docs</strong></p>
+                      <p style="margin:0;color:#64748b;font-size:14px;line-height:22px;">The <strong style="color:#334155;">unslop-docs</strong> team</p>
                     </td>
                   </tr>
                 </table>

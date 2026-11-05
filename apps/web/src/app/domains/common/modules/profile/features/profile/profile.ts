@@ -37,9 +37,9 @@ export default class Profile {
   });
   protected readonly profileForm = form(this.profileModel, (fields) => {
     disabled(fields, () => this.isSaving());
-    required(fields.name, { message: 'Le nom est requis.' });
+    required(fields.name, { message: 'Name is required.' });
     validate(fields.name, ({ value }) =>
-      value().trim() ? undefined : { kind: 'required', message: 'Le nom est requis.' }
+      value().trim() ? undefined : { kind: 'required', message: 'Name is required.' }
     );
   });
   constructor() {

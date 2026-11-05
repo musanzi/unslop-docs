@@ -23,7 +23,7 @@ export class FindRoleByNameHandler implements IQueryHandler<FindRoleByName, Role
       this.logger.error(
         `Find role by name failed name="${query.name}": ${error instanceof Error ? error.message : String(error)}`
       );
-      throw new NotFoundException('Rôle introuvable');
+      throw new NotFoundException('Role not found');
     }
   }
 }

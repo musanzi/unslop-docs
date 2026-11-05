@@ -1,6 +1,8 @@
 # unslop-docs
 
-unslop-docs is an Angular and NestJS starter with public pages, authentication, and profile management. Its administration dashboard lists users and displays statistics. The apps share API types and run in Docker for development and production.
+unslop-docs is a document-editing product for students. The planned first release accepts DOCX files in English or French, reports writing patterns in a writing assessment, edits the document, and returns a revised DOCX. A writing assessment does not establish AI authorship.
+
+Google-only sign-in, profile management, admin user listing, CSV export, and account statistics are available. Document upload, assessment, editing, private downloads, monthly allowances, and status management are not implemented yet. The [product specification](docs/product-spec.md) describes the intended behavior, and the [ticket index](docs/ticket-drafts/README.md) links the implementation issues.
 
 ## Stack and structure
 
@@ -16,31 +18,22 @@ Authentication uses Google-only sign-in and Redis-backed sessions. The API sends
 
 ## Getting started
 
-Use Docker Compose to run the development environment. To run the apps on your host, install Node.js 24.15+ and pnpm 12.11.2. The `package.json` file pins the pnpm version. Run commands from the repository root.
+The owner runs the development environment with Docker Compose. Do not start another copy of the app servers while that stack is running. To run the apps on your host, install Node.js 24.15+ and pnpm 12.11.2. The `package.json` file pins the pnpm version. Run commands from the repository root.
 
 ```sh
 cp -n .env.example .env
 ```
 
-Keep the database credentials from `.env.example`. Add or update these values in `.env`. The example omits `REDIS_URL`.
+The example targets Compose service names: `db`, `redis`, and `mailpit`. Set these private values before starting the stack. Generate `SESSION_SECRET` with `openssl rand -hex 32`, and use that output in `.env`. Never commit `.env`.
 
 ```dotenv
-API_PORT=8000
-WEB_PORT=4200
-DB_HOST=db
-REDIS_URL=redis://redis:6379
-MAIL_HOST=mailhog
-MAIL_PORT=1025
-SESSION_SECRET=local-session-secret
-SESSION_MAX_AGE=86400000
+SESSION_SECRET=replace-with-a-random-secret
 ADMIN_EMAIL=your-verified-google-email@example.com
 GOOGLE_CLIENT_ID=your-google-client-id
 GOOGLE_SECRET=your-google-client-secret
-GOOGLE_REDIRECT_URI=http://localhost:8000/auth/google/redirect
-FRONTEND_URI=http://localhost:4200
 ```
 
-Create a Google OAuth web client and register the exact `GOOGLE_REDIRECT_URI` shown above. Replace the example values with real credentials, and add your Google account as a test user if the consent screen is in testing mode. Local interactive sign-in uses Google OAuth. Leave SMTP credentials empty for MailHog.
+Create a Google OAuth web client and register the exact `GOOGLE_REDIRECT_URI` in `.env.example`, `http://localhost:8000/auth/google/redirect`. Replace the example values with real credentials, and add your Google account as a test user if the consent screen is in testing mode. Local interactive sign-in uses Google OAuth. Leave SMTP credentials empty for Mailpit.
 
 Set `ADMIN_EMAIL` to the verified Google email of the administrator. The API refuses to start if this setting is missing or blank. Email matching ignores letter case. After changing `ADMIN_EMAIL`, restart the API to load the new setting. The previous admin loses access on their next request, including requests from an existing session. The admin portal refreshes authorization when you enter it or navigate between its pages.
 
@@ -51,11 +44,11 @@ docker compose -f compose.dev.yml exec api pnpm db:seed
 docker compose -f compose.dev.yml watch
 ```
 
-Open the [web app](http://localhost:4200), [API docs](http://localhost:8000/docs), or [MailHog inbox](http://localhost:8025). The API runs at `http://localhost:8000` and exposes its schema at `/openapi.json`.
+Open the [web app](http://localhost:4200), [API docs](http://localhost:8000/docs), or [Mailpit inbox](http://localhost:8025). The API runs at `http://localhost:8000` and exposes its schema at `/openapi.json`.
 
 The seed creates only the `user` role. Accounts are created on the first Google sign-in, with that role. Google subjects identify accounts; editable roles never grant admin access. Profile edits change the display name and avatar, while Google controls the email address.
 
-The Google-only migration deletes stored password hashes and removes legacy role assignments. Existing accounts remain in the database, but cannot authenticate without a Google identity. The application never links accounts by email. A Google sign-in with a legacy email creates a separate account. Existing starter sessions must sign in again. Back up the database before applying the migration: the deleted credentials cannot be recovered by a rollback.
+The Google-only migration deletes stored password hashes and removes legacy role assignments. Existing accounts remain in the database, but cannot authenticate without a Google identity. The application never links accounts by email. A Google sign-in with a legacy email creates a separate account. Existing sessions must sign in again. Back up the database before applying the migration: the deleted credentials cannot be recovered by a rollback.
 
 Password endpoints and admin account creation, CSV import, deletion, and role mutations return 404. User listing and CSV export remain available to the configured admin. Status management is implemented separately in issue #3.
 
@@ -72,7 +65,7 @@ Automated specs use fake Google transport, repositories, and isolated in-memory 
 
 ### Running on the host
 
-Run PostgreSQL and Redis locally, and provide an SMTP server. Configure the database through the `DB_*` variables in `.env`. Set `DB_HOST=localhost` and `REDIS_URL=redis://localhost:6379`. Set `MAIL_HOST` and `MAIL_PORT` to your SMTP server's host and port. The supplied Compose files do not publish PostgreSQL or Redis ports to the host.
+Use this alternative only when the Docker app servers are stopped. Run PostgreSQL and Redis locally, and provide an SMTP server. Configure the database through the `DB_*` variables in `.env`. Set `DB_HOST=localhost` and `REDIS_URL=redis://localhost:6379`. Set `MAIL_HOST` and `MAIL_PORT` to your SMTP server's host and port. The supplied Compose files do not publish PostgreSQL, Redis, or SMTP ports to the host. Mailpit exposes only its web inbox on port 8025.
 
 ```sh
 corepack enable
@@ -81,6 +74,16 @@ pnpm db:up
 pnpm db:seed
 pnpm dev
 ```
+
+## Configuration reference
+
+[`.env.example`](.env.example) lists every application setting. `API_PORT=8000` and `WEB_PORT=4200` match the development URLs. Angular's development server uses port 4200. If you change it, also set its `serve.options.port` in `apps/web/project.json`, update `FRONTEND_URI`, and update the Google client configuration. If you change the API port, update `GOOGLE_REDIRECT_URI` and the development API URL in `apps/web/src/environments/environment.development.ts`.
+
+`DB_*` configures PostgreSQL. `REDIS_URL` supplies sessions and cache. `MAIL_*` configures SMTP, with `MAIL_FROM` as the sender. Mailpit uses port 1025 inside Compose and needs no credentials. `SESSION_MAX_AGE` sets the session lifetime in milliseconds. `ADMIN_EMAIL`, `GOOGLE_CLIENT_ID`, `GOOGLE_SECRET`, and `GOOGLE_REDIRECT_URI` configure Google-only sign-in. `FRONTEND_URI` sets the browser origin for redirects and CORS.
+
+`UPLOADS_DIR` holds public profile images. Compose overrides it with `/app/apps/api/uploads` and mounts `uploads_data` there. Do not store student documents there. Private document storage and the background worker are planned in separate issues.
+
+`WEB_PORT` also sets the production SSR listener. `pm_id` is an optional process-manager marker used by the SSR entry point, and is not needed in Docker. `OPENAPI_INPUT` optionally selects an alternate schema for contract generation. `NODE_ENV=production` is set by the production Docker image for runtime dependencies. DeepSeek settings will be added when document processing is implemented.
 
 ## Everyday commands
 
@@ -127,7 +130,7 @@ There is no numeric coverage threshold.
 - After API changes, run `pnpm generate:api`. The command runs the API source in Nest preview mode, exports `libs/api-contracts/openapi.json` and generates the shared types. It does not need a running API, database, Redis, or SMTP server. The web app's build, serve, and typecheck targets also run these steps. Contract generation and type checks do not build either app. To use another schema, set `OPENAPI_INPUT` to a schema URL or a local JSON or YAML file.
 - Import types from `@unslop-docs/api-contracts` and commit the OpenAPI document and generated types. Never edit generated files manually.
 - Before you commit application changes, run `pnpm lint`, `pnpm typecheck`, and `pnpm test:api`. The owner manages builds and the development stack. Git hooks run linting and enforce Conventional Commit messages. GitHub Actions also runs builds.
-- When you adapt the starter, update its branding. Set the web app's API URLs in `apps/web/src/environments`. The production configuration uses `https://api.unslop-docs.com`. Before deployment, configure real secrets, Google OAuth, SMTP, `MAIL_FROM`, and `FRONTEND_URI`. Keep `.env` private.
+- Set the web app's API URLs in `apps/web/src/environments`. The development URL is `http://localhost:8000`. The production value, `https://api.unslop-docs.com`, is a placeholder to replace with the owner's API origin before deployment. Before deployment, configure real secrets, Google OAuth, SMTP, `MAIL_FROM`, and `FRONTEND_URI`. Keep `.env` private. The production Compose file does not run Mailpit, so use an external SMTP service.
 
 ```sh
 docker compose -f compose.prod.yml up -d --build

@@ -3,12 +3,12 @@
   [class]="ref ? '' : 'mx-auto my-6 w-[calc(100%-2rem)] max-w-xl rounded-md border'">
   <header class="flex shrink-0 items-center justify-between gap-4 border-b p-4 sm:p-6">
     @if (ref) {
-      <h2 id="profile-dialog-heading" tabindex="-1" class="text-xl font-semibold">Mon profil</h2>
+      <h2 id="profile-dialog-heading" tabindex="-1" class="text-xl font-semibold">My profile</h2>
     } @else {
-      <h1 class="text-xl font-semibold">Mon profil</h1>
+      <h1 class="text-xl font-semibold">My profile</h1>
     }
     @if (ref) {
-      <button matIconButton type="button" aria-label="Fermer le profil" (click)="ref.close()" [disabled]="isSaving()">
+      <button matIconButton type="button" aria-label="Close profile" (click)="ref.close()" [disabled]="isSaving()">
         <mat-icon svgIcon="x" />
       </button>
     }
@@ -19,7 +19,7 @@
         <img
           class="size-full rounded-full object-cover ring-2 ring-primary"
           [src]="profileImageUrl()"
-          alt="Photo de profil" />
+          alt="Profile photo" />
         <input
           #profileImageInput
           type="file"
@@ -31,7 +31,7 @@
           matIconButton
           type="button"
           class="absolute -right-1 -bottom-1 rounded-full bg-surface text-primary shadow-sm ring-2 ring-surface transition-transform duration-200 [--mat-icon-button-hover-state-layer-opacity:0] enabled:hover:scale-105 motion-reduce:transform-none motion-reduce:transition-none"
-          aria-label="Changer la photo de profil"
+          aria-label="Change profile photo"
           (click)="profileImageInput.click()"
           [disabled]="isSaving()">
           <mat-icon
@@ -40,14 +40,14 @@
         </button>
       </div>
       @if (store.isUpdatingProfileImage()) {
-        <p role="status" class="sr-only">Envoi de la photo de profil…</p>
+        <p role="status" class="sr-only">Uploading profile photo...</p>
       }
       @if (store.profileImageError()) {
         <message class="mb-4" [message]="store.profileImageError()" (dismissed)="store.clearProfileImageMessage()" />
       }
       <form [id]="profileFormId" class="flex flex-col gap-4" (submit)="onUpdateProfile($event)">
         <mat-form-field subscriptSizing="dynamic">
-          <mat-label>Nom</mat-label>
+          <mat-label>Name</mat-label>
           <input matInput [formField]="profileForm.name" autocomplete="name" />
           @if (profileForm.name().touched() && profileForm.name().errors()[0]; as error) {
             <mat-error>{{ error.message }}</mat-error>
@@ -55,7 +55,7 @@
         </mat-form-field>
         <p class="text-sm text-on-surface-variant">Google account: {{ user?.email }}</p>
         @if (!ref && store.profileUpdated()) {
-          <p role="status" class="text-sm text-primary">Vos informations ont bien été enregistrées.</p>
+          <p role="status" class="text-sm text-primary">Your profile has been saved.</p>
         }
         @if (store.profileError()) {
           <message [message]="store.profileError()" (dismissed)="store.clearProfileMessage()" />
@@ -66,7 +66,7 @@
   <footer class="admin-actions shrink-0 justify-end border-t p-4 sm:p-6">
     @if (ref) {
       <button matButton="outlined" type="button" class="admin-action" [disabled]="isSaving()" (click)="ref.close()">
-        Annuler
+        Cancel
       </button>
     }
     <button
@@ -75,7 +75,7 @@
       type="submit"
       [attr.form]="profileFormId"
       [disabled]="isSaving() || profileForm().invalid()">
-      {{ isSaving() ? 'Enregistrement…' : 'Enregistrer' }}
+      {{ isSaving() ? 'Saving...' : 'Save' }}
     </button>
   </footer>
 </section>

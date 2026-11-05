@@ -23,7 +23,7 @@ export class FindRoleByIdHandler implements IQueryHandler<FindRoleById, Role> {
       this.logger.error(
         `Find role by id failed id="${query.id}": ${error instanceof Error ? error.message : String(error)}`
       );
-      throw new NotFoundException('Rôle introuvable');
+      throw new NotFoundException('Role not found');
     }
   }
 }

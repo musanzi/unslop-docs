@@ -1,97 +1,53 @@
-<section class="relative isolate min-h-[calc(100svh-5rem)] overflow-hidden text-white">
-  <img src="/images/hero.jpg" alt="Hero Banner" class="absolute inset-0 -z-30 size-full object-cover object-center" />
-  <div class="absolute inset-0 -z-10 bg-gray-900/70"></div>
+<section class="bg-neutral-950 text-white">
   <div
-    class="mx-auto grid min-h-[calc(100vh-4rem)] w-full max-w-7xl items-center gap-12 px-4 py-14 sm:px-6 lg:grid-cols-[0.95fr_1.05fr] lg:px-8 lg:py-16">
+    class="mx-auto grid w-full max-w-7xl items-center gap-12 px-4 pb-20 pt-32 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:px-8 lg:pb-24 lg:pt-40">
     <div class="max-w-2xl">
-      <div
-        class="inline-flex items-center gap-2 rounded border border-primary-500 bg-primary-200/90 px-3 py-1 text-sm font-medium text-primary-900">
-        <mat-icon class="size-4" svgIcon="sparkles" />
-        Angular base ready for your next products
-      </div>
-
-      <h1 class="mt-6 text-5xl font-bold leading-10">Start with a clear, structured application ready to scale.</h1>
-
-      <p class="mt-6 max-w-xl text-xl leading-7">
-        A simple starter with authentication, dashboard, polished styling, and modern Angular foundations so you can
-        build without starting from zero.
+      <h1 class="text-5xl font-bold leading-tight sm:text-6xl">Your ideas. Clearer writing.</h1>
+      <p class="mt-6 max-w-xl text-xl leading-7 text-neutral-200">
+        unslop-docs is a document-editing product for students, designed to help you revise essays, reports, and
+        dissertations in English or French.
       </p>
-
-      <div class="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
+      <p class="mt-5 max-w-xl text-lg leading-7 text-neutral-200">
+        DOCX upload, writing assessment, editing, and download are in development. You can sign in with Google and
+        manage your profile today.
+      </p>
+      <div class="mt-8 flex flex-wrap items-center gap-4">
         @if (isAuthenticated()) {
-          <a matButton="filled" routerLink="/dashboard">
-            Open dashboard
-            <mat-icon class="ml-2 size-4" svgIcon="arrow-right" />
-          </a>
-          <button matButton="outlined" type="button" [disabled]="isLoading()" (click)="signOut.emit()">
+          <a matButton="filled" routerLink="/user/profile">Open my profile</a>
+          <button
+            matButton="outlined"
+            class="text-white"
+            type="button"
+            [disabled]="isLoading()"
+            (click)="signOut.emit()">
             {{ isLoading() ? 'Signing out...' : 'Sign out' }}
           </button>
         } @else {
-          <a matButton="filled" routerLink="/auth/sign-in">
-            Sign in
-            <mat-icon class="ml-2 size-4" svgIcon="arrow-right" />
-          </a>
-          <a matButton="outlined" class="text-white" routerLink="/auth/sign-in">Continue with Google</a>
+          <a matButton="filled" routerLink="/auth/sign-in">Sign in with Google</a>
         }
+        <a
+          routerLink="/"
+          fragment="features"
+          class="rounded px-2 py-3 font-semibold underline underline-offset-4 hover:text-neutral-200 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
+          >Explore the planned workflow</a
+        >
       </div>
     </div>
-
-    <div class="relative">
-      <div class="rounded-lg border border-neutral-200 bg-neutral-50 p-3 shadow-2xl shadow-neutral-950/10">
-        <div class="rounded border border-neutral-200 bg-white">
-          <div class="flex items-center gap-2 border-b border-neutral-200 px-4 py-3">
-            <span class="size-2.5 rounded-full bg-red-400"></span>
-            <span class="size-2.5 rounded-full bg-yellow-400"></span>
-            <span class="size-2.5 rounded-full bg-green-400"></span>
-            <span class="ml-3 text-sm font-medium text-neutral-500">unslop-docs.local/dashboard</span>
-          </div>
-
-          <div class="grid gap-4 p-4 md:grid-cols-[12rem_1fr]">
-            <aside class="hidden rounded border border-neutral-200 bg-neutral-50 p-3 md:block">
-              <div class="mb-5 h-5 w-24 rounded bg-neutral-300"></div>
-              <div class="space-y-2">
-                <div class="h-8 rounded bg-primary-100"></div>
-                <div class="h-8 rounded bg-neutral-200"></div>
-                <div class="h-8 rounded bg-neutral-200"></div>
-              </div>
-            </aside>
-
-            <div class="space-y-4">
-              <div class="grid gap-3 sm:grid-cols-3">
-                <div class="rounded border border-neutral-200 p-4">
-                  <div class="text-sm text-neutral-500">Modules</div>
-                  <div class="mt-2 text-3xl font-bold text-neutral-950">12</div>
-                </div>
-                <div class="rounded border border-neutral-200 p-4">
-                  <div class="text-sm text-neutral-500">Authentication flows</div>
-                  <div class="mt-2 text-3xl font-bold text-neutral-950">4</div>
-                </div>
-                <div class="rounded border border-neutral-200 p-4">
-                  <div class="text-sm text-neutral-500">UI sections</div>
-                  <div class="mt-2 text-3xl font-bold text-neutral-950">3</div>
-                </div>
-              </div>
-
-              <div class="rounded border border-neutral-200 p-4">
-                <div class="mb-4 flex items-center justify-between">
-                  <div>
-                    <div class="text-lg font-semibold text-neutral-950">Ready-to-connect flow</div>
-                    <div class="mt-1 text-sm text-neutral-500">
-                      Authentication, profile, and navigation are already aligned.
-                    </div>
-                  </div>
-                  <span class="rounded bg-green-50 px-2 py-1 text-sm font-medium text-green-700">Active</span>
-                </div>
-                <div class="space-y-3">
-                  <div class="h-3 rounded bg-neutral-200"></div>
-                  <div class="h-3 w-10/12 rounded bg-neutral-200"></div>
-                  <div class="h-3 w-7/12 rounded bg-neutral-200"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <figure class="rounded-lg bg-white p-6 text-neutral-950 sm:p-8">
+      <figcaption class="border-b border-neutral-200 pb-4 text-md font-medium text-neutral-600">
+        Illustrative writing assessment
+      </figcaption>
+      <blockquote class="mt-6 text-2xl leading-8">
+        “It is important to note that the survey had 120 responses.”
+      </blockquote>
+      <h2 class="mt-6 text-lg font-semibold">An opening that adds no meaning</h2>
+      <p class="mt-2 text-lg leading-7 text-neutral-600">The sentence can start with the finding itself.</p>
+      <p class="mt-6 text-md font-medium text-neutral-600">Possible edit</p>
+      <p class="mt-2 text-2xl leading-8">“The survey had 120 responses.”</p>
+      <p class="mt-8 border-t border-neutral-200 pt-4 text-md leading-6 text-neutral-600">
+        A writing assessment describes patterns with examples. It does not establish who wrote a document or give an AI
+        authorship percentage.
+      </p>
+    </figure>
   </div>
 </section>

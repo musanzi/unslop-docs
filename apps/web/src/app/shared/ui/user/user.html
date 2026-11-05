@@ -2,14 +2,14 @@
   class="flex cursor-pointer items-center gap-x-3 p-2 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
   [class]="compact() ? 'rounded-full text-neutral-950' : 'w-full rounded-md bg-on-primary/15 text-on-primary'"
   type="button"
-  aria-label="Ouvrir le menu utilisateur"
+  aria-label="Open user menu"
   [matMenuTriggerFor]="userMenu"
   #menuTrigger="matMenuTrigger">
   <img
     class="rounded-full object-cover ring-2 ring-primary"
     [class]="compact() ? 'size-8' : 'size-9'"
     [src]="avatarImageUrl()"
-    alt="Photo de profil" />
+    alt="Profile photo" />
   @if (!compact()) {
     <div class="flex min-w-0 flex-auto flex-col select-none">
       <div class="truncate font-medium text-white">
@@ -37,7 +37,7 @@
     mat-menu-item
     type="button"
     (click)="editProfile.emit()">
-    <img class="size-9 rounded-full object-cover ring-2 ring-primary" [src]="avatarImageUrl()" alt="Photo de profil" />
+    <img class="size-9 rounded-full object-cover ring-2 ring-primary" [src]="avatarImageUrl()" alt="Profile photo" />
     <div class="ml-3 flex min-w-0 flex-auto flex-col select-none">
       <div class="truncate font-medium text-neutral-950">
         {{ user()?.name }}
@@ -48,11 +48,11 @@
   <mat-divider />
   <button class="text-neutral-950" mat-menu-item type="button" (click)="editProfile.emit()">
     <mat-icon svgIcon="user-round" />
-    Mon profil
+    My profile
   </button>
   <mat-divider />
   <button class="text-neutral-950" mat-menu-item (click)="signedOut.emit()">
     <mat-icon svgIcon="log-out" />
-    Se déconnecter
+    Sign out
   </button>
 </mat-menu>

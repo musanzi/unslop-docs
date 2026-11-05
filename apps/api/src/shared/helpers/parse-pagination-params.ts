@@ -21,7 +21,7 @@ export function parsePaginationParams(params: PaginationDto): IParsedPaginationP
     limitNumber < 1 ||
     limitNumber > MAX_LIMIT
   ) {
-    throw new BadRequestException('Les paramètres de pagination sont invalides');
+    throw new BadRequestException('Invalid pagination parameters');
   }
 
   return { pageNumber, limitNumber };

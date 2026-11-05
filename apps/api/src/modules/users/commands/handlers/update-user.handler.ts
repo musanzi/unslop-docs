@@ -21,7 +21,7 @@ export class UpdateUserHandler implements ICommandHandler<UpdateUser, IUserRespo
     const { name, avatar } = command.updateUserDto;
 
     try {
-      if (!command.id) throw new BadRequestException('Utilisateur introuvable');
+      if (!command.id) throw new BadRequestException('User not found');
 
       const user = await this.repository.findOneOrFail({ where: { id: command.id } });
 
@@ -37,7 +37,7 @@ export class UpdateUserHandler implements ICommandHandler<UpdateUser, IUserRespo
       this.logger.error(
         `Update user failed id="${command.id}": ${error instanceof Error ? error.message : String(error)}`
       );
-      throw new BadRequestException('Mise à jour impossible');
+      throw new BadRequestException('Unable to update user');
     }
   }
 }

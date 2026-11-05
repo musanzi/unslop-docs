@@ -32,7 +32,7 @@ export class FindUserByEmailHandler implements IQueryHandler<FindUserByEmail, IU
       this.logger.error(
         `Find user by email failed email="${email}": ${error instanceof Error ? error.message : String(error)}`
       );
-      throw new NotFoundException('Utilisateur introuvable');
+      throw new NotFoundException('User not found');
     }
   }
 }
