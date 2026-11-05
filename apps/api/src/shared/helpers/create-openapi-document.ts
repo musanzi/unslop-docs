@@ -3,7 +3,7 @@ import { DocumentBuilder, OpenAPIObject, SwaggerModule } from '@nestjs/swagger';
 
 export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
   const config = new DocumentBuilder()
-    .setTitle('unslop-docs API DOC')
+    .setTitle('Unslopy API')
     .setDescription(
       'Google-only sign-in with Redis sessions. Admin access requires the verified Google account configured by ADMIN_EMAIL.'
     )

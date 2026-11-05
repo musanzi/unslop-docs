@@ -11,7 +11,7 @@
     aria-label="Your documents">
     <div class="history-content">
       <div class="history-header">
-        <a routerLink="/" class="wordmark">unslop-docs</a>
+        <a routerLink="/" class="wordmark">Unslopy</a>
         @if (isMobile()) {
           <button class="icon-button" type="button" (click)="history.close()" aria-label="Close documents">
             <mat-icon svgIcon="x" />
@@ -110,7 +110,8 @@
         }
         <div class="upload-area" [class.with-document]="store.selected()">
           <p id="document-privacy" class="privacy">
-            Document text goes to DeepSeek for assessment and editing. Your files are private to you.
+            Assessment and editing are in development and will send text to DeepSeek. For now, uploads save a private
+            original.
           </p>
           <button
             class="upload-button"

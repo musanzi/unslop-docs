@@ -1,8 +1,10 @@
-# unslop-docs
+# Unslopy
 
-unslop-docs is a document-editing product for students. The planned first release accepts DOCX files in English or French, reports writing patterns in a writing assessment, edits the document, and returns a revised DOCX. A writing assessment does not establish AI authorship.
+Unslopy is a document-editing product for clearer, more natural writing. The planned first release accepts DOCX files in English or French, reports writing patterns in a writing assessment, edits the document, and returns a revised DOCX. A writing assessment does not establish AI authorship.
 
-Google-only sign-in, profile management, admin user listing, status management with audit history, CSV export, and account statistics are available. Document upload, assessment, editing, private downloads, and monthly allowances are not implemented yet. The [product specification](docs/product-spec.md) describes the intended behavior, and the [ticket index](docs/ticket-drafts/README.md) links the implementation issues.
+Google-only sign-in, profile management, private DOCX uploads and original downloads, admin user listing, status management with audit history, CSV export, and account statistics are available. Assessment, editing, revised downloads, and monthly allowances are not implemented yet. The [product specification](docs/product-spec.md) describes the intended behavior, and the [ticket index](docs/ticket-drafts/README.md) links the implementation issues.
+
+The product brand is Unslopy. Repository, package, database, and Compose identifiers remain `unslop-docs`.
 
 ## Stack and structure
 
@@ -121,7 +123,7 @@ pnpm dev
 
 [`.env.example`](.env.example) lists every application setting. `API_PORT=8000` and `WEB_PORT=4200` match the development URLs. Angular's development server uses port 4200. If you change it, also set its `serve.options.port` in `apps/web/project.json`, update `FRONTEND_URI`, and update the Google client configuration. If you change the API port, update `GOOGLE_REDIRECT_URI` and the development API URL in `apps/web/src/environments/environment.development.ts`.
 
-`DB_*` configures PostgreSQL. `REDIS_URL` supplies sessions and cache. `MAIL_*` configures SMTP, with `MAIL_FROM` as the sender. Mailpit uses port 1025 inside Compose and needs no credentials. `SESSION_MAX_AGE` sets the session lifetime in milliseconds. `ADMIN_EMAIL`, `GOOGLE_CLIENT_ID`, `GOOGLE_SECRET`, and `GOOGLE_REDIRECT_URI` configure Google-only sign-in. `FRONTEND_URI` sets the browser origin for redirects and CORS.
+`DB_*` configures PostgreSQL. `REDIS_URL` supplies sessions and cache. `MAIL_*` configures SMTP, with `MAIL_FROM` as the sender. For existing installations, change the display name in `MAIL_FROM` to `Unslopy Support` and retain the configured email address. Mailpit uses port 1025 inside Compose and needs no credentials. `SESSION_MAX_AGE` sets the session lifetime in milliseconds. `ADMIN_EMAIL`, `GOOGLE_CLIENT_ID`, `GOOGLE_SECRET`, and `GOOGLE_REDIRECT_URI` configure Google-only sign-in. `FRONTEND_URI` sets the browser origin for redirects and CORS.
 
 `UPLOADS_DIR` holds public profile images. Compose overrides it with `/app/apps/api/uploads` and mounts `uploads_data` there. Do not store student documents there. `DOCUMENTS_DIR` holds private originals. It defaults to `private-documents`, relative to the API working directory. Both Compose files override it with `/app/private-documents` and mount the separate `documents_data` volume. The web container does not mount this volume. The API rejects overlapping public and private storage paths, including symlink aliases. The production image prepares the private directory for its `node` user. The background worker is a later issue.
 

@@ -92,7 +92,7 @@ export const buildEmailBody = (options: EmailTemplateOptions): EmailContent => {
           <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width:600px;table-layout:fixed;">
             <tr>
               <td bgcolor="#ffffff" class="email-content" style="padding:40px;border:1px solid #e2e8f0;border-radius:6px;">
-                <p style="margin:0 0 28px;color:#64748b;font-size:14px;font-weight:700;line-height:20px;letter-spacing:1px;">unslop-docs</p>
+                <p style="margin:0 0 28px;color:#64748b;font-size:14px;font-weight:700;line-height:20px;letter-spacing:1px;">Unslopy</p>
                 <h1 class="email-title" style="margin:0 0 28px;color:#0f172a;font-size:28px;font-weight:700;line-height:36px;overflow-wrap:break-word;">${escapeHtml(options.title)}</h1>
 
                 ${paragraph(`Hello ${options.greetingName},`)}
@@ -110,7 +110,7 @@ export const buildEmailBody = (options: EmailTemplateOptions): EmailContent => {
                 <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top:8px;">
                   <tr>
                     <td style="padding-top:24px;border-top:1px solid #e2e8f0;">
-                      <p style="margin:0;color:#64748b;font-size:14px;line-height:22px;">The <strong style="color:#334155;">unslop-docs</strong> team</p>
+                      <p style="margin:0;color:#64748b;font-size:14px;line-height:22px;">The <strong style="color:#334155;">Unslopy</strong> team</p>
                     </td>
                   </tr>
                 </table>

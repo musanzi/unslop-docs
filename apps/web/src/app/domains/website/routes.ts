@@ -8,7 +8,7 @@ const routes: Routes = [
     children: [
       {
         path: '',
-        title: 'Document editing for students',
+        title: 'Humanize your documents',
         loadChildren: () => import('./modules/landing/routes')
       },
       { path: '**', redirectTo: '' }

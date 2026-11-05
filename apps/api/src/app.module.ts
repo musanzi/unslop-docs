@@ -75,8 +75,7 @@ import { ApiResponseInterceptor } from './shared/interceptors';
         },
         defaults: {
           from:
-            config.get('MAIL_FROM') ||
-            `unslop-docs Support <${config.get('MAIL_USERNAME') || 'support@unslop-docs.local'}>`
+            config.get('MAIL_FROM') || `Unslopy Support <${config.get('MAIL_USERNAME') || 'support@unslop-docs.local'}>`
         }
       })
     }),

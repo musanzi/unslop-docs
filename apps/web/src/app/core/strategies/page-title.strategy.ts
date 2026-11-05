@@ -14,7 +14,7 @@ export class PageTitleStrategy extends TitleStrategy {
     const title = this.buildTitle(routerState);
 
     if (title !== undefined) {
-      this.title.setTitle(`unslop-docs | ${title}`);
+      this.title.setTitle(`Unslopy | ${title}`);
     }
   }
 }

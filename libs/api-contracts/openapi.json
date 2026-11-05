@@ -1037,7 +1037,7 @@
     }
   },
   "info": {
-    "title": "unslop-docs API DOC",
+    "title": "Unslopy API",
     "description": "Google-only sign-in with Redis sessions. Admin access requires the verified Google account configured by ADMIN_EMAIL.",
     "version": "1.0.0",
     "contact": {}

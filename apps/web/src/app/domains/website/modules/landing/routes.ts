@@ -3,7 +3,7 @@ import { Routes } from '@angular/router';
 const routes: Routes = [
   {
     path: '',
-    title: 'Document editing for students',
+    title: 'Humanize your documents',
     loadComponent: () => import('./features/landing').then((component) => component.Landing)
   }
 ];

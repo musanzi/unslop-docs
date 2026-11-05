@@ -11,14 +11,14 @@ export class SendWelcomeEmailHandler implements IEventHandler<WelcomeUserEvent> 
   async handle(event: WelcomeUserEvent): Promise<void> {
     try {
       const content = buildEmailBody({
-        title: 'Welcome to unslop-docs',
+        title: 'Welcome to Unslopy',
         greetingName: event.user.name,
         intro: 'Your account is ready. You can sign in with Google and manage your profile.'
       });
 
       await this.mailerService.sendMail({
         to: event.user.email,
-        subject: 'Welcome to unslop-docs',
+        subject: 'Welcome to Unslopy',
         ...content
       });
     } catch {
