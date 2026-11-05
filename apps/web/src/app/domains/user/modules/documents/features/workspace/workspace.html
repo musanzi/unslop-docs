@@ -30,7 +30,7 @@
             [attr.aria-current]="store.selected()?.id === document.id ? 'true' : null"
             (click)="select(document)">
             <span class="filename">{{ document.filename }}</span>
-            <span class="entry-status" [class.error]="document.status === 'failed'">{{
+            <span [class]="document.status === 'failed' ? 'text-xs text-[#ffb4a5]' : 'text-xs text-[#aaa9a5]'">{{
               store.statusLabels[document.status]
             }}</span>
             <time [attr.datetime]="document.createdAt">{{ document.createdAt | date: 'MMM d, y' }}</time>
@@ -105,11 +105,13 @@
             <mat-icon svgIcon="download" />
             {{ store.downloading() ? 'Downloading…' : 'Download original' }}
           </button>
-          <section class="assessment" aria-labelledby="assessment-heading">
-            <h2 id="assessment-heading">Writing assessment</h2>
-            <p class="processing-status" role="status">
+          <section class="mt-10" aria-labelledby="assessment-heading">
+            <h2 id="assessment-heading" class="text-lg font-medium">Writing assessment</h2>
+            <p class="my-3 flex items-center gap-2" role="status">
               @if (document.status === 'queued' || document.status === 'processing') {
-                <span class="progress-dot" aria-hidden="true"></span>
+                <span
+                  class="size-1.5 animate-pulse rounded-full bg-current motion-reduce:animate-none"
+                  aria-hidden="true"></span>
               }
               {{ store.statusLabels[document.status] }}
             </p>
@@ -127,16 +129,19 @@
             }
             @if (store.detail()?.assessment; as assessment) {
               @for (pattern of assessment.patterns; track pattern.rule) {
-                <div class="writing-pattern">
-                  <h3>{{ pattern.name }}</h3>
+                <div class="mt-6">
+                  <h3 class="text-[0.9375rem] font-medium">{{ pattern.name }}</h3>
                   @for (example of pattern.examples; track example) {
-                    <blockquote>{{ example }}</blockquote>
+                    <blockquote
+                      class="my-2 border-l-2 border-[#454540] pl-4 whitespace-pre-wrap break-words text-[#aaa9a5]">
+                      {{ example }}
+                    </blockquote>
                   }
                 </div>
               } @empty {
                 <p>No writing patterns found.</p>
               }
-              <p class="muted assessment-note">
+              <p class="mt-6 text-[0.8125rem] text-[#aaa9a5]">
                 This assessment describes writing patterns. It does not establish who wrote the document.
               </p>
             }
