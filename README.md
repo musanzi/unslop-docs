@@ -2,7 +2,7 @@
 
 Unslopy is a web app that makes DOCX files in English or French read more naturally. A user uploads a document, a background worker assesses and edits it with DeepSeek, and the user downloads a revised DOCX. A writing assessment reports writing patterns. It does not prove AI authorship.
 
-The app is live. This README describes the current code. The accepted [workflow revision](docs/document-workflow-design.md) is not implemented yet.
+The app is live. This README describes the current code. Of the accepted [workflow revision](docs/document-workflow-design.md), the document support from issue #15 is implemented: ordinary content controls and tracked changes are accepted, passages that fail a content check keep their original text with a notice, and formatting differences alone never block a download. The lifecycle changes from issue #16 are not implemented yet.
 
 The product name is Unslopy. Repository, package, database, and Compose identifiers use `unslop-docs`.
 
@@ -108,5 +108,6 @@ Before each release, back up PostgreSQL and the `documents_data` volume together
 - [Glossary](GLOSSARY.md)
 - [Architecture decisions](docs/adr/)
 - [Assessment worker reference](docs/assessment-worker.md)
+- [DOCX support reference](docs/document-support.md)
 - [Revised document reference](docs/document-revisions.md)
 - [DOCX test fixtures](apps/api/src/shared/testing/fixtures/docx/README.md)

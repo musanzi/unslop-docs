@@ -1,6 +1,6 @@
 # Document workflow revision
 
-This document records the accepted workflow from the November 5, 2026 design interview. The interview is complete. These changes are not yet implemented.
+This document records the accepted workflow from the November 5, 2026 design interview. The interview is complete. Issue #15 implemented the document-support changes; see the [DOCX support reference](document-support.md). The lifecycle changes in issue #16 are not yet implemented.
 
 ## Requested behavior
 
@@ -32,7 +32,7 @@ The existing assessment produces writing-pattern examples without a numerical sc
 
 The original product specification starts assessment and editing automatically after upload. ADR 0003 originally published the assessment and revised file together. [ADR 0005](adr/0005-separate-assessment-from-user-requested-editing.md) supersedes that lifecycle and allowance policy. PostgreSQL remains the lifecycle store, but these transitions must change.
 
-The upload validator rejects all Word content controls. The document reader also rejects unsupported wrappers, so removing the upload check alone does not provide support. Existing output checks require strict preservation of document structures and formatting, which conflicts with the requested tolerance for formatting differences.
+Before issue #15, the upload validator rejected all Word content controls, the document reader rejected unsupported wrappers, and output checks required strict preservation of document structures and formatting. Issue #15 resolved these conflicts by normalizing controls and tracked changes before modeling and by keeping passages that fail a content check instead of failing the document.
 
 ## Implementation defaults
 
