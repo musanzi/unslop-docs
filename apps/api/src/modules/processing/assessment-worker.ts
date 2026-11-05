@@ -209,10 +209,10 @@ export class AssessmentWorker {
 
   private async rewrite(run: ClaimRun): Promise<void> {
     const { claim, active } = run;
-    const revisedKey = `${randomUUID()}.docx`;
-    let written = false;
-    let saveAttempted = false;
+    const revisedKey = claim.revisedKey ?? `${randomUUID()}.docx`;
+    let written = claim.revisedKey !== null;
     let saved = claim.revisedKey !== null;
+    let published = false;
     try {
       let revised: Buffer;
       if (claim.revisedKey !== null) {
@@ -248,7 +248,6 @@ export class AssessmentWorker {
         await this.storage.write(revisedKey, result.revised);
         written = true;
         await active();
-        saveAttempted = true;
         saved = await this.jobs.saveRevision(claim, { key: revisedKey, size: result.revised.length }, result.notices);
         if (!saved) {
           await this.jobs.recover();
@@ -264,24 +263,26 @@ export class AssessmentWorker {
         if (error instanceof RetryScheduled) throw error;
         this.logger.warn('Final assessment unavailable; publishing the validated revision without a final score.');
       }
-      if (!(await this.jobs.complete(claim, finalAssessment))) await this.jobs.recover();
+      published = await this.jobs.complete(claim, finalAssessment);
+      if (!published) await this.jobs.recover();
     } catch (error) {
       if (error instanceof RetryScheduled) return;
       if (saved) {
-        const published = await this.jobs.complete(claim, null).catch(() => false);
+        published = await this.jobs.complete(claim, null).catch(() => false);
         if (!published) await this.jobs.recover();
         return;
       }
       await run.fail(error);
     } finally {
-      if (written && !saved) {
-        try {
-          if (!saveAttempted || !(await this.jobs.ownsRevision(claim.id, revisedKey)))
-            await this.storage.remove(revisedKey);
-        } catch {
-          this.logger.warn('Private revised document cleanup could not be confirmed.');
-        }
-      }
+      if (written && !published) await this.removeOrphanedRevision(claim, revisedKey);
+    }
+  }
+
+  private async removeOrphanedRevision(claim: JobClaim, revisedKey: string): Promise<void> {
+    try {
+      if (!(await this.jobs.ownsRevision(claim.id, revisedKey))) await this.storage.remove(revisedKey);
+    } catch {
+      this.logger.warn('Private revised document cleanup could not be confirmed.');
     }
   }
 }

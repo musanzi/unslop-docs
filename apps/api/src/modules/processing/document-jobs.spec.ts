@@ -897,6 +897,20 @@ describe('Durable document jobs', () => {
     expect(await reservations(id)).toEqual(['released']);
   });
 
+  it('removes the saved revision when publication finds the document deleted', async () => {
+    const id = await enqueueRewrite();
+    const storage = privateStorage(await assessmentDocxFixture());
+    const provider = faithfulRevisionProvider();
+    provider.assess = async () => {
+      await database.query('DELETE FROM document WHERE id = $1', [id]);
+      return { score: 10, patterns: [] };
+    };
+    await workerWith(storage, provider).runOnce();
+    expect(storage.revisions.size).toBe(0);
+    expect(await sql.query('SELECT id FROM document')).toEqual([]);
+    expect(await reservations(id)).toEqual([]);
+  });
+
   it('keeps a published revision if the completion acknowledgement is lost', async () => {
     const id = await enqueueRewrite();
     const storage = privateStorage(await assessmentDocxFixture());
