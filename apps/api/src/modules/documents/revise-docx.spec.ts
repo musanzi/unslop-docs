@@ -66,6 +66,26 @@ describe('Revision preservation corpus', () => {
     }
   );
 
+  it('revises the final version of a document with content controls and tracked changes', async () => {
+    const revision = 'w:id="1" w:author="Tutor" w:date="2026-01-01T00:00:00Z"';
+    const original = await readerFixture(
+      `<w:sdt><w:sdtPr><w:alias w:val="Body"/></w:sdtPr><w:sdtContent>${textParagraph(revisionPassages.english)}</w:sdtContent></w:sdt>` +
+        `<w:p><w:r><w:t xml:space="preserve">In order to keep the original notes, </w:t></w:r><w:del ${revision}><w:r><w:delText>nobody </w:delText></w:r></w:del><w:ins ${revision}><w:r><w:t>the students finish early.</w:t></w:r></w:ins></w:p>`
+    );
+    const source = await readDocx(original);
+    const result = await createDocumentWorkflow(faithfulRevisionProvider(), 'rules').invoke({ source });
+    const revised = await readDocx(result.revised);
+    expect(revised.text).toBe(
+      `${revisionPassages.english.replace('In order to', 'To')}\nTo keep the original notes, the students finish early.`
+    );
+    expect(revised.readXmlPart(revised.mainPart)).not.toMatch(/<w:(sdt|ins|del)\b/);
+    expect(revised.protectedParts).toEqual(source.protectedParts);
+    await expect(validateRevisedDocx(source, result.revised)).resolves.toBeUndefined();
+    expect((await readDocx(original)).text).toContain(
+      'In order to keep the original notes, the students finish early.'
+    );
+  });
+
   it.each([
     ['citation', '(2024)', '(2025)'],
     ['citation', '(2024)', ''],

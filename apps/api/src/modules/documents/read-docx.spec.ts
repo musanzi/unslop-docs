@@ -19,7 +19,7 @@ describe('DOCX reader', () => {
     if (!png) throw new Error('Fixture image is missing');
     expect(png.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
     const data: Buffer[] = [];
-    for (let offset = 8; offset < png.length; ) {
+    for (let offset = 8; offset < png.length;) {
       const size = png.readUInt32BE(offset);
       const type = png.subarray(offset + 4, offset + 8);
       const chunk = png.subarray(offset + 8, offset + 8 + size);
@@ -107,8 +107,14 @@ describe('DOCX reader', () => {
     const result = await readDocx(
       await readerFixture(
         `<w:p><w:r><w:t xml:space="preserve">Name: </w:t></w:r>${control('<w:r><w:rPr><w:b/></w:rPr><w:t>Student</w:t></w:r>')}</w:p>` +
-          control(`<w:p><w:pPr><w:pStyle w:val="ResearchTitle"/></w:pPr><w:r><w:t>Findings</w:t></w:r></w:p>${textParagraph('Outer paragraph.')}`, 'Section') +
-          control(`<w:p><w:r><w:t>Nested </w:t></w:r>${control('<w:r><w:t>control</w:t></w:r>', 'Inner')}</w:p>`, 'Outer') +
+          control(
+            `<w:p><w:pPr><w:pStyle w:val="ResearchTitle"/></w:pPr><w:r><w:t>Findings</w:t></w:r></w:p>${textParagraph('Outer paragraph.')}`,
+            'Section'
+          ) +
+          control(
+            `<w:p><w:r><w:t>Nested </w:t></w:r>${control('<w:r><w:t>control</w:t></w:r>', 'Inner')}</w:p>`,
+            'Outer'
+          ) +
           `<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w="2400"/><w:gridCol w:w="2400"/></w:tblGrid>${control(
             `<w:tr>${control(`<w:tc><w:tcPr/>${textParagraph('Cell control')}</w:tc>`, 'Cell')}<w:tc>${textParagraph('Plain cell')}</w:tc></w:tr>`,
             'Row'
@@ -127,7 +133,10 @@ describe('DOCX reader', () => {
       { kind: 'heading', level: 1, text: 'Findings' },
       { kind: 'paragraph', text: 'Outer paragraph.' },
       { kind: 'paragraph', text: 'Nested control' },
-      { kind: 'table', rows: [{ cells: [{ blocks: [{ text: 'Cell control' }] }, { blocks: [{ text: 'Plain cell' }] }] }] }
+      {
+        kind: 'table',
+        rows: [{ cells: [{ blocks: [{ text: 'Cell control' }] }, { blocks: [{ text: 'Plain cell' }] }] }]
+      }
     ]);
     expect(result.text).toBe('Name: Student\nFindings\nOuter paragraph.\nNested control\nCell control\nPlain cell');
     expect(result.wordCount).toBe(11);
@@ -146,7 +155,9 @@ describe('DOCX reader', () => {
   });
 
   it('counts words inside content controls toward the limit', async () => {
-    const bytes = await readerFixture(control(textParagraph('word '.repeat(5001)), 'Body') + textParagraph('word '.repeat(5000)));
+    const bytes = await readerFixture(
+      control(textParagraph('word '.repeat(5001)), 'Body') + textParagraph('word '.repeat(5000))
+    );
     await expect(readDocx(bytes)).rejects.toThrow('10,001 words. The limit is 10,000');
   });
 
