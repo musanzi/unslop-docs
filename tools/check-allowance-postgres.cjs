@@ -12,6 +12,7 @@ const { Role } = require('../apps/api/src/modules/roles/entities');
 const { MonthlyAllowance } = require('../apps/api/src/modules/documents/monthly-allowance');
 const { UploadDocumentHandler } = require('../apps/api/src/modules/documents/commands/upload-document.handler');
 const { RetryDocumentHandler } = require('../apps/api/src/modules/documents/commands/retry-document.handler');
+const { DeleteDocumentHandler } = require('../apps/api/src/modules/documents/commands/delete-document.handler');
 const { UnslopifyDocumentHandler } = require('../apps/api/src/modules/documents/commands/unslopify-document.handler');
 const { DocumentJobs } = require('../apps/api/src/modules/processing/document-jobs');
 const { AssessmentWorker } = require('../apps/api/src/modules/processing/assessment-worker');
@@ -60,6 +61,7 @@ async function main() {
     const upload = new UploadDocumentHandler(database.getRepository(Document), storage);
     const unslopifyHandler = new UnslopifyDocumentHandler(database, allowance);
     const retry = new RetryDocumentHandler(database, allowance);
+    const deletion = new DeleteDocumentHandler(database, storage);
     const jobs = new DocumentJobs(database);
     const bytes = await assessmentDocxFixture();
     const add = (ownerId) => upload.execute({ ownerId, file: { buffer: bytes, originalname: 'fixture.docx' } });
@@ -94,13 +96,23 @@ async function main() {
       }
       throw new Error('Competing test transactions did not reach the database lock');
     };
-    const holdOwner = async (owner) => {
+    const holdRow = async (table, id) => {
       blocker = database.createQueryRunner();
       await blocker.connect();
       await blocker.startTransaction();
-      await blocker.query('SELECT id FROM "user" WHERE id = $1 FOR UPDATE', [owner]);
+      await blocker.query(`SELECT id FROM "${table}" WHERE id = $1 FOR UPDATE`, [id]);
     };
-    const releaseOwner = async () => {
+    const holdOwner = (owner) => holdRow('user', owner);
+    const waitForStage = async (id, stage) => {
+      const until = Date.now() + 10000;
+      while (Date.now() < until) {
+        const [row] = await database.query('SELECT "processingStage" AS stage FROM document WHERE id = $1', [id]);
+        if (row?.stage === stage) return;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      throw new Error(`The worker did not reach the ${stage} stage`);
+    };
+    const releaseLock = async () => {
       await blocker.commitTransaction();
       await blocker.release();
       blocker = null;
@@ -123,7 +135,7 @@ async function main() {
       await holdOwner(owner);
       const competing = Promise.allSettled([unslopify(owner, documents[2].id), unslopify(owner, documents[3].id)]);
       await waitForLock(2);
-      await releaseOwner();
+      await releaseLock();
       const results = await competing;
       assert.equal(results.filter((result) => result.status === 'fulfilled').length, 1);
       assert.equal(results.find((result) => result.status === 'rejected').reason.getStatus(), 409);
@@ -148,7 +160,7 @@ async function main() {
     const crossing = unslopify(boundaryOwner, boundary.id);
     await waitForLock(1);
     now = new Date('2027-01-01T00:00:00.000Z');
-    await releaseOwner();
+    await releaseLock();
     await crossing;
     assert.equal((await allowance.read(database, boundaryOwner)).reserved, 1);
     now = new Date('2026-12-31T23:59:59.999Z');
@@ -250,7 +262,7 @@ async function main() {
         retry.execute({ ownerId: retryOwner, id: failed.id })
       ]);
       await waitForLock(2);
-      await releaseOwner();
+      await releaseLock();
       const results = await competing;
       assert.equal(results.filter((result) => result.status === 'fulfilled').length, 1);
       assert.equal(results.find((result) => result.status === 'rejected').reason.getStatus(), 409);
@@ -277,7 +289,7 @@ async function main() {
     const retryCrossing = retry.execute({ ownerId: retryOwner, id: failed.id });
     await waitForLock(1);
     now = new Date('2027-02-01T00:00:00.000Z');
-    await releaseOwner();
+    await releaseLock();
     await retryCrossing;
     assert.equal((await allowance.read(database, retryOwner)).reserved, 1);
     await worker().runOnce();
@@ -287,6 +299,65 @@ async function main() {
     assert.equal((await allowance.read(database, retryOwner)).used, 0);
     assert.equal((await allowance.read(database, retryOwner)).reserved, 0);
     console.log('PASS retry waiting across January/February charges February after fake-provider completion');
+
+    await database.query('DELETE FROM document');
+    const outcomes = { deletedFirst: 0, completedFirst: 0 };
+    for (let round = 0; round < 10; round++) {
+      const raceOwner = await createOwner();
+      const before = files.size;
+      const [raced] = await assessed(raceOwner, 1);
+      await unslopify(raceOwner, raced.id);
+      let openGate;
+      const gate = new Promise((resolve) => {
+        openGate = resolve;
+      });
+      const gated = faithfulRevisionProvider();
+      const assessRevised = gated.assess;
+      gated.assess = async (...args) => {
+        await gate;
+        return assessRevised(...args);
+      };
+      const running = worker(gated).runOnce();
+      await waitForStage(raced.id, 'final-assessment');
+      await holdRow('document', raced.id);
+      let deleting;
+      if (round % 2 === 0) {
+        deleting = deletion.execute({ ownerId: raceOwner, id: raced.id });
+        await waitForLock(1);
+        openGate();
+        await waitForLock(2);
+      } else {
+        openGate();
+        await waitForLock(1);
+        deleting = deletion.execute({ ownerId: raceOwner, id: raced.id });
+        await waitForLock(2);
+      }
+      await releaseLock();
+      const [completion, removal] = await Promise.allSettled([running, deleting]);
+      assert.equal(completion.status, 'fulfilled');
+      assert.equal(removal.status, 'fulfilled');
+      assert.deepEqual(await database.query('SELECT id FROM document WHERE id = $1', [raced.id]), []);
+      assert.equal(files.size, before);
+      const states = await database.query('SELECT state FROM allowance_reservation WHERE "ownerId" = $1', [raceOwner]);
+      assert.equal(states.length, 1);
+      assert.ok(['charged', 'released'].includes(states[0].state));
+      const usage = await allowance.read(database, raceOwner);
+      assert.equal(usage.reserved, 0);
+      assert.equal(usage.used, states[0].state === 'charged' ? 1 : 0);
+      outcomes[states[0].state === 'charged' ? 'completedFirst' : 'deletedFirst']++;
+      await assert.rejects(
+        deletion.execute({ ownerId: raceOwner, id: raced.id }),
+        (error) => error.getStatus() === 404
+      );
+      assert.equal(
+        (await database.query('SELECT state FROM allowance_reservation WHERE "ownerId" = $1', [raceOwner])).length,
+        1
+      );
+    }
+    assert.ok(outcomes.deletedFirst >= 1);
+    console.log(
+      `PASS PostgreSQL deletion against publication: 10 rounds, ${outcomes.deletedFirst} deleted first with a released slot, ${outcomes.completedFirst} completed first with a kept charge, no row or file left behind`
+    );
   } finally {
     if (blocker) {
       await blocker.rollbackTransaction();
