@@ -18,9 +18,16 @@ export async function docxFixture(
     const archive = new ZipFile();
     for (const [name, content] of Object.entries(parts)) {
       if (content !== null)
-        archive.addBuffer(Buffer.isBuffer(content) ? content : Buffer.from(content), name, { compress });
+        archive.addBuffer(Buffer.isBuffer(content) ? content : Buffer.from(content), name, {
+          compress,
+          mtime: new Date('2026-01-01T00:00:00Z')
+        });
     }
-    if (padding !== undefined) archive.addBuffer(Buffer.alloc(padding), 'word/media/padding.bin', { compress });
+    if (padding !== undefined)
+      archive.addBuffer(Buffer.alloc(padding), 'word/media/padding.bin', {
+        compress,
+        mtime: new Date('2026-01-01T00:00:00Z')
+      });
     const chunks: Buffer[] = [];
     const finished = new Promise<Buffer>((resolve, reject) => {
       archive.outputStream.on('data', (chunk) => chunks.push(chunk));

@@ -2,6 +2,10 @@ import { BadRequestException } from '@nestjs/common';
 import { crc32 } from 'node:zlib';
 import { fromBufferPromise } from 'yauzl';
 import { SaxesParser } from 'saxes';
+import { createHash } from 'node:crypto';
+import { documentModel, freezeModel, XmlNode } from './docx-content';
+import { documentLanguage } from './docx-language';
+import { DocxDocument } from './docx-model';
 
 const contentTypesNamespace = 'http://schemas.openxmlformats.org/package/2006/content-types';
 const relationshipsNamespace = 'http://schemas.openxmlformats.org/package/2006/relationships';
@@ -15,7 +19,7 @@ const officeRelationships = new Set([
 ]);
 const mainContentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml';
 
-function inspectXml(bytes: Buffer) {
+function inspectXml(bytes: Buffer, budget: { nodes: number }) {
   const encoding =
     bytes[0] === 0xff && bytes[1] === 0xfe ? 'utf-16le' : bytes[0] === 0xfe && bytes[1] === 0xff ? 'utf-16be' : 'utf-8';
   const parser = new SaxesParser({ xmlns: true });
@@ -23,12 +27,86 @@ function inspectXml(bytes: Buffer) {
   let root = '';
   let namespace = '';
   let body = false;
+  const tags: XmlNode[] = [];
+  let tree: XmlNode;
+  const source = new TextDecoder(encoding, { fatal: true }).decode(bytes);
+  let start = 0;
+  parser.on('opentagstart', () => {
+    start = source.lastIndexOf('<', parser.position - 1);
+  });
   const overrides = new Map<string, string>();
   const targets: string[] = [];
   parser.on('doctype', () => {
     throw new Error('Document types are not allowed');
   });
   parser.on('opentag', (tag) => {
+    if (
+      tag.uri === 'http://schemas.microsoft.com/office/word/2010/wordml' &&
+      ['conflictIns', 'conflictDel'].includes(tag.local)
+    )
+      throw new BadRequestException(
+        'This DOCX contains tracked changes. In Word, accept or reject all changes, then upload again.'
+      );
+    if (wordNamespaces.has(tag.uri)) {
+      if (
+        [
+          'ins',
+          'del',
+          'moveFrom',
+          'moveTo',
+          'cellIns',
+          'cellDel',
+          'cellMerge',
+          'numberingChange',
+          'conflictIns',
+          'conflictDel'
+        ].includes(tag.local) ||
+        tag.local.endsWith('Change') ||
+        /^(moveFrom|moveTo|customXml.*)(RangeStart|RangeEnd)$/.test(tag.local)
+      )
+        throw new BadRequestException(
+          'This DOCX contains tracked changes. In Word, accept or reject all changes, then upload again.'
+        );
+      const unsupported: Record<string, string> = {
+        txbxContent: 'text boxes',
+        sdt: 'content controls',
+        object: 'embedded objects',
+        altChunk: 'imported content',
+        subDoc: 'subdocuments'
+      };
+      if (unsupported[tag.local])
+        throw new BadRequestException(
+          `This DOCX contains unsupported ${unsupported[tag.local]}. Convert them to ordinary paragraphs or images, then upload again.`
+        );
+    }
+    if (
+      (tag.uri === 'urn:schemas-microsoft-com:vml' && tag.local === 'textbox') ||
+      (tag.uri === 'urn:schemas-microsoft-com:office:office' && tag.local === 'OLEObject')
+    )
+      throw new BadRequestException(
+        'This DOCX contains unsupported text boxes or embedded objects. Convert them to ordinary paragraphs or images, then upload again.'
+      );
+    if (
+      tag.uri === relationshipsNamespace &&
+      tag.local === 'Relationship' &&
+      /\/(oleObject|package|aFChunk|subDocument)$/.test(tag.attributes.Type?.value ?? '')
+    )
+      throw new BadRequestException(
+        'This DOCX contains unsupported embedded objects or imported content. Remove them or convert them to ordinary paragraphs or images, then upload again.'
+      );
+    if (++budget.nodes > 100000) throw new Error('XML node count exceeds limit');
+    const node: XmlNode = {
+      local: tag.local,
+      uri: tag.uri,
+      attributes: Object.values(tag.attributes),
+      children: [],
+      text: '',
+      start,
+      end: 0
+    };
+    if (tags.length) tags.at(-1).children.push(node);
+    else tree = node;
+    tags.push(node);
     if (++depth > 128) throw new Error('XML nesting exceeds limit');
     if (depth === 1) {
       root = tag.local;
@@ -50,33 +128,54 @@ function inspectXml(bytes: Buffer) {
       targets.push(tag.attributes.Target?.value);
     }
   });
+  const collectText = (value: string) => {
+    const tag = tags.at(-1);
+    if (tag) tag.text += value;
+  };
+  parser.on('text', collectText);
+  parser.on('cdata', collectText);
   parser.on('closetag', () => {
+    const tag = tags.pop();
+    tag.end = parser.position;
     depth--;
   });
-  parser.write(new TextDecoder(encoding, { fatal: true }).decode(bytes)).close();
-  return { root, namespace, body, overrides, targets };
+  parser.write(source).close();
+  return { root, namespace, body, overrides, targets, source, tree };
 }
 
-export async function validateDocx(bytes: Buffer): Promise<void> {
+export async function readDocx(bytes: Buffer): Promise<DocxDocument> {
   try {
+    if (bytes.length > 10000000) throw new BadRequestException('Choose a DOCX file of 10 MB or less.');
+    if (bytes.subarray(0, 8).equals(Buffer.from('d0cf11e0a1b11ae1', 'hex')))
+      throw new BadRequestException(
+        'This file may be password-protected or an older Word document. Remove its password and save it as DOCX, then upload again.'
+      );
     const zip = await fromBufferPromise(bytes, { lazyEntries: true, strictFileNames: true, validateEntrySizes: true });
     try {
       if (zip.entryCount > 2048) throw new Error('Too many archive entries');
       const names = new Set<string>();
       const xml = new Map<string, ReturnType<typeof inspectXml>>();
+      const parts = new Map<string, Buffer>();
+      const budget = { nodes: 0 };
       let total = 0;
       for await (const entry of zip.eachEntry()) {
         const name = entry.fileName;
+        if (entry.isEncrypted())
+          throw new BadRequestException('This DOCX is password-protected. Remove the password and upload again.');
         if (
           names.has(name) ||
           name.includes('\0') ||
           name.split('/').includes('.') ||
-          entry.isEncrypted() ||
           ![0, 8].includes(entry.compressionMethod)
         )
           throw new Error('Unsafe archive entry');
         names.add(name);
         total += entry.uncompressedSize;
+        if (
+          (entry.uncompressedSize > 1000000 && entry.uncompressedSize > entry.compressedSize * 200) ||
+          (total > 1000000 && total > bytes.length * 200)
+        )
+          throw new Error('Archive compression ratio exceeds limit');
         if (entry.uncompressedSize > 20000000 || total > 50000000) throw new Error('Expanded archive exceeds limit');
         const isXml = name.endsWith('.xml') || name.endsWith('.rels');
         if (isXml && entry.uncompressedSize > 10000000) throw new Error('XML exceeds limit');
@@ -89,13 +188,15 @@ export async function validateDocx(bytes: Buffer): Promise<void> {
             length += chunk.length;
             if (length > entry.uncompressedSize) throw new Error('Invalid entry size');
             checksum = crc32(chunk, checksum);
-            if (isXml) chunks.push(chunk);
+            chunks.push(chunk);
           }
         } finally {
           stream.destroy();
         }
         if (checksum !== entry.crc32 || length !== entry.uncompressedSize) throw new Error('Corrupt archive');
-        if (isXml) xml.set(name, inspectXml(Buffer.concat(chunks)));
+        const content = Buffer.concat(chunks);
+        parts.set(name, content);
+        if (isXml) xml.set(name, inspectXml(content, budget));
       }
       const types = xml.get('[Content_Types].xml');
       const relationships = xml.get('_rels/.rels');
@@ -118,12 +219,43 @@ export async function validateDocx(bytes: Buffer): Promise<void> {
         !main.body
       )
         throw new Error('Missing DOCX content');
+      const model = documentModel(target, new Map([...xml].map(([name, value]) => [name, value.tree])));
+      let wordCount = 0;
+      for (const segment of new Intl.Segmenter('en', { granularity: 'word' }).segment(model.text))
+        if (segment.isWordLike) wordCount++;
+      if (wordCount > 10000)
+        throw new BadRequestException(
+          `This document has ${wordCount.toLocaleString('en-US')} words. The limit is 10,000. Shorten it and upload again.`
+        );
+      const sources = new Map([...xml].map(([name, value]) => [name, value.source]));
+      return freezeModel({
+        mainPart: target,
+        ...model,
+        wordCount,
+        language: documentLanguage(model.text),
+        protectedParts: [...parts]
+          .filter(([name]) => name !== target)
+          .map(([name, content]) => ({
+            name,
+            size: content.length,
+            sha256: createHash('sha256').update(content).digest('hex')
+          })),
+        readXmlPart: (name: string) => sources.get(name),
+        readPart: (name: string) => (parts.has(name) ? Buffer.from(parts.get(name)) : undefined)
+      });
     } finally {
       zip.close();
     }
-  } catch {
+  } catch (error) {
+    if (error instanceof BadRequestException) throw error;
+    if (error instanceof Error && /encryption|encrypted/.test(error.message))
+      throw new BadRequestException('This DOCX is password-protected. Remove the password and upload again.');
     throw new BadRequestException(
-      'Choose a valid DOCX file. The file is not a DOCX, is damaged, or exceeds safe archive limits.'
+      'Choose a valid DOCX file. The file is not a DOCX, is damaged, or exceeds safe archive limits. Open it in Word, save a new DOCX, and upload again. Reduce large images if needed.'
     );
   }
+}
+
+export async function validateDocx(bytes: Buffer): Promise<void> {
+  await readDocx(bytes);
 }

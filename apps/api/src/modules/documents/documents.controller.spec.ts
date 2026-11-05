@@ -29,6 +29,8 @@ import { UploadDocumentHandler } from './commands/upload-document.handler';
 import { FindDocumentsHandler } from './queries/find-documents.handler';
 import { DownloadOriginalHandler } from './queries/download-original.handler';
 import { DocumentStorage } from './document-storage';
+import { readerFixture, textParagraph } from '@api/shared/testing/docx-reader-fixture';
+import { languageSamples } from '@api/shared/testing/docx-language-fixtures';
 import { docxFixture } from '@api/shared/testing/docx-fixture';
 
 describe('Private documents HTTP', () => {
@@ -205,6 +207,36 @@ describe('Private documents HTTP', () => {
     }
     expect(await (await list()).json()).toMatchObject({ data: { items: [], total: 0 } });
     expect(await readdir(join(root, 'private'))).toEqual(before);
+  });
+
+  it('rejects unprocessable uploads without records or files and accepts an immediate retry', async () => {
+    const rejected = [
+      [await readerFixture(textParagraph('word '.repeat(10001))), '10,001'],
+      [await readerFixture('<w:p><w:ins w:id="1"><w:r><w:t>Changed text</w:t></w:r></w:ins></w:p>'), 'tracked changes'],
+      [
+        await readerFixture('<w:p><w:r><w:pict><w:txbxContent><w:p/></w:txbxContent></w:pict></w:r></w:p>'),
+        'text boxes'
+      ],
+      [
+        await readerFixture('<w:sdt><w:sdtContent>' + textParagraph('Controlled') + '</w:sdtContent></w:sdt>'),
+        'content controls'
+      ],
+      [await readerFixture('<w:p><w:r><w:object/></w:r></w:p>'), 'embedded objects'],
+      [await readerFixture(textParagraph(languageSamples.spanish)), 'English or French'],
+      [Buffer.from('d0cf11e0a1b11ae1', 'hex'), 'password'],
+      [await docxFixture({ 'word/media/bomb.bin': Buffer.alloc(20000001) }, undefined, true), 'safe archive limits'],
+      [Buffer.from('damaged'), 'damaged']
+    ] as const;
+    for (const [bytes, message] of rejected) {
+      const response = await upload(bytes);
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({ message: expect.stringContaining(message) });
+      expect(await (await list()).json()).toMatchObject({ data: { items: [], total: 0 } });
+      expect(await readdir(join(root, 'private'))).toEqual([]);
+    }
+    const accepted = await upload(await readerFixture(textParagraph(languageSamples.french)));
+    expect(accepted.status).toBe(201);
+    expect(await (await list()).json()).toMatchObject({ data: { total: 1 } });
   });
 
   it('accepts exactly 10 MB and rejects one byte over without storage', async () => {

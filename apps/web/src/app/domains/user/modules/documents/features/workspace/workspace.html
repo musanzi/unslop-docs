@@ -118,7 +118,9 @@
             type="button"
             (click)="fileInput.click()"
             [disabled]="store.uploading()"
-            aria-describedby="document-privacy upload-limit">
+            [attr.aria-describedby]="
+              store.uploadError() ? 'document-privacy upload-limit upload-error' : 'document-privacy upload-limit'
+            ">
             <mat-icon svgIcon="paperclip" />
             {{ store.uploading() ? 'Uploading…' : 'Upload DOCX' }}
           </button>
@@ -130,9 +132,9 @@
             [disabled]="store.uploading()"
             hidden
             aria-label="Choose a DOCX file" />
-          <p id="upload-limit" class="muted upload-limit">Up to 10 MB</p>
+          <p id="upload-limit" class="muted upload-limit">Up to 10 MB · 10,000 words · English or French</p>
           @if (store.uploadError()) {
-            <p class="error" role="alert">{{ store.uploadError() }}</p>
+            <p id="upload-error" class="error" role="alert">{{ store.uploadError() }}</p>
           }
           <p class="status" role="status">
             {{ store.uploading() ? 'Uploading your original…' : store.announcement() }}

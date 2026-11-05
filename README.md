@@ -76,7 +76,7 @@ To verify the UI on the owner's stack, apply the migration, change a user's stat
 
 ### Upload and download documents
 
-Google sign-in opens `/user/documents`. Choose **Upload DOCX** after reading the DeepSeek privacy notice. The workspace lists your originals, newest first, with 20 entries per page. On phones, **Open documents** opens the history drawer. Choose an entry, then **Download original**. This slice stores originals only. Assessment, editing, word limits, allowances, and deletion belong to later issues.
+Google sign-in opens `/user/documents`. Choose **Upload DOCX** after reading the DeepSeek privacy notice. The workspace lists your originals, newest first, with 20 entries per page. On phones, **Open documents** opens the history drawer. Choose an entry, then **Download original**. This slice stores originals only. Assessment, editing, allowances, and deletion belong to later issues. Uploads already enforce the processing eligibility rules below.
 
 The `PrivateDocuments1793880200000` migration adds document ownership, display filename, byte size, upload time, and a generated original storage key. No document relation is added to user responses or CSV exports. Admin access does not grant access to another user's documents. The original has its own download endpoint and remains separate from future revised files.
 
@@ -88,7 +88,50 @@ The `PrivateDocuments1793880200000` migration adds document ownership, display f
 
 Signed-out requests return 401. Download requests from another user or the admin return the same 404 as an unknown document. Invalid pagination or DOCX content returns 400. Uploads over 10 MB return 413. Metadata responses also disable caching. Stored names never contain the supplied filename, and no static route serves the private directory.
 
-The upload limit is exactly 10,000,000 bytes. The API checks content rather than trusting the extension or MIME type. `yauzl` reads ZIP entries lazily without extracting files. `saxes` parses namespace-aware XML without resolving external entities. Validation checks DOCX content types, the main relationship, document XML, entry lengths, and CRC checksums. Archives with encrypted entries, duplicate or unsafe paths, DTDs, malformed XML, or more than 2,048 entries are rejected. Expanded data is limited to 50 MB total, 20 MB per entry, and 10 MB per XML part, with XML nesting limited to 128 levels. These are parser safety limits. Processing eligibility checks belong to issue #5.
+The upload limit is exactly 10,000,000 bytes. The API checks content rather than trusting the extension or MIME type. `yauzl` reads ZIP entries lazily without extracting files. `saxes` parses namespace-aware XML without resolving external entities. Validation checks DOCX content types, the main relationship, document XML, entry lengths, and CRC checksums. Archives with encrypted entries, duplicate or unsafe paths, DTDs, malformed XML, or more than 2,048 entries are rejected. Expanded data is limited to 50 MB total, 20 MB per entry, and 10 MB per XML part, with XML nesting limited to 128 levels. The reader also limits XML to 100,000 elements and style inheritance to 128 levels. Above 1 MB of expanded data, compression ratios over 200:1 are rejected per entry and for the archive as a whole. These are parser safety limits.
+
+#### DOCX rejection rules
+
+Uploads must contain no more than 10,000 words in the main document body. The reader joins text across runs before counting Unicode word segments with `Intl.Segmenter`. It counts headings, paragraphs, list items, table cells, and displayed field results. It excludes field instructions, equation markup, and the protected text in notes, comments, headers, and footers. Exactly 10,000 words is accepted. A rejection reports both the actual count and the limit.
+
+The API rejects these files before creating a record or writing private storage:
+
+- Tracked insertions, deletions, moves, or formatting changes, including changes inside protected parts. Accept or reject all tracked changes in Word before uploading again.
+- Text boxes, content controls, and embedded objects. Convert them to ordinary paragraphs or images.
+- Imported content, subdocuments, or body structures the reader cannot represent. Convert them to supported document content.
+- Password-protected files, legacy Word containers, damaged ZIP or XML content, damaged fields or hyperlinks, and archives that exceed the safety limits. Remove passwords and save a new DOCX in Word. Reduce large images if needed.
+- Clearly unsupported-language prose. English, French, and documents mixing both are supported.
+
+Language screening runs locally and sends no text to a provider. It uses script proportions and conservative function-word signals for English, French, Spanish, German, Portuguese, Italian, and Dutch. It requires substantial evidence before rejecting text. Short or uncertain text remains unclassified and is accepted; acceptance is not a language-confidence claim. Language settings in the file do not override its text.
+
+Images, equations, and reference fields are accepted as protected content. Footnotes, endnotes, comments, headers, footers, styles, numbering, relationship targets, and media retain their original bytes. Bold, italic, and hyperlink information remains available in the reader model. This slice does not create edited output; output-preservation validation belongs to issue #7.
+
+Rejections return HTTP 400 with an actionable message beside **Upload DOCX**. The upload control becomes available immediately, including for selecting the same file again. Rejected uploads add no history entry, make no provider request, and use no allowance. Provider calls and allowance reservations are not implemented in this slice.
+
+#### Shared DOCX reader
+
+`readDocx(bytes)` in `apps/api/src/modules/documents/validate-docx.ts` is the reader for uploads and future workers. `validateDocx(bytes)` calls that same reader and discards the model. Both reject with a `BadRequestException` suitable for the upload response. Neither performs persistence, network requests, or allowance changes.
+
+The returned `DocxDocument` and its nested arrays and objects are frozen. Its properties are defined in `docx-model.ts`:
+
+| Property                          | Meaning                                                                                                                                                                |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `blocks`                          | Headings, paragraphs, list items, protected blocks, and tables in source order. Table rows contain cells, which contain ordered blocks, including nested tables.       |
+| `text`, `wordCount`               | Main-body text in reading order, separated by newlines between blocks and table cells, and its word count.                                                             |
+| `language`                        | Supported language signals, or `uncertain` with no claimed language.                                                                                                   |
+| Run `bold`, `italic`, `hyperlink` | Formatting from paragraph and character styles plus direct run properties, and the original hyperlink target or internal anchor. Original style XML remains protected. |
+| Run `textNodes`                   | Editable text nodes and their exact source locations. Tabs, line breaks, run properties, and surrounding markup stay outside these locations.                          |
+| `source`                          | Part name and half-open UTF-16 string offsets into `readXmlPart(part)`, after decoding and removing any byte-order mark. These are not byte offsets.                   |
+| Protected `reason`                | Why the content must remain unchanged, such as `image`, `equation`, `reference-field`, or a note reference.                                                            |
+| `protectedParts`                  | Every package part except the main document, with original size and SHA-256 digest.                                                                                    |
+| `readPart(name)`                  | A fresh copy of the original part bytes, or `undefined`. Changing that copy cannot change the reader's stored original.                                                |
+| `readXmlPart(name)`               | The original decoded XML string, or `undefined`.                                                                                                                       |
+
+A complex field can span runs or paragraphs. The reader protects every paragraph that touches such a field, including adjacent prose in that paragraph. A run containing an image or another protected element is protected as a whole. Simple fields retain their own protected range. Downstream editing must replace only exposed `textNodes`, preserve all other main-part markup and all protected parts, and validate the output. The reader does not authorize reconstructing the document from plain text.
+
+Issues #6 and #7 can call this reader on a stored original and pass only the needed text and structure to their workflow. The model's part accessors stay local to the worker. Issue #6 adds the owner's required LangChain AI calls and LangGraph workflow. This reader requires neither dependency.
+
+[DOCX fixtures](apps/api/src/shared/testing/fixtures/docx/README.md) include downloadable accepted and rejected files, their generator, and the screenshot procedure for the integration stack.
 
 Uploads write and sync the original before committing its metadata. A failed write or database insert removes the private file when possible and publishes no document. Once a transaction reaches its commit phase, a connection failure can leave its outcome uncertain. The API retains the private file in that case because a delayed commit could still publish its metadata. An immediate empty lookup would not prove that the transaction rolled back. An unreferenced file has no download route. Failed cleanup and interrupted uploads can leave unreferenced files in the private volume; do not delete them until database recovery confirms that no document references them. Errors never log document text. A failed or interrupted upload can have completed, so refresh the history before retrying.
 
