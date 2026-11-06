@@ -597,12 +597,8 @@
                 Up to 10 MB · 10,000 words · English or French
               </p>
             </div>
-            <p class="mt-3 text-[0.8125rem] leading-5 text-muted">
-              AI detection runs on our server. When you choose Unslopify, document text is sent to DeepSeek for editing,
-              then checked locally again.
-            </p>
             @if (store.uploadError()) {
-              <p id="upload-error" class="mt-3 text-[0.875rem] text-danger [overflow-wrap:anywhere]" role="alert">
+              <p id="upload-error" class="mt-3 text-[0.875rem] text-danger wrap-anywhere" role="alert">
                 {{ store.uploadError() }}
               </p>
             }
