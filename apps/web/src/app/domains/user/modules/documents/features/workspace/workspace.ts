@@ -107,7 +107,7 @@ export class Workspace {
       case 'checking-result':
         return document.processingStage === 'validating'
           ? 'Comparing the revision with the original.'
-          : 'Rechecking the revised document with the local detector.';
+          : 'Rechecking the revised document';
       case 'download-ready':
         return 'Your revised DOCX is ready.';
       case 'failed':

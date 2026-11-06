@@ -9,13 +9,6 @@
     <span class="min-w-0 flex-1"
       ><span class="block truncate text-ink">{{ auth.user()?.name }}</span
       ><span class="block truncate text-[0.75rem] font-normal text-muted">{{ auth.user()?.email }}</span>
-      @if (subscription(); as plan) {
-        <span
-          class="mt-1.5 inline-flex items-center gap-1.5 text-[0.75rem] font-normal text-muted"
-          [attr.aria-label]="plan.name + ' subscription'">
-          <mat-icon [svgIcon]="plan.icon" />{{ plan.name }}
-        </span>
-      }
     </span>
     <mat-icon svgIcon="settings-2" />
   </button>
