@@ -96,6 +96,13 @@
         "command": "vitest run --config apps/web/vitest.config.mts"
       }
     },
+    "test-reload": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "node --test tools/document-reload.test.mjs"
+      }
+    },
     "typecheck-spec": {
       "executor": "nx:run-commands",
       "options": {
