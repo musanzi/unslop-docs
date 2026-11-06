@@ -275,6 +275,13 @@ describe('Monthly allowance at Unslopify and worker boundaries', () => {
     const provider = faithfulRevisionProvider();
     provider.edit = async () => ({ edits: [] });
     await workerFor(provider).runOnce();
+    for (let retry = 0; retry < 2; retry++) {
+      expect(await read()).toMatchObject({ used: 0, reserved: 1, remaining: 2 });
+      await database.query('UPDATE document SET "nextRequestAt" = now() - interval \'1 second\' WHERE id = $1', [
+        document.id
+      ]);
+      await workerFor(provider).runOnce();
+    }
     expect(await detail(document.id)).toMatchObject({
       status: 'failed',
       phase: 'rewrite',

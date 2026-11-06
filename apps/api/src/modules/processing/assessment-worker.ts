@@ -119,18 +119,28 @@ export class AssessmentWorker {
       if (prior?.state === 'succeeded') return validate(prior.outcome);
       const checkpoint = await this.jobs.startRequest(claim, operation, inputHash);
       if (!checkpoint) throw new Error('Provider request cannot start');
-      let raw: unknown;
+      let outcome: unknown;
       try {
-        raw = await invoke(
+        const raw = await invoke(
           call,
           operation.startsWith('local-detection:')
             ? (this.settings.assessmentProviderTimeoutMs ?? this.settings.providerTimeoutMs)
             : this.settings.providerTimeoutMs
         );
+        try {
+          outcome = validate(raw);
+        } catch (error) {
+          if (error instanceof RevisionValidationError) throw error;
+          throw new ProviderFailure('output');
+        }
       } catch (error) {
         await active();
-        const providerFailure = classifyProviderFailure(error, controller.signal);
-        const retry = providerFailure.temporary && checkpoint.attempts < 3;
+        const providerFailure =
+          error instanceof RevisionValidationError
+            ? new ProviderFailure('output')
+            : classifyProviderFailure(error, controller.signal);
+        const retryableOutput = operation.startsWith('edit:') && providerFailure.category === 'output';
+        const retry = (providerFailure.temporary || retryableOutput) && checkpoint.attempts < 3;
         const saved = await this.jobs.finishRequest(
           claim,
           operation,
@@ -146,17 +156,6 @@ export class AssessmentWorker {
         );
         if (!saved) throw providerFailure;
         if (retry) throw new RetryScheduled();
-        throw providerFailure;
-      }
-      let outcome: unknown;
-      try {
-        outcome = validate(raw);
-      } catch (error) {
-        await this.jobs.finishRequest(claim, operation, {
-          ...checkpoint,
-          state: 'failed',
-          failure: { category: 'output' }
-        });
         throw error;
       }
       await active();

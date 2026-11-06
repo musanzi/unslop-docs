@@ -13,7 +13,7 @@ export const failureMessages: Record<ProcessingFailure, string> = {
     Object.entries(validationReasons).map(([key, message]) => [key, `${message} Your original is still available.`])
   ) as Record<ValidationCheck, string>),
   provider:
-    'Document processing could not be completed. Upload the original again to start a new attempt. Your original is still available.',
+    'The processing service could not complete this attempt. Retry to try again. Your original is still available.',
   deadline: 'Processing took too long. Your original is still available.',
   interrupted: 'Processing was interrupted. Your original is still available.'
 };

@@ -254,7 +254,38 @@ export async function constructRevisedDocx(
     else zip.addBuffer(document.readPart(part.name), part.name);
   }
   zip.end();
-  return { bytes: await bytes, notices: { keptPassages, uneditedElements: uneditedElements(document) } };
+  const candidate = await bytes;
+  const revised = await readDocx(candidate);
+  const originals = paragraphs(document.blocks);
+  const revisions = paragraphs(revised.blocks);
+  requirePreserved(originals.length === revisions.length, 'structure');
+  const sourcePlan = sourceSpans(document);
+  const restored = new Map<string, RevisedSpan>();
+  originals.forEach((paragraph, index) => {
+    try {
+      validateTextPreservation(paragraph.text, revisions[index].text);
+    } catch (error) {
+      if (!(error instanceof RevisionValidationError)) throw error;
+      const affected = sourcePlan.filter(
+        (span) => span.source.start >= paragraph.source.start && span.source.end <= paragraph.source.end
+      );
+      requirePreserved(
+        affected.some((span) => edits.get(span.id) !== span.text),
+        error.check
+      );
+      for (const span of affected) restored.set(span.id, { id: span.id, text: span.text, kept: error.check });
+    }
+  });
+  if (restored.size) {
+    const validated = new Map(spans.map((span) => [span.id, span]));
+    return constructRevisedDocx(
+      document,
+      new Map(
+        plan.map((chunk) => [chunk.id, chunk.spans.map((span) => restored.get(span.id) ?? validated.get(span.id))])
+      )
+    );
+  }
+  return { bytes: candidate, notices: { keptPassages, uneditedElements: uneditedElements(document) } };
 }
 
 export async function validateRevisedDocx(source: DocxDocument, bytes: Buffer): Promise<void> {

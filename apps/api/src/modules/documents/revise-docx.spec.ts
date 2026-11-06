@@ -277,6 +277,51 @@ describe('Revision preservation corpus', () => {
 });
 
 describe('Passage-level spans', () => {
+  it('keeps a paragraph when edits across formatting boundaries change its citation', async () => {
+    const source = await readDocx(
+      await readerFixture(
+        '<w:p><w:r><w:t xml:space="preserve">Smith and </w:t></w:r>' +
+          '<w:r><w:rPr><w:b/></w:rPr><w:t>Jones (2024)</w:t></w:r>' +
+          '<w:r><w:t xml:space="preserve"> compared the results.</w:t></w:r></w:p>' +
+          textParagraph('In order to compare the results, the students kept notes.')
+      )
+    );
+    const provider = faithfulRevisionProvider();
+    provider.edit = async (_system, chunk) => ({
+      edits: chunk.spans.map(({ id, text }) => ({
+        id,
+        text: text.replace('Smith and', 'Smith with').replace('In order to', 'To')
+      }))
+    });
+    const result = await createRewriteWorkflow(provider, 'rules', 50).invoke({ source });
+    expect((await readDocx(result.revised)).text).toBe(
+      'Smith and Jones (2024) compared the results.\nTo compare the results, the students kept notes.'
+    );
+    expect(result.notices.keptPassages).toEqual(
+      expect.arrayContaining([expect.objectContaining({ check: 'citation' })])
+    );
+  });
+
+  it('accepts a faithful shorter passage when it falls below the language detection threshold', async () => {
+    const original =
+      'In order to compare the results that they have from the river, the students have kept their notes with the samples because they would need these notes after the study.';
+    const replacement =
+      'To compare the river results, the students kept their notes with the samples because they would need them after the study.';
+    const source = await readDocx(await readerFixture(textParagraph(original)));
+    expect(source.language.status).toBe('supported');
+    const result = await createRewriteWorkflow(
+      {
+        edit: async (_system, chunk) => ({
+          edits: chunk.spans.map(({ id }) => ({ id, text: replacement }))
+        })
+      },
+      'rules',
+      75
+    ).invoke({ source });
+    expect((await readDocx(result.revised)).text).toBe(replacement);
+    expect(result.notices.keptPassages).toEqual([]);
+  });
+
   it('offers one span across runs that share formatting and writes the rewrite back without losing runs', async () => {
     const source = await readDocx(
       await readerFixture(

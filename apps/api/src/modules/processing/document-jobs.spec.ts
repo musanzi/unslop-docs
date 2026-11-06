@@ -21,6 +21,7 @@ import { DocumentAssessment1793880300000 } from '../database/migrations/17938803
 import { DocumentJobs } from './document-jobs';
 import { ProviderRetries1793880500000 } from '../database/migrations/1793880500000-ProviderRetries';
 import { detectionFixture } from '@api/shared/testing/detection-fixtures';
+import { ProviderFailure } from '../documents/provider-failure';
 
 const noNotices = { keptPassages: [], uneditedElements: [] };
 const initialAssessment = detectionFixture(40);
@@ -105,6 +106,28 @@ describe('Durable document jobs', () => {
     provider: ReturnType<typeof faithfulRevisionProvider>,
     settings: WorkerSettings = timeouts
   ) => new AssessmentWorker(new DocumentJobs(sql), storage, provider, 'rules', settings);
+
+  it('retries an incomplete editing response and reuses already completed chunks', async () => {
+    const id = await enqueueRewrite();
+    const storage = privateStorage(await readerFixture(textParagraph('In order to compare the results. '.repeat(150))));
+    const provider = faithfulRevisionProvider();
+    const edit = provider.edit;
+    const calls: string[] = [];
+    provider.edit = async (system, chunk, signal) => {
+      calls.push(chunk.id);
+      if (calls.length === 2) throw new ProviderFailure('output');
+      return edit(system, chunk, signal);
+    };
+    const worker = workerWith(storage, provider);
+    await worker.runOnce();
+    expect(await sql.query('SELECT status FROM document')).toEqual([{ status: 'processing' }]);
+    await sql.query('UPDATE document SET "nextRequestAt" = now() - interval \'1 second\'');
+    await worker.runOnce();
+    expect(await sql.query('SELECT status FROM document')).toEqual([{ status: 'completed' }]);
+    expect(calls.filter((id) => id === calls[0])).toHaveLength(1);
+    expect(calls.filter((id) => id === calls[1])).toHaveLength(2);
+    expect(await reservations(id)).toEqual(['charged']);
+  });
 
   it('publishes the initial assessment and preview without a reservation, then waits for the user', async () => {
     const id = await enqueue();
@@ -843,7 +866,7 @@ describe('Durable document jobs', () => {
     expect(JSON.stringify(vi.mocked(Logger.prototype.warn).mock.calls)).not.toContain('2031');
   });
 
-  it('keeps the assessment and strength but releases the slot when a chunk fails validation', async () => {
+  it('keeps the assessment and strength but releases the slot after invalid editing responses exhaust retries', async () => {
     const id = await enqueueRewrite(30);
     const original = await readerFixture(textParagraph('word '.repeat(10000)));
     const storage = privateStorage(original);
@@ -852,11 +875,17 @@ describe('Durable document jobs', () => {
     const edit = provider.edit;
     provider.edit = async (system, chunk, signal) => {
       requests++;
-      return requests === 2 ? { edits: [] } : edit(system, chunk, signal);
+      return requests >= 2 ? { edits: [] } : edit(system, chunk, signal);
     };
     provider.assess = vi.fn(provider.assess);
     await workerWith(storage, provider).runOnce();
     expect(requests).toBe(2);
+    for (let retry = 0; retry < 2; retry++) {
+      expect(await reservations(id)).toEqual(['active']);
+      await sql.query('UPDATE document SET "nextRequestAt" = now() - interval \'1 second\'');
+      await workerWith(storage, provider).runOnce();
+    }
+    expect(requests).toBe(4);
     expect(provider.assess).not.toHaveBeenCalled();
     expect(vi.mocked(Logger.prototype.warn)).toHaveBeenCalledWith('Document processing failed: structure.');
     expect(JSON.stringify(vi.mocked(Logger.prototype.warn).mock.calls)).not.toContain('word word');

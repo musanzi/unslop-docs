@@ -74,8 +74,9 @@ export function validateTextPreservation(original: string, revised: string): voi
   try {
     const source = documentLanguage(original);
     const result = documentLanguage(revised);
-    requirePreserved(same(source, result), 'language');
-    if (source.status === 'uncertain') {
+    if (source.status === 'supported' && result.status === 'supported')
+      requirePreserved(same(source.languages, result.languages), 'language');
+    if (source.status === 'uncertain' || result.status === 'uncertain') {
       const words = (text: string) => new Set(text.toLowerCase().match(/\p{L}+/gu) ?? []);
       const sourceWords = words(original);
       const resultWords = words(revised);
