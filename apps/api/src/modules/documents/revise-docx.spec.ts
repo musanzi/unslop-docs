@@ -35,7 +35,7 @@ describe('Validated revised DOCX', () => {
 
 import { revisionFixture, faithfulRevisionProvider, revisionPassages } from '@api/shared/testing/revision-fixtures';
 import { constructRevisedDocx, planDocxEdits, validateChunkResult, validateRevisedDocx } from './revise-docx';
-import { RevisionValidationError } from './revision-validation';
+import { RevisionValidationError, validateTextPreservation } from './revision-validation';
 import { ZipFile } from 'yazl';
 
 async function changedPackage(bytes: Buffer, change: (name: string, bytes: Buffer) => Buffer | null) {
@@ -368,6 +368,35 @@ describe('Passage-level spans', () => {
 });
 
 describe('Revision archive edge cases', () => {
+  it.each(['Williams et al. (2024)', 'Williams\u00a0et al.\u00a0(2024)', 'Williams\tand\tJones\t(2024)'])(
+    'still rejects changed citation authors with horizontal whitespace: %s',
+    (citation) => {
+      expect(() => validateTextPreservation(citation, citation.replace('Williams', 'Anderson'))).toThrow(
+        RevisionValidationError
+      );
+    }
+  );
+
+  it('does not treat a capitalized paragraph before a citation as part of its author list', async () => {
+    const source = await readDocx(
+      await readerFixture(textParagraph('The sample summary') + textParagraph('Williams et al. (2024)'))
+    );
+    const result = await createRewriteWorkflow(
+      {
+        edit: async (_system, chunk) => ({
+          edits: chunk.spans.map(({ id, text }) => ({
+            id,
+            text: text.replace('The sample summary', 'The Sample Summary')
+          }))
+        })
+      },
+      'rules',
+      50
+    ).invoke({ source });
+    expect((await readDocx(result.revised)).text).toBe('The Sample Summary\nWilliams et al. (2024)');
+    expect(result.notices.keptPassages).toEqual([]);
+  });
+
   it('preserves accepted UTF-16 source markup and XML attributes containing greater-than signs', async () => {
     const xml =
       '<?xml version="1.0" encoding="UTF-16"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t xml:space="preserve" data-label="a > b">In order to compare &amp; study the river.</w:t></w:r></w:p></w:body></w:document>';

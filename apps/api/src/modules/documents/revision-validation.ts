@@ -43,7 +43,7 @@ const same = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.st
 const citations = (text: string) =>
   matches(
     text,
-    /\[[^\]\n]+\]|\([^()\n]*(?:\d{4}|\bet al\.|\bs\.\s?d\.|\bn\.d\.)[^()\n]*\)|\p{Lu}[\p{L}'’-]+(?:\s+(?:et al\.|and|et|&|\p{Lu}[\p{L}'’-]+)){0,4}\s*\(\d{4}[^)]*\)/gu
+    /\[[^\]\r\n]+\]|\([^()\r\n]*(?:\d{4}|\bet al\.|\bs\.[^\S\r\n]?d\.|\bn\.d\.)[^()\r\n]*\)|\p{Lu}[\p{L}'’-]+(?:[^\S\r\n]+(?:et al\.|and|et|&|\p{Lu}[\p{L}'’-]+)){0,4}[^\S\r\n]*\(\d{4}[^)\r\n]*\)/gu
   );
 const quotations = (text: string) =>
   matches(text, /"[^"\n]+"|“[^”]+”|«[^»]+»|(?<!\p{L})‘[^’]+’(?!\p{L})|(?<!\p{L})'[^'\n]+'(?!\p{L})/gu);
