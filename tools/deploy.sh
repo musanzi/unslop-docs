@@ -26,11 +26,11 @@ docker compose -f compose.prod.yml -p unslopy stop worker api
 umask 077
 backup_dir="$HOME/unslop-backups/$(date -u +%Y%m%dT%H%M%SZ)-$(git rev-parse --short HEAD)"
 mkdir -p "$backup_dir"
-docker compose -f compose.prod.yml -p unslopy exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom' > "$backup_dir/database.dump"
-docker compose -f compose.prod.yml -p unslopy run --rm --no-deps -T api tar -C /app/private-documents -czf - . > "$backup_dir/documents.tar.gz"
+docker compose -f compose.prod.yml -p unslopy exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom' < /dev/null > "$backup_dir/database.dump"
+docker compose -f compose.prod.yml -p unslopy run --rm --no-deps -T api tar -C /app/private-documents -czf - . < /dev/null > "$backup_dir/documents.tar.gz"
 echo "Database and document backup saved to $backup_dir"
 
-docker compose -f compose.prod.yml -p unslopy run --rm --no-deps -T api node_modules/.bin/typeorm migration:run -d dist/apps/api/src/modules/database/orm.config.js
+docker compose -f compose.prod.yml -p unslopy run --rm --no-deps -T api node_modules/.bin/typeorm migration:run -d dist/apps/api/src/modules/database/orm.config.js < /dev/null
 docker compose -f compose.prod.yml -p unslopy up -d --remove-orphans --wait --wait-timeout 120
 docker image prune -f
 

@@ -34,4 +34,6 @@ jobs:
           ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
 
       - name: Deploy
-        run: ssh -i ~/.ssh/deploy_key "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" 'bash -s' < tools/deploy.sh
+        run: |
+          ssh -i ~/.ssh/deploy_key "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            'remote_script=$(mktemp) && cat > "$remote_script" && bash "$remote_script"; result=$?; rm -f "$remote_script"; exit "$result"' < tools/deploy.sh
