@@ -1,113 +1,124 @@
 # Unslopy
 
-Unslopy edits DOCX files in English or French. Uploading runs a local AI detector. The user chooses a rewrite strength and clicks **Unslopify**. DeepSeek then edits with the pinned unslop skill, and the local detector checks the revised document. Detection needs no paid API or subscription. Its experimental model score does not prove authorship or match a university's detector. [Local detector setup and limitations](services/detector/README.md).
+Unslopy edits English and French DOCX files for students. Users sign in with Google, upload a document, and review a local AI detector's score. They choose a rewrite strength and click **Unslopify** to edit with DeepSeek. The app checks the revised document and offers both versions for download.
 
-The app is live. This README describes the current code. Of the accepted [workflow revision](docs/document-workflow-design.md), the document support from issue #15 and the API lifecycle from issue #16 are implemented: ordinary content controls and tracked changes are accepted, passages that fail a content check keep their original text with a notice, formatting differences alone never block a download, uploads are assessed before any editing, Unslopify reserves one monthly slot and charges it only when the revised download is ready, and the revised document receives its own assessment. Deletion from issues #11 and #12 is implemented: the owner deletes a document in any state together with every file kept for it. Deleting a queued or processing document stops it: no later result is saved, an active rewrite reservation is released once, and the worker sends nothing further to DeepSeek for it. Text already sent to DeepSeek in a request still in flight may be processed there to completion; the worker aborts that request within its next heartbeat and discards any answer. The workspace from issue #13 is implemented: uploads show transferred bytes, each document shows its phase (queued, assessing, ready to unslopify, editing with progress from the API, checking the result, download ready, or failed with a phase-specific retry), an assessed document shows its local model score, a Light/Balanced/Thorough rewrite-strength slider (1–100, initially 50) and the **Unslopify** action, and a completed document shows the before and after scores, both downloads, revision notices, and a note when the final score is unavailable. The interface shows neither writing-pattern examples nor a document preview. Retry is available in the selected document panel, not the sidebar. A completion animation plays once when the user watches the document complete; `prefers-reduced-motion` removes all motion and keeps the same text.
+Editing reserves one monthly allowance slot and charges it when the revised download is ready. The detector's score is experimental and does not prove authorship. See the [detector setup and limitations](services/detector/README.md).
 
-The product name is Unslopy. Repository, package, database, and Compose identifiers use `unslop-docs`.
+The product name is Unslopy. Code, database, and Compose identifiers use `unslop-docs`.
 
-## Project structure
+## Run locally
 
-This TypeScript monorepo uses pnpm and Nx.
+Use Docker with Compose, a Google OAuth web client, and a DeepSeek API key. Allow about 4 GB of RAM for the detector and 1.7 GB for its model weights, in addition to the rest of the stack. Run these commands from the repository root.
 
-| Path                 | Purpose                                                           | Main technologies                                                        |
-| -------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `apps/api`           | HTTP API and the background worker, which has its own entry point | NestJS 12, CQRS, TypeORM, LangChain, LangGraph                           |
-| `apps/web`           | Public pages, user workspace, and admin portal                    | Angular 22 with SSR, Angular Material, Tailwind CSS 4, NgRx Signal Store |
-| `libs/api-contracts` | API types generated for the web app                               | OpenAPI, `openapi-typescript`                                            |
-
-PostgreSQL 18 stores application data and the job queue. Redis 8 stores sessions and cache. Users sign in with Google only.
-
-## Run the app locally
-
-You need Docker, a Google OAuth web client, a DeepSeek API key, and enough memory for the local detector. Budget about 4 GB of RAM for that service and about 1.7 GB for its model weights. The first start downloads the pinned model before the worker becomes ready. Run all commands from the repository root.
-
-1. Create your environment file. Never commit `.env`.
+1. Create the environment file. Keep `.env` out of version control.
 
    ```sh
    cp -n .env.example .env
    ```
 
-2. Set these values in `.env`. Generate `SESSION_SECRET` with `openssl rand -hex 32`. Choose a `DEEPSEEK_MODEL` that supports JSON output from the [DeepSeek model list](https://api-docs.deepseek.com/quick_start/pricing/).
+2. Set `SESSION_SECRET`, `ADMIN_EMAIL`, `GOOGLE_CLIENT_ID`, `GOOGLE_SECRET`, `DEEPSEEK_API_KEY`, and `DEEPSEEK_MODEL` in `.env`. Generate the session secret with:
 
-   ```dotenv
-   SESSION_SECRET=
-   ADMIN_EMAIL=
-   GOOGLE_CLIENT_ID=
-   GOOGLE_SECRET=
-   DEEPSEEK_API_KEY=
-   DEEPSEEK_MODEL=
+   ```sh
+   openssl rand -hex 32
    ```
 
-3. In your Google OAuth client, register `http://localhost:8000/auth/google/redirect` as a redirect URI. If the consent screen is in testing mode, add your Google account as a test user.
+   Choose a DeepSeek model that supports JSON output. Keep the other development defaults in [`.env.example`](.env.example).
 
-4. Start the stack, prepare the database, and watch for source changes.
+3. Register `http://localhost:8000/auth/google/redirect` as a redirect URI in your Google OAuth client. If the consent screen is in testing mode, add your Google account as a test user.
+
+4. Start the stack. The first start downloads the detector model before the worker becomes ready.
 
    ```sh
    docker compose -f compose.dev.yml up -d --build
+   ```
+
+5. Apply database migrations, then seed the database.
+
+   ```sh
    docker compose -f compose.dev.yml exec api pnpm db:up
    docker compose -f compose.dev.yml exec api pnpm db:seed
+   ```
+
+6. Start source synchronization and leave this command running while you develop.
+
+   ```sh
    docker compose -f compose.dev.yml watch
    ```
 
-| Service       | URL                                  |
-| ------------- | ------------------------------------ |
-| Web app       | <http://localhost:4200>              |
-| API           | <http://localhost:8000>              |
-| API docs      | <http://localhost:8000/docs>         |
-| OpenAPI file  | <http://localhost:8000/openapi.json> |
-| Mailpit inbox | <http://localhost:8025>              |
+Open the [web app](http://localhost:4200) and sign in with Google. The first sign-in creates your account. The account whose verified email matches `ADMIN_EMAIL` gets admin access.
 
-The first Google sign-in creates an account. The account whose verified Google email matches `ADMIN_EMAIL` gets admin access. The API refuses to start if `ADMIN_EMAIL` is blank, and the worker refuses to start if a DeepSeek setting is blank. `ASSESSMENT_TIMEOUT_MS` bounds an initial assessment and `PROCESSING_TIMEOUT_MS` bounds a rewrite including its final assessment; the [worker reference](docs/assessment-worker.md) describes both.
+Use the [API reference](http://localhost:8000/docs) to inspect endpoints and [Mailpit](http://localhost:8025) to read local email. The API runs at `http://localhost:8000` and exposes its schema at `/openapi.json`.
 
-## Configuration
+If startup fails, check the service logs:
 
-[`.env.example`](.env.example) lists every setting, with a comment for each group.
+```sh
+docker compose -f compose.dev.yml logs --tail 100 api worker detector
+```
 
-`UPLOADS_DIR` holds public profile images. `DOCUMENTS_DIR` holds private student documents. Keep these paths separate, because the API refuses to start if they overlap.
+Check that `ADMIN_EMAIL` and both DeepSeek settings are set. Keep `UPLOADS_DIR` for public profile images separate from `DOCUMENTS_DIR` for private documents. The API rejects overlapping paths.
 
-## Develop
+## Find the code to change
 
-To run commands on your host, install Node.js 24.15+ and the dependencies. The `packageManager` field in `package.json` pins pnpm.
+Use these entry points in the pnpm and Nx monorepo:
+
+- [apps/web/src/app](apps/web/src/app) contains the Angular app with server-side rendering. Start in `domains/user/modules/documents` for the workspace or `domains/admin` for user management. Keep state and data access separate from UI components.
+- [apps/api/src/modules](apps/api/src/modules) contains NestJS modules, CQRS handlers, and TypeORM entities. Start in `documents` for uploads, assessments, rewrites, downloads, and deletion.
+- [apps/api/src/worker.ts](apps/api/src/worker.ts) starts the background worker. PostgreSQL stores document jobs and application data. Redis stores sessions and cache.
+- [services/detector](services/detector) contains the Python detector service. Detection runs locally. Rewriting sends document text to DeepSeek using the pinned skill in [vendor/cursor-pstack-unslop](vendor/cursor-pstack-unslop).
+- [libs/api-contracts](libs/api-contracts) contains the generated OpenAPI schema and TypeScript types shared with the web app.
+- [apps/api/src/modules/database/migrations](apps/api/src/modules/database/migrations) contains database migrations.
+
+Read [CLAUDE.md](CLAUDE.md) for code conventions and the [architecture decisions](docs/adr/) before changing document processing or storage.
+
+## Check your changes
+
+For host commands, use Node.js 24.15 or later within the 24.x release line. Use the pnpm version pinned in `package.json`.
 
 ```sh
 corepack enable
 pnpm install --frozen-lockfile
 ```
 
-To run a command in Docker instead, prefix it with `docker compose -f compose.dev.yml exec api` or `docker compose -f compose.dev.yml exec web`.
+Keep the development stack in Docker. Avoid starting a second copy with `pnpm dev`.
 
-| Command                       | Purpose                                         |
-| ----------------------------- | ----------------------------------------------- |
-| `pnpm lint`                   | Lint all projects                               |
-| `pnpm typecheck`              | Check types in all projects, including specs    |
-| `pnpm test:api`               | Run the API tests                               |
-| `pnpm test:api:watch`         | Rerun the API tests while editing               |
-| `pnpm test:api --args=google` | Run the API specs whose paths match the filter  |
-| `pnpm test:web`               | Run the web tests                               |
-| `pnpm db:up` / `pnpm db:down` | Apply migrations or revert the latest migration |
-| `pnpm generate:api`           | Regenerate the API contracts                    |
+Before committing, run:
 
-The API tests need no running services and no `.env` file. `bash tools/check-allowance-postgres.sh [api-container]` copies `tools/check-allowance-postgres.cjs` into the running API container and runs the allowance and deletion races against a disposable PostgreSQL database, including deletion contending with publication of a revised document.
+```sh
+pnpm lint
+pnpm typecheck
+pnpm test:api
+```
 
-After you change the API, run `pnpm generate:api` and commit the OpenAPI document and the generated types. Import these types from `@unslop-docs/api-contracts`, and do not edit the generated files.
+The API tests need no running services or `.env`. To filter API tests by path, use `pnpm test:api --args=google`.
 
-Before you commit, run `pnpm lint`, `pnpm typecheck`, and `pnpm test:api`. Commit messages must follow Conventional Commits. [CLAUDE.md](CLAUDE.md) lists the code style and testing conventions.
+For web changes, run `pnpm test:web`. For detector changes, run `python3 -m unittest discover -s services/detector -v`.
+
+After changing the API contract, regenerate it:
+
+```sh
+pnpm generate:api
+```
+
+Commit the generated schema and types. Import types from `@unslop-docs/api-contracts` instead of editing generated files.
+
+Use Conventional Commit messages, such as `docs: clarify local setup`. The pre-commit hook runs lint, and commitlint checks the message.
 
 ## Deploy
 
-A push to `main` runs the CI workflow. When CI succeeds, the Deploy workflow connects to the VPS over SSH and runs `tools/deploy.sh`. The script pulls `main`, rebuilds the stack from `compose.prod.yml` under the `unslopy` project name, and waits for the local detector to become healthy. It stops the API and worker, backs up PostgreSQL and private documents together under `~/unslop-backups`, and applies migrations before starting the updated services. It then checks `/health`. To redeploy without a push, use **Run workflow** in the Actions tab.
+Push to `main` to run CI. After CI passes, the [Deploy workflow](.github/workflows/deploy.yml) runs [tools/deploy.sh](tools/deploy.sh) on the VPS over SSH.
 
-The Deploy workflow needs the `VPS_HOST`, `VPS_USER`, and `VPS_SSH_KEY` repository secrets. The server needs its own `.env` with real secrets and an external SMTP service, because production does not run Mailpit.
+Configure the `VPS_HOST`, `VPS_USER`, and `VPS_SSH_KEY` repository secrets. Keep the checkout at `~/unslop-docs` on the VPS, with a production `.env` and an external SMTP service.
 
-Before each release, back up PostgreSQL and the `documents_data` volume together. Document records and their files must stay in step. `docker compose down` keeps the named volumes, but `down -v` deletes them.
+The script rebuilds [compose.prod.yml](compose.prod.yml), stops the API and worker, and backs up PostgreSQL and private documents together under `~/unslop-backups`. It applies migrations, starts the updated services, and checks `/health`.
 
-## More documentation
+To redeploy, select **Run workflow** in the Deploy workflow. Preserve the database and document backups together. Avoid `docker compose down -v`, which deletes named volumes.
 
-- [Product specification](docs/product-spec.md)
-- [Glossary](GLOSSARY.md)
-- [Architecture decisions](docs/adr/)
-- [Assessment worker reference](docs/assessment-worker.md)
-- [DOCX support reference](docs/document-support.md)
-- [Revised document reference](docs/document-revisions.md)
-- [DOCX test fixtures](apps/api/src/shared/testing/fixtures/docx/README.md)
+## Read the detailed docs
+
+Choose the reference for the behavior you need to change:
+
+- [Document support](docs/document-support.md) covers accepted DOCX content and validation limits.
+- [Document revisions](docs/document-revisions.md) covers editing, preserved content, and revision notices.
+- [Assessment worker](docs/assessment-worker.md) covers job states, deadlines, and retries.
+- [DOCX test fixtures](apps/api/src/shared/testing/fixtures/docx/README.md) describes the sample documents used in tests.
+- [Product specification](docs/product-spec.md), [workflow revision](docs/document-workflow-design.md), and [glossary](GLOSSARY.md) provide product context. Some descriptions predate the current detector. Use the [detector reference](services/detector/README.md) for current scoring behavior.
