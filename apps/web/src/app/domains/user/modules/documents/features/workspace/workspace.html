@@ -1,3 +1,45 @@
+<ng-template #aiRate let-value let-label="label" let-compact="compact" let-emptyLabel="emptyLabel">
+  @let appearance = rateAppearance(value);
+  <div
+    class="relative grid shrink-0 place-items-center"
+    [class.size-32]="!compact"
+    [class.size-24]="compact"
+    [class]="appearance.tone"
+    role="img"
+    [attr.aria-label]="
+      label + ': ' + (value === null ? (emptyLabel ?? 'Not scored') : value + '%, ' + appearance.severity)
+    ">
+    <svg class="absolute inset-0 size-full -rotate-90" viewBox="0 0 120 120" fill="none" aria-hidden="true">
+      <circle cx="60" cy="60" r="52" stroke="currentColor" stroke-width="7" stroke-opacity="0.25" />
+      @if (value !== null && value > 0) {
+        <circle
+          cx="60"
+          cy="60"
+          r="52"
+          pathLength="100"
+          stroke="currentColor"
+          stroke-width="7"
+          stroke-linecap="round"
+          stroke-dasharray="100"
+          [attr.stroke-dashoffset]="100 - value" />
+      }
+    </svg>
+    <div class="flex flex-col items-center gap-1" aria-hidden="true">
+      <span
+        class="leading-none font-semibold tracking-tight tabular-nums"
+        [class.text-4xl]="compact"
+        [class.text-5xl]="!compact">
+        {{ value ?? '–' }}
+        @if (value !== null) {
+          <span class="ml-0.5 text-[0.875rem] font-medium">%</span>
+        }
+      </span>
+      <span class="text-[0.6875rem] leading-4 font-medium">{{
+        value === null ? (emptyLabel ?? 'Not scored') : appearance.severity
+      }}</span>
+    </div>
+  </div>
+</ng-template>
 <ng-template #originalDownload let-document let-spaced="spaced">
   <button
     class="ui-button ui-secondary w-full sm:w-auto"
@@ -56,7 +98,7 @@
       </div>
       <button
         #newDocument
-        class="ui-sidebar-item w-full text-ink"
+        class="ui-button w-full justify-start gap-3 bg-panel px-3 hover:border-muted active:bg-hover"
         type="button"
         (click)="select(null)"
         [disabled]="store.uploading()">
@@ -110,21 +152,6 @@
             </button>
           </div>
           @if (store.deleteError(); as error) {
-            @if (error.id === document.id) {
-              <p class="mb-3 px-3 text-xs text-danger [overflow-wrap:anywhere]" role="alert">{{ error.message }}</p>
-            }
-          }
-          @if (document.status === 'failed') {
-            <button
-              class="ui-sidebar-item mb-2 ml-3 min-h-0 py-1 text-xs"
-              type="button"
-              (click)="store.retry(document)"
-              [disabled]="store.retrying() !== null"
-              [attr.aria-label]="'Retry ' + document.filename">
-              {{ store.retrying() === document.id ? 'Retrying…' : 'Retry' }}
-            </button>
-          }
-          @if (store.retryError(); as error) {
             @if (error.id === document.id) {
               <p class="mb-3 px-3 text-xs text-danger [overflow-wrap:anywhere]" role="alert">{{ error.message }}</p>
             }
@@ -189,6 +216,12 @@
     </header>
     <main id="workspace-content" tabindex="-1" class="flex flex-1 justify-center px-5 py-10 md:px-10 md:py-14">
       <p class="sr-only" role="status">{{ store.phaseAnnouncement() }}</p>
+      @if (store.selected()) {
+        <p class="sr-only" role="status">{{ store.announcement() }}</p>
+      }
+      @if (store.selected()) {
+        <p class="sr-only" role="status">{{ store.announcement() }}</p>
+      }
       <div class="w-full max-w-3xl">
         @if (store.selected(); as document) {
           <h1
@@ -275,51 +308,63 @@
               class="mt-8 grid gap-8 border-t border-divider/60 pt-8 md:grid-cols-[minmax(0,13rem)_minmax(0,1fr)] md:gap-12">
               <section aria-labelledby="score-heading" class="min-w-0">
                 @if (document.status === 'completed') {
-                  <div class="flex items-end gap-4">
-                    <p class="min-w-0">
-                      <span class="block text-[0.75rem] leading-4 text-muted">Before</span>
-                      <span
-                        class="block text-[1.75rem] leading-none font-medium tracking-tight text-muted tabular-nums"
-                        >{{ score() ?? '–' }}</span
-                      >
-                    </p>
-                    <mat-icon svgIcon="arrow-right" class="mb-1.5 text-muted" aria-hidden="true" />
-                    <p class="celebrate-rise min-w-0">
-                      <span class="block text-[0.75rem] leading-4 text-muted">After</span>
-                      <span class="block text-[3rem] leading-none font-semibold tracking-tight tabular-nums">{{
-                        finalScore() ?? '–'
-                      }}</span>
-                    </p>
+                  <div class="flex items-start gap-4">
+                    <div class="flex flex-col items-center gap-2">
+                      <span class="text-[0.75rem] leading-4 text-muted">Before</span>
+                      <ng-container
+                        *ngTemplateOutlet="
+                          aiRate;
+                          context: { $implicit: score(), label: 'Before AI Rate', compact: true }
+                        " />
+                    </div>
+                    <div class="celebrate-rise flex flex-col items-center gap-2">
+                      <span class="text-[0.75rem] leading-4 text-muted">After</span>
+                      <ng-container
+                        *ngTemplateOutlet="
+                          aiRate;
+                          context: {
+                            $implicit: finalScore(),
+                            label: 'After AI Rate',
+                            compact: true,
+                            emptyLabel: store.detail()?.finalScoreUnavailable ? 'Unavailable' : 'Not scored'
+                          }
+                        " />
+                    </div>
                   </div>
                   @if (store.detail()?.finalScoreUnavailable) {
                     <p id="final-score-unavailable" class="mt-3 text-[0.8125rem] leading-5 font-medium text-ink">
                       Final score unavailable
                     </p>
                   }
-                } @else if (score() !== null) {
-                  <p class="flex items-baseline gap-1.5">
-                    <span class="text-[3rem] leading-none font-semibold tracking-tight tabular-nums">{{
-                      score()
-                    }}</span>
-                    <span class="text-[0.9375rem] text-muted">/ 100</span>
-                  </p>
-                } @else if (store.detail()?.assessment) {
-                  <p class="text-[1.75rem] leading-none font-medium tracking-tight text-muted">Not scored</p>
                 } @else {
-                  <p class="text-[3rem] leading-none font-semibold tracking-tight text-divider" aria-hidden="true">–</p>
+                  <ng-container
+                    *ngTemplateOutlet="
+                      aiRate;
+                      context: {
+                        $implicit: score(),
+                        label: 'AI Rate',
+                        emptyLabel: store.detail()?.assessment ? 'Not scored' : 'Pending'
+                      }
+                    " />
                 }
-                <h2 id="score-heading" class="mt-3 text-[0.9375rem] leading-5 font-medium">Estimated AI-style score</h2>
-                <p class="mt-1 text-[0.8125rem] leading-5 text-muted">
-                  @if (store.detail()?.assessment || document.status === 'completed') {
-                    It measures writing patterns and does not prove AI authorship.
-                  } @else if (store.detailLoading()) {
-                    Loading the assessment…
-                  } @else if (phase()?.key === 'failed') {
-                    No score until the assessment succeeds.
-                  } @else {
-                    The score appears once the assessment finishes.
-                  }
-                </p>
+                <h2
+                  id="score-heading"
+                  class="mt-3 text-center text-[0.9375rem] leading-5 font-medium"
+                  [class.w-32]="document.status !== 'completed'"
+                  [class.w-52]="document.status === 'completed'">
+                  AI Rate
+                </h2>
+                @if (!store.detail()?.assessment && document.status !== 'completed') {
+                  <p class="mt-2 text-[0.8125rem] leading-5 text-muted">
+                    @if (store.detailLoading()) {
+                      Loading the assessment…
+                    } @else if (phase()?.key === 'failed') {
+                      No score until the assessment succeeds.
+                    } @else {
+                      The score appears once the assessment finishes.
+                    }
+                  </p>
+                }
               </section>
 
               <section aria-labelledby="action-heading" class="min-w-0">
@@ -327,10 +372,6 @@
                   <h2 id="action-heading" class="text-[0.9375rem] leading-5 font-medium">
                     <label for="rewrite-strength">Rewrite strength</label>
                   </h2>
-                  <p id="rewrite-strength-help" class="mt-1 text-[0.8125rem] leading-5 text-muted">
-                    Light touches up wording; Thorough rewrites more of each passage. It sets how much to edit, not the
-                    score you get.
-                  </p>
                   <div class="mt-4 flex items-baseline justify-between gap-4">
                     <span class="text-[1.0625rem] font-medium" aria-live="polite">{{ store.strengthLabel() }}</span>
                     <span class="text-[0.8125rem] text-muted tabular-nums">{{ store.strength() }}</span>
@@ -345,7 +386,6 @@
                     [value]="store.strength()"
                     [style.--rewrite-strength.%]="store.strength()"
                     [attr.aria-valuetext]="store.strength() + ', ' + store.strengthLabel()"
-                    aria-describedby="rewrite-strength-help"
                     [disabled]="store.unslopifying() !== null"
                     (input)="setStrength($event)" />
                   <div class="flex justify-between text-[0.75rem] leading-4 text-muted" aria-hidden="true">
@@ -474,142 +514,125 @@
               }
             </div>
           }
-
-          @if (store.preview() || store.previewLoading() || store.previewError()) {
-            <section class="mt-10" aria-labelledby="preview-heading">
-              <div class="flex items-baseline justify-between gap-4">
-                <h2 id="preview-heading" class="text-[1.0625rem] leading-6 font-medium">Original preview</h2>
-                <p class="text-[0.75rem] text-muted">Read-only · structure, not pagination</p>
-              </div>
-              @if (store.preview(); as blocks) {
-                <div
-                  class="mt-3 max-h-[70dvh] overflow-y-auto overscroll-contain rounded-2xl border border-divider bg-canvas px-5 py-6 sm:px-10 sm:py-9"
-                  role="region"
-                  tabindex="0"
-                  aria-labelledby="preview-heading">
-                  <document-preview [blocks]="blocks" />
-                </div>
-              } @else if (store.previewLoading()) {
-                <p class="mt-3 text-[0.875rem] text-muted" role="status">Loading the preview…</p>
-              } @else {
-                <p class="mt-3 text-[0.875rem] text-muted">{{ store.previewError() }}</p>
-              }
-            </section>
-          }
         } @else {
           <h1
             class="mb-5 text-[1.5rem] leading-[1.3] font-medium tracking-tight text-balance text-ink [overflow-wrap:anywhere] md:text-[1.875rem]">
             {{ welcomeName() ? 'Welcome, ' + welcomeName() + '.' : 'Welcome back.' }}
           </h1>
-        }
-        <div class="rounded-2xl border border-divider bg-canvas p-5 sm:p-7" [class.mt-12]="store.selected()">
-          <section class="mb-6 text-[0.875rem] leading-6" aria-label="Your subscription" aria-live="polite">
-            @if (currentPlan(); as plan) {
-              <p class="text-muted">
-                Your current plan is <span class="font-medium text-ink">{{ plan.name }}</span
-                >.
-              </p>
-              <p class="mt-1 flex flex-wrap items-center gap-2 text-muted">
-                <span>{{ planStatus() === 'GOLD' ? 'Need help with your plan?' : 'Need an upgrade?' }}</span>
-                <a class="ui-text-action" [href]="contactUrl" target="_blank" rel="noopener noreferrer">
-                  <img src="/brand/whatsapp.svg" class="size-4.5 shrink-0" width="18" height="18" alt="" />
-                  <span>Contact Musanzi on WhatsApp</span>
-                </a>
-              </p>
-            } @else if (!store.allowanceError()) {
-              <p class="text-muted">Loading your plan…</p>
-            }
-            @if (store.allowanceError()) {
-              <p class="text-danger">{{ store.allowanceError() }}</p>
-              <button class="ui-button ui-ghost mt-2" type="button" (click)="store.loadAllowance()">Try again</button>
-            }
-          </section>
-
-          <div class="flex flex-wrap items-center gap-x-4 gap-y-3">
-            <button
-              class="ui-button min-h-12 w-full gap-2.5 border-0 bg-ink px-5 py-3 font-semibold text-canvas hover:bg-paper-hover active:bg-paper-pressed sm:w-auto"
-              type="button"
-              (click)="fileInput.click()"
-              [disabled]="store.uploading()"
-              [attr.aria-busy]="store.uploading()"
-              [attr.aria-describedby]="'upload-limit' + (store.uploadError() ? ' upload-error' : '')">
-              <mat-icon svgIcon="paperclip" />
-              {{ store.uploading() ? 'Uploading…' : 'Upload DOCX' }}
-            </button>
-            <input
-              #fileInput
-              type="file"
-              accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-              (change)="upload($event)"
-              [disabled]="store.uploading()"
-              hidden
-              aria-label="Choose a DOCX file" />
-            <p id="upload-limit" class="text-[0.8125rem] text-muted">Up to 10 MB · 10,000 words · English or French</p>
-          </div>
-          @if (store.uploadError()) {
-            <p id="upload-error" class="mt-3 text-[0.875rem] text-danger [overflow-wrap:anywhere]" role="alert">
-              {{ store.uploadError() }}
-            </p>
-          }
-          <div class="mt-4 min-h-10">
-            @if (store.uploading()) {
-              @let progress = store.uploadProgress();
-              <ng-container
-                *ngTemplateOutlet="bar; context: { $implicit: progress?.percent ?? null, max: 100, label: 'Upload' }" />
-              <p class="sr-only" role="status">Uploading your original…</p>
-              <p class="mt-2 text-[0.875rem] text-muted tabular-nums">
-                {{
-                  progress?.percent !== null && progress?.percent !== undefined
-                    ? 'Uploading… ' + progress?.percent + '%'
-                    : 'Uploading your original…'
-                }}
-              </p>
-            } @else {
-              <p class="text-[0.875rem] text-muted" role="status">{{ store.announcement() }}</p>
-            }
-          </div>
-        </div>
-        <details class="subscription-disclosure group mt-4">
-          <summary class="ui-button ui-ghost w-fit list-none border-0 [&::-webkit-details-marker]:hidden">
-            View plans
-            <mat-icon
-              svgIcon="chevron-down"
-              class="group-open:rotate-180 motion-safe:transition-transform motion-safe:duration-200" />
-          </summary>
-          <section class="mt-3 px-1" aria-label="Subscription plans">
-            <p class="mb-2 text-[0.8125rem] text-muted">Monthly plans, priced in USD.</p>
-            <ul class="divide-y divide-divider">
-              @for (plan of plans; track plan.status) {
-                <li class="flex flex-wrap items-center justify-between gap-x-5 gap-y-3 py-4">
-                  <div class="flex items-center gap-3">
-                    <mat-icon [svgIcon]="plan.icon" class="text-muted" />
-                    <div>
-                      <p class="font-medium">{{ plan.name }}</p>
-                      <p class="text-[0.8125rem] text-muted">{{ plan.documents }} documents / month</p>
-                    </div>
-                  </div>
-                  <div class="flex flex-wrap items-center gap-3">
-                    <p class="text-[0.875rem] tabular-nums">
-                      ${{ plan.price }}<span class="text-muted"> / month</span>
-                    </p>
-                    @if (plan.status === planStatus()) {
-                      <span class="ui-badge items-center gap-1.5"><mat-icon svgIcon="check" />Current plan</span>
-                    } @else if (plan.price > (currentPlan()?.price ?? 0)) {
-                      <a
-                        class="ui-button ui-secondary"
-                        [href]="plan.contactUrl"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        [attr.aria-label]="'Upgrade to ' + plan.name + ' on WhatsApp'">
-                        Upgrade<mat-icon svgIcon="arrow-up-right" />
-                      </a>
-                    }
-                  </div>
-                </li>
+          <div class="rounded-2xl border border-divider bg-canvas p-5 sm:p-7">
+            <section class="mb-6 text-[0.875rem] leading-6" aria-label="Your subscription" aria-live="polite">
+              @if (currentPlan(); as plan) {
+                <p class="text-muted">
+                  Your current plan is <span class="font-medium text-ink">{{ plan.name }}</span
+                  >.
+                </p>
+                <p class="mt-1 flex flex-wrap items-center gap-2 text-muted">
+                  <span>{{ planStatus() === 'GOLD' ? 'Need help with your plan?' : 'Need an upgrade?' }}</span>
+                  <a class="ui-text-action" [href]="contactUrl" target="_blank" rel="noopener noreferrer">
+                    <img src="/brand/whatsapp.svg" class="size-4.5 shrink-0" width="18" height="18" alt="" />
+                    <span>Contact Musanzi on WhatsApp</span>
+                  </a>
+                </p>
+              } @else if (!store.allowanceError()) {
+                <p class="text-muted">Loading your plan…</p>
               }
-            </ul>
-          </section>
-        </details>
+              @if (store.allowanceError()) {
+                <p class="text-danger">{{ store.allowanceError() }}</p>
+                <button class="ui-button ui-ghost mt-2" type="button" (click)="store.loadAllowance()">Try again</button>
+              }
+            </section>
+
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-3">
+              <button
+                class="ui-button min-h-12 w-full gap-2.5 border-0 bg-ink px-5 py-3 font-semibold text-canvas hover:bg-paper-hover active:bg-paper-pressed sm:w-auto"
+                type="button"
+                (click)="fileInput.click()"
+                [disabled]="store.uploading()"
+                [attr.aria-busy]="store.uploading()"
+                [attr.aria-describedby]="'upload-limit' + (store.uploadError() ? ' upload-error' : '')">
+                <mat-icon svgIcon="paperclip" />
+                {{ store.uploading() ? 'Uploading…' : 'Upload DOCX' }}
+              </button>
+              <input
+                #fileInput
+                type="file"
+                accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                (change)="upload($event)"
+                [disabled]="store.uploading()"
+                hidden
+                aria-label="Choose a DOCX file" />
+              <p id="upload-limit" class="text-[0.8125rem] text-muted">
+                Up to 10 MB · 10,000 words · English or French
+              </p>
+            </div>
+            @if (store.uploadError()) {
+              <p id="upload-error" class="mt-3 text-[0.875rem] text-danger [overflow-wrap:anywhere]" role="alert">
+                {{ store.uploadError() }}
+              </p>
+            }
+            <div class="mt-4 min-h-10">
+              @if (store.uploading()) {
+                @let progress = store.uploadProgress();
+                <ng-container
+                  *ngTemplateOutlet="
+                    bar;
+                    context: { $implicit: progress?.percent ?? null, max: 100, label: 'Upload' }
+                  " />
+                <p class="sr-only" role="status">Uploading your original…</p>
+                <p class="mt-2 text-[0.875rem] text-muted tabular-nums">
+                  {{
+                    progress?.percent !== null && progress?.percent !== undefined
+                      ? 'Uploading… ' + progress?.percent + '%'
+                      : 'Uploading your original…'
+                  }}
+                </p>
+              } @else {
+                <p class="text-[0.875rem] text-muted" role="status">{{ store.announcement() }}</p>
+              }
+            </div>
+          </div>
+          <details class="subscription-disclosure group mt-4">
+            <summary class="ui-button ui-ghost w-fit list-none border-0 [&::-webkit-details-marker]:hidden">
+              View plans
+              <mat-icon
+                svgIcon="chevron-down"
+                class="group-open:rotate-180 motion-safe:transition-transform motion-safe:duration-200" />
+            </summary>
+            <section class="mt-3 px-1" aria-label="Subscription plans">
+              <p class="mb-2 text-[0.8125rem] text-muted">Monthly plans, priced in USD.</p>
+              <ul class="divide-y divide-divider">
+                @for (plan of plans; track plan.status) {
+                  <li class="flex flex-wrap items-center justify-between gap-x-5 gap-y-3 py-4">
+                    <div class="flex items-center gap-3">
+                      <mat-icon [svgIcon]="plan.icon" class="text-muted" />
+                      <div>
+                        <p class="font-medium">{{ plan.name }}</p>
+                        <p class="text-[0.8125rem] text-muted">{{ plan.documents }} documents / month</p>
+                      </div>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-3">
+                      <p class="text-[0.875rem] tabular-nums">
+                        ${{ plan.price }}<span class="text-muted"> / month</span>
+                      </p>
+                      @if (plan.status === planStatus()) {
+                        <span class="ui-badge items-center gap-1.5"><mat-icon svgIcon="check" />Current plan</span>
+                      } @else if (plan.price > (currentPlan()?.price ?? 0)) {
+                        <a
+                          class="ui-button ui-secondary"
+                          [href]="plan.contactUrl"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          [attr.aria-label]="'Upgrade to ' + plan.name + ' on WhatsApp'">
+                          Upgrade<mat-icon svgIcon="arrow-up-right" />
+                        </a>
+                      }
+                    </div>
+                  </li>
+                }
+              </ul>
+            </section>
+          </details>
+        }
       </div>
     </main>
   </mat-sidenav-content>

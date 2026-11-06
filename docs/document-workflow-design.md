@@ -4,7 +4,7 @@ This document records the accepted workflow from the November 5, 2026 design int
 
 ## Requested behavior
 
-The user uploads a document and sees upload progress. Assessment starts automatically. The user then sees the document and its score, chooses rewrite strength with a slider, and clicks **Unslopify**. Editing and a second automatic assessment show progress until the revised DOCX is ready to download. No further user action is required before download.
+The user uploads a document and sees upload progress. Assessment starts automatically. The user then sees the AI Rate, chooses rewrite strength with a slider, and clicks **Unslopify**. Editing and a second automatic assessment show progress until the revised DOCX is ready to download. No further user action is required before download.
 
 Ordinary Word content controls must not force the user to convert the document manually before uploading it. Blocking checks focus on length and security. Formatting differences alone must not prevent download. The output should match the uploaded document's style as closely as practical, and the user can adjust the downloaded document.
 
@@ -12,9 +12,9 @@ The owner confirms that the app is live. [Deployment issue #14](https://github.c
 
 ## Confirmed decisions
 
-The displayed rate is an estimated **AI-style score**. The interface explains that it measures writing patterns rather than proving who wrote the document. It does not use an external AI-authorship detector. The owner decided on November 6, 2026 that the score is the only assessment result shown: the workspace lists no writing-pattern examples, and after rewriting it shows the before and after scores only. The API may keep returning pattern examples; the interface ignores them.
+The displayed rate is an estimated **AI-style score**. It measures writing patterns rather than proving who wrote the document. The owner removed the explanatory sentence from the interface on November 6. It does not use an external AI-authorship detector. The owner decided on November 6, 2026 that the score is the only assessment result shown: the workspace lists no writing-pattern examples, and after rewriting it shows the before and after scores only. The API may keep returning pattern examples; the interface ignores them.
 
-The document preview is read-only and appears alongside the score. Users download the revised DOCX and adjust it outside the app.
+On November 6, the owner removed the document preview from the workspace. The frontend neither displays nor requests a preview. Users download the revised DOCX and adjust it outside the app. The AI Rate appears inside a circle colored by severity: green for 0–33, amber for 34–66, and red for 67–100. Completed documents show before and after circles. Retry appears only in the selected document panel, not the sidebar.
 
 The existing limits remain: 10 MB, 10,000 words, and English/French. Formatting-based rejection is removed. These decisions describe the intended revision, not the current implementation.
 
@@ -22,7 +22,7 @@ The slider controls rewrite strength, from light edits to thorough rewriting. It
 
 If a rewritten passage fails checks for quotations, citations, numbers, or references, retain the original passage and finish the rest of the document. Identify passages left unchanged in a short notice. Formatting differences never block download. These checks do not prove that all factual meaning has been preserved, so the user still reviews the output.
 
-Assessment does not consume or reserve an additional document allowance slot. Reserve one slot atomically when the user clicks **Unslopify**, and charge it only when the revised document is ready. Waiting at the preview does not hold a reservation. The owner clarified that assessment is an automatic part of the document flow, before and after rewriting. There is no separate assessment allowance or action. Normal request throttling and processing resource limits still apply.
+Assessment does not consume or reserve an additional document allowance slot. Reserve one slot atomically when the user clicks **Unslopify**, and charge it only when the revised document is ready. Waiting at the assessment result does not hold a reservation. The owner clarified that assessment is an automatic part of the document flow, before and after rewriting. There is no separate assessment allowance or action. Normal request throttling and processing resource limits still apply.
 
 Convert ordinary Word content controls into their visible text or images automatically. For tracked changes, use the final version: include insertions and exclude deletions. Keep the original available for download. Preserve complex elements unchanged where possible, and identify elements that could not be edited. Security checks still apply to preserved elements.
 
@@ -44,8 +44,8 @@ Keep one revision per document entry. An editing retry retains the initial asses
 
 ## Issue impact
 
-[Issue #13](https://github.com/musanzi/unslop-docs/issues/13) covers upload, assessment, the preview and slider, awaiting-user-action, editing, final assessment, and download-ready states. Progress indicators distinguish actual upload progress from processing progress. It is implemented: the workspace shows upload bytes, named phases with editing progress from the API, the score-only assessment, the rewrite-strength slider, Unslopify, before and after scores, revision notices, retries per phase, compact history rows, and a one-time completion animation that respects reduced motion.
+[Issue #13](https://github.com/musanzi/unslop-docs/issues/13) covers upload, assessment, the AI Rate circles and slider, awaiting-user-action, editing, final assessment, and download-ready states. Progress indicators distinguish actual upload progress from processing progress. It is implemented: the workspace shows upload bytes, named phases with editing progress from the API, the score-only assessment, the rewrite-strength slider, Unslopify, before and after scores, revision notices, retries per phase, compact history rows, and a one-time completion animation that respects reduced motion.
 
-[Issue #11](https://github.com/musanzi/unslop-docs/issues/11) covers deletion after assessment while the document waits for the user, and of stored, failed, and completed documents. [Issue #12](https://github.com/musanzi/unslop-docs/issues/12) covers deletion during either assessment or editing, including automatic-retry waits and the final assessment. Both are implemented. Deleting an assessment or its preview releases no document allowance because neither holds a reservation. Deleting active editing releases its reservation unless completion has already charged it.
+[Issue #11](https://github.com/musanzi/unslop-docs/issues/11) covers deletion after assessment while the document waits for the user, and of stored, failed, and completed documents. [Issue #12](https://github.com/musanzi/unslop-docs/issues/12) covers deletion during either assessment or editing, including automatic-retry waits and the final assessment. Both are implemented. Deleting an assessed document releases no document allowance because it holds no reservation. Deleting active editing releases its reservation unless completion has already charged it.
 
 [Issue #15](https://github.com/musanzi/unslop-docs/issues/15) covers content controls, tracked changes, and tolerant formatting and content fallback. [Issue #16](https://github.com/musanzi/unslop-docs/issues/16) covers automatic initial and final assessments, scoring, explicit editing, allowance changes, retry behavior, and progress data. The original validation, assessment, and editing tickets remain closed as historical work. Issues #11–#13 depend on the revised lifecycle in #16, which depends on #15.

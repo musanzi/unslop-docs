@@ -7,9 +7,7 @@ import type {
   IAllowanceResponse,
   IDocumentAssessmentResponse,
   IDocumentPage,
-  IDocumentPreviewResponse,
-  IDocumentResponse,
-  IPreviewBlockResponse
+  IDocumentResponse
 } from '@unslop-docs/api-contracts';
 import { AuthStore } from '@web/domains/auth/shared/data-access';
 import { firstValueFrom } from 'rxjs';
@@ -120,18 +118,14 @@ export class DocumentsStore {
   readonly downloadError = signal('');
   readonly announcement = signal('');
   readonly phaseAnnouncement = signal('');
-  readonly strength = linkedSignal<string | undefined, number>({
-    source: () => this.selected()?.id,
-    computation: () => this.selected()?.strength ?? defaultRewriteStrength
+  readonly strength = linkedSignal<IDocumentResponse | null, number>({
+    source: this.selected,
+    computation: (document, previous) =>
+      previous && document?.id === previous.source?.id ? previous.value : (document?.strength ?? defaultRewriteStrength)
   });
   readonly strengthLabel = computed(() => strengthLabel(this.strength()));
   readonly unslopifying = signal<string | null>(null);
   readonly unslopifyError = signal<{ id: string; message: string } | null>(null);
-  readonly preview = signal<IPreviewBlockResponse[] | null>(null);
-  readonly previewError = signal('');
-  readonly previewLoading = signal(false);
-  private previewRequest = 0;
-  private previewFor: string | null = null;
   readonly celebrating = signal<string | null>(null);
   private readonly observedPhases = new Map<string, DocumentPhaseKey>();
   readonly pageCount = computed(() => Math.max(1, Math.ceil(this.total() / 20)));
@@ -197,7 +191,6 @@ export class DocumentsStore {
   select(document: IDocumentResponse | null): void {
     this.selected.set(document);
     this.unslopifyError.set(null);
-    this.resetPreview();
     this.celebrating.set(null);
     this.phaseAnnouncement.set('');
     if (document) this.observe([document]);
@@ -230,7 +223,6 @@ export class DocumentsStore {
           this.items.update((items) => items.map((item) => (item.id === detail.id ? detail : item)));
           this.detailError.set('');
           this.detailLoading.set(false);
-          if (detail.assessment) this.loadPreview(detail);
         },
         error: (error: unknown) => {
           if (request !== this.detailRequest) return;
@@ -285,43 +277,6 @@ export class DocumentsStore {
           this.uploadError.set(this.errorMessage(error, 'Upload failed. Check your history before trying again.'));
           if (error instanceof HttpErrorResponse && (error.status === 0 || error.status >= 500)) this.load(1);
           else this.loadAllowance();
-        }
-      });
-  }
-
-  private resetPreview(): void {
-    this.previewRequest++;
-    this.previewFor = null;
-    this.preview.set(null);
-    this.previewError.set('');
-    this.previewLoading.set(false);
-  }
-
-  loadPreview(document: IDocumentResponse): void {
-    if (this.previewFor === document.id) return;
-    this.previewFor = document.id;
-    const request = ++this.previewRequest;
-    this.previewLoading.set(true);
-    this.previewError.set('');
-    this.http
-      .get<IDocumentPreviewResponse>(`/documents/${document.id}/preview`, { transferCache: false })
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: (result) => {
-          if (request !== this.previewRequest) return;
-          this.preview.set(result.blocks);
-          this.previewLoading.set(false);
-        },
-        error: (error: unknown) => {
-          if (request !== this.previewRequest) return;
-          this.previewLoading.set(false);
-          const missing = error instanceof HttpErrorResponse && error.status === 404;
-          this.previewError.set(
-            missing
-              ? 'No preview is available for this document.'
-              : this.errorMessage(error, 'The preview could not be loaded. Try again.')
-          );
-          if (!missing) this.previewFor = null;
         }
       });
   }

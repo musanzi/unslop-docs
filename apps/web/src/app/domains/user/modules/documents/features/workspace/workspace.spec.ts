@@ -8,12 +8,7 @@ import { MatIconRegistry } from '@angular/material/icon';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { of } from 'rxjs';
-import {
-  IAllowanceResponse,
-  IDocumentAssessmentResponse,
-  IPreviewBlockResponse,
-  IUserResponse
-} from '@unslop-docs/api-contracts';
+import { IAllowanceResponse, IDocumentAssessmentResponse, IUserResponse } from '@unslop-docs/api-contracts';
 import { AuthStore } from '@web/domains/auth/shared/data-access';
 import { Media } from '@web/core/media';
 import { DocumentsStore } from '../../data-access/documents.store';
@@ -22,21 +17,13 @@ import { User } from '@web/shared/ui/user/user';
 import { testUser } from '@web/shared/testing/user-fixture';
 import { MatDialog } from '@angular/material/dialog';
 import DeleteDocument from '../delete-document/delete-document';
-import { DocumentPreview } from '../document-preview/document-preview';
 
 enableJitSignalInput(User, 'subscriptionStatus');
-enableJitSignalInput(DocumentPreview, 'blocks');
 
 function overrideTemplates(workspaceProviders?: Provider[]) {
   const shared = `${import.meta.dirname}/../../../../../../shared/ui`;
   TestBed.overrideComponent(User, {
     set: { template: readFileSync(`${shared}/user/user.html`, 'utf8'), templateUrl: undefined }
-  });
-  TestBed.overrideComponent(DocumentPreview, {
-    set: {
-      template: readFileSync(`${import.meta.dirname}/../document-preview/document-preview.html`, 'utf8'),
-      templateUrl: undefined
-    }
   });
   TestBed.overrideComponent(DeleteDocument, {
     set: {
@@ -75,11 +62,11 @@ const document: IDocumentAssessmentResponse = {
 
 afterEach(() => TestBed.resetTestingModule());
 
-function flushPreview(http: HttpTestingController, blocks: IPreviewBlockResponse[] = []) {
-  http.expectOne(`/documents/${document.id}/preview`).flush({ blocks });
+function expectNoPreview(http: HttpTestingController) {
+  http.expectNone(`/documents/${document.id}/preview`);
 }
 
-describe('Retry from document history', () => {
+describe('Retry from the selected document', () => {
   function element<T extends Element = Element>(root: ParentNode, selector: string): T {
     const found = root.querySelector<T>(selector);
     if (!found) throw new Error(`Missing workspace element: ${selector}`);
@@ -129,13 +116,20 @@ describe('Retry from document history', () => {
       .flush({ items: [detail], page: 1, pageSize: 20, total: 1 });
     http.expectOne('/documents/allowance').flush(allowance);
     await fixture.whenStable();
-    return { fixture, http, page: fixture.nativeElement as HTMLElement };
+    const page = fixture.nativeElement as HTMLElement;
+    if (detail.status === 'failed') {
+      element<HTMLButtonElement>(page, 'nav[aria-label="Document history"] button').click();
+      http.expectOne(`/documents/${document.id}`).flush(detail);
+      await fixture.whenStable();
+    }
+    return { fixture, http, page };
   }
 
-  it('shows a retry action on a failed sidebar entry', async () => {
+  it('shows retry only in the selected document, not the sidebar', async () => {
     const { page, http } = await render();
     const history = element(page, 'nav[aria-label="Document history"]');
-    expect(history.querySelector<HTMLButtonElement>('button[aria-label="Retry river.docx"]')).not.toBeNull();
+    expect(history.textContent).not.toContain('Retry');
+    expect(element(page, 'main section[aria-labelledby="phase-heading"] button').textContent).toContain('Retry');
     http.verify();
   });
 
@@ -143,14 +137,14 @@ describe('Retry from document history', () => {
     'hides retry for a %s entry',
     async (status) => {
       const { page, http } = await render({ ...document, status });
-      expect(page.querySelector('button[aria-label="Retry river.docx"]')).toBeNull();
+      expect(page.querySelector('main section[aria-labelledby="phase-heading"] button')).toBeNull();
       http.verify();
     }
   );
 
   it('sends one retry for a double click and replaces the failed entry with queued progress', async () => {
     const { page, http, fixture } = await render();
-    const retry = element<HTMLButtonElement>(page, 'button[aria-label="Retry river.docx"]');
+    const retry = element<HTMLButtonElement>(page, 'main section[aria-labelledby="phase-heading"] button');
     retry.click();
     retry.click();
     await fixture.whenStable();
@@ -161,12 +155,13 @@ describe('Retry from document history', () => {
     expect(request.request.body).toBeNull();
     const queued = { ...failed, status: 'queued', failure: null };
     request.flush(queued);
+    http.expectOne(`/documents/${document.id}`).flush(queued);
     http.expectOne('/documents/allowance').flush({ ...allowance, reserved: 1, remaining: 2 });
     http
       .expectOne((request) => request.url === '/documents')
       .flush({ items: [queued], page: 1, pageSize: 20, total: 1 });
     await fixture.whenStable();
-    expect(page.querySelector('button[aria-label="Retry river.docx"]')).toBeNull();
+    expect(page.querySelector('main section[aria-labelledby="phase-heading"] button')).toBeNull();
     expect(element(page, 'nav[aria-label="Document history"]').textContent).toContain('Queued');
     expect(fixture.debugElement.injector.get(DocumentsStore).allowance()?.reserved).toBe(1);
     http.verify();
@@ -174,18 +169,21 @@ describe('Retry from document history', () => {
 
   it('keeps a refused retry failed and displays the server allowance explanation', async () => {
     const { page, http, fixture } = await render();
-    element<HTMLButtonElement>(page, 'button[aria-label="Retry river.docx"]').click();
+    element<HTMLButtonElement>(page, 'main section[aria-labelledby="phase-heading"] button').click();
     const message =
       'Your FREE allowance of 3 documents is fully used or reserved. It resets on 2026-12-01T00:00:00.000Z (UTC).';
     http.expectOne(`/documents/${document.id}/retry`).flush({ message }, { status: 409, statusText: 'Conflict' });
+    http.expectOne(`/documents/${document.id}`).flush(failed);
     http.expectOne('/documents/allowance').flush({ ...allowance, used: 3, remaining: 0 });
     http
       .expectOne((request) => request.url === '/documents')
       .flush({ items: [failed], page: 1, pageSize: 20, total: 1 });
     await fixture.whenStable();
     expect(element(page, 'nav[aria-label="Document history"]').textContent).toContain('Failed');
-    expect(element(page, '[role="alert"]').textContent).toContain(message);
-    expect(element<HTMLButtonElement>(page, 'button[aria-label="Retry river.docx"]').disabled).toBe(false);
+    expect(page.querySelector('main')?.textContent).toContain(message);
+    expect(element<HTMLButtonElement>(page, 'main section[aria-labelledby="phase-heading"] button').disabled).toBe(
+      false
+    );
     http.verify();
   });
 
@@ -193,7 +191,7 @@ describe('Retry from document history', () => {
     const { page, http, fixture } = await render();
     element<HTMLButtonElement>(page, 'nav[aria-label="Document history"] button').click();
     const oldDetail = http.expectOne(`/documents/${document.id}`);
-    element<HTMLButtonElement>(page, 'button[aria-label="Retry river.docx"]').click();
+    element<HTMLButtonElement>(page, 'main section[aria-labelledby="phase-heading"] button').click();
     const queued = { ...failed, status: 'queued', failure: null };
     http.expectOne(`/documents/${document.id}/retry`).flush(queued);
     http.expectOne(`/documents/${document.id}`).flush(queued);
@@ -205,21 +203,22 @@ describe('Retry from document history', () => {
     await fixture.whenStable();
     expect(page.textContent).not.toContain(failed.failure);
     expect(page.querySelector('main')?.textContent).toContain('Queued');
-    expect(page.querySelector('button[aria-label="Retry river.docx"]')).toBeNull();
+    expect(page.querySelector('main section[aria-labelledby="phase-heading"] button')).toBeNull();
     http.verify();
   });
 
   it('refreshes history after an uncertain response so an accepted retry no longer appears failed', async () => {
     const { page, http, fixture } = await render();
-    element<HTMLButtonElement>(page, 'button[aria-label="Retry river.docx"]').click();
+    element<HTMLButtonElement>(page, 'main section[aria-labelledby="phase-heading"] button').click();
     http.expectOne(`/documents/${document.id}/retry`).flush({}, { status: 503, statusText: 'Service unavailable' });
+    http.expectOne(`/documents/${document.id}`).flush({ ...failed, status: 'processing', failure: null });
     http.expectOne('/documents/allowance').flush({ ...allowance, reserved: 1, remaining: 2 });
     http
       .expectOne((request) => request.url === '/documents')
       .flush({ items: [{ ...failed, status: 'processing', failure: null }], page: 1, pageSize: 20, total: 1 });
     await fixture.whenStable();
-    expect(page.querySelector('button[aria-label="Retry river.docx"]')).toBeNull();
-    expect(element(page, '[role="alert"]').textContent).toContain('Refresh your history');
+    expect(page.querySelector('main section[aria-labelledby="phase-heading"] button')).toBeNull();
+    expect(fixture.debugElement.injector.get(DocumentsStore).retryError()?.message).toContain('Refresh your history');
     expect(element(page, 'nav[aria-label="Document history"]').textContent).toContain('Processing');
     http.verify();
   });
@@ -301,7 +300,7 @@ describe('Delete from document history', () => {
     const entry = element<HTMLButtonElement>(page, 'nav[aria-label="Document history"] button');
     entry.click();
     http.expectOne(`/documents/${document.id}`).flush(document);
-    flushPreview(http);
+    expectNoPreview(http);
     await fixture.whenStable();
     expect(page.querySelector('main h1')?.textContent).toContain('river.docx');
     confirm.click();
@@ -409,9 +408,6 @@ describe('Document workspace results', () => {
       strengthLabel: signal('Balanced'),
       unslopifying: signal(null),
       unslopifyError: signal(null),
-      preview: signal(null),
-      previewError: signal(''),
-      previewLoading: signal(false),
       phase: (item: IDocumentAssessmentResponse) =>
         item.status === 'completed'
           ? { key: 'download-ready', label: 'Download ready' }
@@ -504,15 +500,14 @@ describe('Document workspace results', () => {
     resetsAt: '2027-01-01T00:00:00.000Z'
   };
 
-  it('keeps uploads and downloads available when the allowance is exhausted', async () => {
-    const page = await render(document, exhausted);
+  it('keeps new document uploads available when the allowance is exhausted', async () => {
+    const page = await render(null, exhausted);
     expect(page.textContent).not.toContain('Your monthly document limit is reached');
     const buttons = [...page.querySelectorAll('button')];
     const upload = buttons.find((button) => button.textContent.includes('Upload DOCX'))!;
     expect(upload.disabled).toBe(false);
     expect(upload.getAttribute('aria-describedby')).toBe('upload-limit');
     expect(page.querySelector<HTMLInputElement>('input[type="file"]')?.disabled).toBe(false);
-    expect(buttons.find((button) => button.textContent.includes('Download original'))?.disabled).toBe(false);
   });
 
   it('refuses only Unslopify with the allowance explanation beside it when the allowance is exhausted', async () => {
@@ -532,7 +527,10 @@ describe('Document workspace results', () => {
     expect(unslopify.disabled).toBe(true);
     expect(unslopify.getAttribute('aria-describedby')).toBe('allowance-limit');
     expect(page.querySelector('#allowance-limit')?.textContent).toContain('Your monthly document limit is reached');
-    expect(buttons.find((button) => button.textContent.includes('Upload DOCX'))?.disabled).toBe(false);
+    expect(buttons.find((button) => button.textContent.includes('Upload DOCX'))).toBeUndefined();
+    expect(page.querySelector('section[aria-label="Your subscription"]')).toBeNull();
+    expect(page.querySelector('.subscription-disclosure')).toBeNull();
+    expect(buttons.find((button) => button.textContent.includes('Download original'))?.disabled).toBe(false);
     expect(page.querySelector('input[type="range"]')).not.toBeNull();
   });
 
@@ -547,6 +545,9 @@ describe('Document workspace results', () => {
     const buttons = [...page.querySelectorAll('button')].map((button) => button.textContent.trim());
     expect(buttons).toContain('Download original');
     expect(buttons).toContain('Download revised DOCX');
+    expect(buttons).not.toContain('Upload DOCX');
+    expect(page.querySelector('section[aria-label="Your subscription"]')).toBeNull();
+    expect(page.querySelector('.subscription-disclosure')).toBeNull();
     expect(page.querySelector('textarea')).toBeNull();
   });
 
@@ -770,13 +771,13 @@ describe('Phase changes while watching', () => {
     expect(store.celebrating()).toBeNull();
     store.loadSelected(true);
     http.expectOne(`/documents/${document.id}`).flush({ ...document, status: 'completed' });
-    flushPreview(http);
+    expectNoPreview(http);
     expect(store.phaseAnnouncement()).toBe('river.docx: Download ready.');
     expect(store.celebrating()).toBe(document.id);
     store.select(null);
     store.select(document);
     http.expectOne(`/documents/${document.id}`).flush(document);
-    flushPreview(http);
+    expectNoPreview(http);
     expect(store.celebrating()).toBeNull();
     http.verify();
   });
@@ -790,7 +791,7 @@ describe('Phase changes while watching', () => {
     http.expectOne('/documents/allowance').flush({});
     store.select(document);
     http.expectOne(`/documents/${document.id}`).flush(document);
-    flushPreview(http);
+    expectNoPreview(http);
     expect(store.celebrating()).toBeNull();
     expect(store.phaseAnnouncement()).toBe('');
     http.verify();
@@ -806,7 +807,7 @@ describe('Phase changes while watching', () => {
     http.expectOne('/documents/allowance').flush({});
     store.select(editing);
     http.expectOne(`/documents/${document.id}`).flush(editing);
-    flushPreview(http);
+    expectNoPreview(http);
     store.load(1, true);
     http
       .expectOne((request) => request.url === '/documents')
@@ -883,7 +884,7 @@ describe('Rewrite strength and Unslopify', () => {
     const { store, http } = setup();
     store.select(assessed);
     http.expectOne(`/documents/${document.id}`).flush(assessed);
-    flushPreview(http);
+    expectNoPreview(http);
     expect(store.strength()).toBe(50);
     expect(store.strengthLabel()).toBe('Balanced');
     store.strength.set(20);
@@ -901,7 +902,7 @@ describe('Rewrite strength and Unslopify', () => {
     } as const;
     store.select({ ...retryable, phase: 'rewrite' });
     http.expectOne(`/documents/${retryable.id}`).flush({ ...retryable, phase: 'rewrite' });
-    http.expectOne(`/documents/${retryable.id}/preview`).flush({ blocks: [] });
+    http.expectNone(`/documents/${retryable.id}/preview`);
     expect(store.strength()).toBe(70);
     http.verify();
   });
@@ -910,7 +911,7 @@ describe('Rewrite strength and Unslopify', () => {
     const { store, http } = setup();
     store.select(assessed);
     http.expectOne(`/documents/${document.id}`).flush(assessed);
-    flushPreview(http);
+    expectNoPreview(http);
     store.strength.set(80);
     store.unslopify(assessed);
     store.unslopify(assessed);
@@ -932,7 +933,7 @@ describe('Rewrite strength and Unslopify', () => {
     const { store, http } = setup();
     store.select(assessed);
     http.expectOne(`/documents/${document.id}`).flush(assessed);
-    flushPreview(http);
+    expectNoPreview(http);
     store.unslopify(assessed);
     const message =
       'Your FREE allowance of 3 documents is fully used or reserved. It resets on 2026-12-01T00:00:00.000Z (UTC).';
@@ -947,7 +948,7 @@ describe('Rewrite strength and Unslopify', () => {
   });
 });
 
-describe('Document preview', () => {
+describe('Assessment without document previews', () => {
   function setup() {
     TestBed.configureTestingModule({
       providers: [
@@ -966,36 +967,19 @@ describe('Document preview', () => {
     phase: 'assessment',
     assessment: { rubric: 'ai-style-v1', score: 62, patterns: [] }
   };
-  const blocks = [{ kind: 'paragraph', level: null, text: 'Hello', inlines: null, rows: null, reason: null }];
-
-  it('loads the preview once an assessment exists and keeps it across polls', () => {
+  it('keeps the score without requesting a preview after assessment or polling', () => {
     const { store, http } = setup();
     const queued: IDocumentAssessmentResponse = { ...assessed, status: 'queued', assessment: null };
     store.select(queued);
     http.expectOne(`/documents/${document.id}`).flush(queued);
-    http.expectNone(`/documents/${document.id}/preview`);
+    expectNoPreview(http);
     store.loadSelected(true);
     http.expectOne(`/documents/${document.id}`).flush(assessed);
-    http.expectOne(`/documents/${document.id}/preview`).flush({ blocks });
-    expect(store.preview()).toEqual(blocks);
+    expectNoPreview(http);
+    expect(store.detail()?.assessment?.score).toBe(62);
     store.loadSelected(true);
     http.expectOne(`/documents/${document.id}`).flush(assessed);
-    http.expectNone(`/documents/${document.id}/preview`);
-    expect(store.preview()).toEqual(blocks);
-    store.select(null);
-    expect(store.preview()).toBeNull();
-    http.verify();
-  });
-
-  it('explains a missing preview instead of failing the document', () => {
-    const { store, http } = setup();
-    store.select(assessed);
-    http.expectOne(`/documents/${document.id}`).flush(assessed);
-    http
-      .expectOne(`/documents/${document.id}/preview`)
-      .flush({ message: 'Not found' }, { status: 404, statusText: 'Not Found' });
-    expect(store.preview()).toBeNull();
-    expect(store.previewError()).toBe('No preview is available for this document.');
+    expectNoPreview(http);
     expect(store.detail()?.assessment?.score).toBe(62);
     http.verify();
   });
@@ -1046,18 +1030,6 @@ describe('Workspace flow', () => {
       ]
     }
   };
-  const blocks: IPreviewBlockResponse[] = [
-    { kind: 'heading', level: 1, text: 'Chapter 3', inlines: null, rows: null, reason: null },
-    {
-      kind: 'paragraph',
-      level: null,
-      text: 'Rivers remember.',
-      inlines: [{ text: 'Rivers remember.', bold: false, italic: false, protected: null }],
-      rows: null,
-      reason: null
-    }
-  ];
-
   async function mount(items: IDocumentAssessmentResponse[]) {
     TestBed.configureTestingModule({
       providers: [
@@ -1097,7 +1069,7 @@ describe('Workspace flow', () => {
   async function open(context: Awaited<ReturnType<typeof mount>>, detail: IDocumentAssessmentResponse) {
     element<HTMLButtonElement>(context.history, 'button').click();
     context.http.expectOne(`/documents/${detail.id}`).flush(detail);
-    if (detail.assessment) flushPreview(context.http, blocks);
+    if (detail.assessment) expectNoPreview(context.http);
     await context.fixture.whenStable();
   }
 
@@ -1107,7 +1079,7 @@ describe('Workspace flow', () => {
     await context.fixture.whenStable();
   }
 
-  it('waits at the preview with the score, a Balanced slider at 50 and no busy indicator', async () => {
+  it('shows the score and a Balanced slider without a preview or busy indicator', async () => {
     const context = await mount([assessed]);
     await open(context, assessed);
     const { main, history, http } = context;
@@ -1115,8 +1087,12 @@ describe('Workspace flow', () => {
     expect(history.textContent).toContain('Ready to unslopify');
     expect(main.querySelector('[role="progressbar"]')).toBeNull();
     expect(main.innerHTML).not.toContain('animate-pulse');
+    expect(element(main, '#score-heading').textContent?.trim()).toBe('AI Rate');
+    expect(element(main, '[role="img"][aria-label="AI Rate: 62%, Moderate"]').classList.contains('text-warning')).toBe(
+      true
+    );
     expect(main.textContent).toContain('62');
-    expect(main.textContent).toContain('It measures writing patterns and does not prove AI authorship.');
+    expect(main.textContent).not.toContain('It measures writing patterns and does not prove AI authorship.');
     expect(main.textContent).not.toMatch(/AI vocabulary|Filler phrases|patterns found/);
     const slider = element<HTMLInputElement>(main, 'input[type="range"]');
     expect(slider.min).toBe('1');
@@ -1127,15 +1103,12 @@ describe('Workspace flow', () => {
     expect(main.textContent).not.toMatch(/%\s*reduction|reduce.*by \d+%/i);
     const unslopify = [...main.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Unslopify');
     expect(unslopify?.disabled).toBe(false);
-    const preview = element(main, '[role="region"][aria-labelledby="preview-heading"]');
-    expect(preview.getAttribute('tabindex')).toBe('0');
-    expect(preview.querySelector('h3')?.textContent).toContain('Chapter 3');
-    expect(preview.textContent).toContain('Rivers remember.');
-    expect(preview.querySelector('img, a, iframe, script')).toBeNull();
+    expect(main.querySelector('document-preview, #preview-heading')).toBeNull();
+    expect(main.textContent).not.toContain('Original preview');
     http.verify();
   });
 
-  it('sends the chosen strength once for a double click and queues editing while keeping the preview', async () => {
+  it('sends the chosen strength once for a double click and queues editing while keeping the score', async () => {
     const context = await mount([assessed]);
     await open(context, assessed);
     const { main, history, http, fixture } = context;
@@ -1163,14 +1136,12 @@ describe('Workspace flow', () => {
     expect(main.querySelector('input[type="range"]')).toBeNull();
     expect(main.textContent).toContain('Thorough');
     expect(main.textContent).toContain('80 of 100');
-    expect(main.querySelector('[role="region"][aria-labelledby="preview-heading"]')?.textContent).toContain(
-      'Chapter 3'
-    );
+    expect(main.querySelector('#preview-heading')).toBeNull();
     expect(context.live.textContent).toBe('river.docx: Queued for editing.');
     http.verify();
   });
 
-  it('keeps the preview and shows an allowance refusal beside Unslopify', async () => {
+  it('keeps the score and shows an allowance refusal beside Unslopify', async () => {
     const context = await mount([assessed]);
     await open(context, assessed);
     const { main, page, http, fixture } = context;
@@ -1188,10 +1159,8 @@ describe('Workspace flow', () => {
     expect(unslopify.getAttribute('aria-describedby')).toBe('unslopify-error');
     expect(unslopify.disabled).toBe(true);
     expect(main.querySelector('#allowance-limit')).toBeNull();
-    expect(element<HTMLInputElement>(page, 'input[type="file"]').disabled).toBe(false);
-    expect(main.querySelector('[role="region"][aria-labelledby="preview-heading"]')?.textContent).toContain(
-      'Chapter 3'
-    );
+    expect(page.querySelector('input[type="file"]')).toBeNull();
+    expect(main.querySelector('#preview-heading')).toBeNull();
     expect(main.textContent).toContain('62');
     http.verify();
   });
@@ -1224,7 +1193,7 @@ describe('Workspace flow', () => {
   it('celebrates a watched completion once with before and after scores, downloads and notices', async () => {
     const context = await mount([editing]);
     await open(context, editing);
-    const { main, history, http, fixture, store } = context;
+    const { main, page, history, http, fixture, store } = context;
     await poll(context, completed);
     const phase = element(main, 'section[aria-labelledby="phase-heading"]');
     expect(phase.classList.contains('workspace-celebrate')).toBe(true);
@@ -1235,9 +1204,11 @@ describe('Workspace flow', () => {
     const scores = element(main, 'section[aria-labelledby="score-heading"]');
     expect(scores.textContent).toMatch(/Before\s*62/);
     expect(scores.textContent).toMatch(/After\s*31/);
+    expect(element(scores, '[aria-label="After AI Rate: 31%, Low"]').classList.contains('text-success')).toBe(true);
     expect(scores.textContent).not.toMatch(/Down|Up|points|Unchanged/);
     const buttons = [...main.querySelectorAll('button')].map((button) => button.textContent?.trim());
     expect(buttons).toContain('Download revised DOCX');
+    expect(buttons).not.toContain('Upload DOCX');
     expect(buttons).toContain('Download original');
     expect(main.textContent).toContain('Review the revised document before submitting it.');
     expect(main.textContent).not.toContain('do not prove unchanged meaning');
@@ -1248,7 +1219,7 @@ describe('Workspace flow', () => {
     await fixture.whenStable();
     element<HTMLButtonElement>(history, 'button').click();
     http.expectOne(`/documents/${document.id}`).flush(completed);
-    flushPreview(http, blocks);
+    expectNoPreview(http);
     await fixture.whenStable();
     expect(main.querySelector('.workspace-celebrate')).toBeNull();
     expect(element(main, '#phase-heading').textContent).toContain('Download ready');
@@ -1257,10 +1228,11 @@ describe('Workspace flow', () => {
 
   it('allows download when the score rose or the final score is unavailable, without a success claim', async () => {
     const context = await mount([completed]);
-    await open(context, { ...completed, finalAssessment: { rubric: 'ai-style-v1', score: 66, patterns: [] } });
+    await open(context, { ...completed, finalAssessment: { rubric: 'ai-style-v1', score: 80, patterns: [] } });
     const { main, http } = context;
     expect(main.querySelector('.workspace-celebrate')).toBeNull();
-    expect(main.textContent).toMatch(/After\s*66/);
+    expect(main.textContent).toMatch(/After\s*80/);
+    expect(element(main, '[aria-label="After AI Rate: 80%, High"]').classList.contains('text-danger')).toBe(true);
     expect(main.textContent).not.toMatch(/Up \d+ points/);
     expect(
       element<HTMLButtonElement>(main, 'button[aria-describedby="final-score-note"], button:not([disabled])')
@@ -1277,7 +1249,7 @@ describe('Workspace flow', () => {
     http.verify();
   });
 
-  it('offers Retry editing after a failed rewrite and keeps the initial score, strength and preview', async () => {
+  it('offers Retry editing after a failed rewrite and keeps the initial score and strength', async () => {
     const failed: IDocumentAssessmentResponse = {
       ...assessed,
       status: 'failed',
@@ -1294,7 +1266,7 @@ describe('Workspace flow', () => {
     expect(main.textContent).toContain('62');
     expect(main.textContent).toContain('Thorough');
     expect(main.textContent).toContain('70 of 100');
-    expect(main.querySelector('[role="region"][aria-labelledby="preview-heading"]')).not.toBeNull();
+    expect(main.querySelector('#preview-heading')).toBeNull();
     const phase = element(main, 'section[aria-labelledby="phase-heading"]');
     expect(phase.innerHTML).not.toMatch(/animate-pulse|animate-spin|animate-progress|workspace-celebrate/);
     expect(main.querySelector('input[type="range"]')).toBeNull();
@@ -1306,7 +1278,7 @@ describe('Workspace flow', () => {
     const queued = { ...failed, status: 'queued', failure: null };
     http.expectOne(`/documents/${document.id}/retry`).flush(queued);
     http.expectOne(`/documents/${document.id}`).flush(queued);
-    flushPreview(http, blocks);
+    expectNoPreview(http);
     http.expectOne('/documents/allowance').flush({ ...allowance, reserved: 1, remaining: 2 });
     http
       .expectOne((request) => request.url === '/documents')

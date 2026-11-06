@@ -22,8 +22,6 @@ _Avoid_: AI authorship percentage, probability of AI authorship.
 
 **Final assessment**: The automatic writing assessment of a revised document, shown alongside its initial assessment. It requires no separate user action or allowance.
 
-**Document preview**: A read-only view of an uploaded document alongside its writing assessment. Users edit the downloaded DOCX outside the app.
-
 **Unslop**: Editing that removes the specified writing patterns while preserving the document's meaning, language, citations, quotations, and factual claims.
 
 **Rewrite strength**: The user's chosen extent of editing, from light edits to thorough rewriting. It does not promise a particular reduction in the AI-style score.
@@ -38,7 +36,7 @@ _Avoid_: AI authorship percentage, probability of AI authorship.
 
 **Processing document**: A document whose initial assessment, editing, final assessment, or validation is in progress.
 
-**Assessed document**: A document with a complete writing assessment that the user can preview before choosing to start Unslopify. Assessment alone does not mean editing has succeeded.
+**Assessed document**: A document with a complete writing assessment that the user can review before choosing to start Unslopify. Assessment alone does not mean editing has succeeded.
 
 **Revised document**: The edited DOCX whose formatting matches the original as closely as practical. Its owner can download it separately from the original and reviews and adjusts it before use.
 

@@ -20,7 +20,7 @@ Usage resets on the first day of each month at 00:00 UTC. Clicking **Unslopify**
 
 A successful document uses the allowance for the month when its slot was reserved, even if processing finishes the next month. Existing jobs can finish after a status downgrade. New rewrites are blocked when completed documents and active reservations exhaust the current allowance. Deleting a completed document does not restore usage.
 
-Assessment runs automatically after upload and again after rewriting. Neither assessment consumes an additional document slot. There is no separate monthly assessment allowance, assessment purchase, or assessment action. Waiting at the preview holds no reservation. Normal request throttling and processing resource limits still apply.
+Assessment runs automatically after upload and again after rewriting. Neither assessment consumes an additional document slot. There is no separate monthly assessment allowance, assessment purchase, or assessment action. Waiting at the assessment result holds no reservation. Normal request throttling and processing resource limits still apply.
 
 ## Documents
 
@@ -38,13 +38,13 @@ When a rewritten passage fails checks for quotations, citations, numbers, or ref
 
 ## Assessment and editing
 
-An accepted upload automatically starts a writing assessment. Publish its estimated AI-style score beside a read-only document preview, then wait for the user. Show only the score as the assessment result, with a one-line explanation that it measures writing patterns and does not prove AI authorship; the interface does not list writing-pattern examples. Users can edit documents regardless of the score.
+An accepted upload automatically starts a writing assessment. Show its estimated AI-style score in a circle labelled **AI Rate**, then wait for the user. The workspace does not display or load a document preview. Show the rate and severity label without the explanatory sentence or writing-pattern examples. Users can edit documents regardless of the score.
 
 The user chooses rewrite strength, from light edits to thorough rewriting, and clicks **Unslopify**. The slider controls editing extent, not a promised score reduction. Save the chosen strength with the attempt so retries use the same instructions.
 
-After rewriting, assess the revised document automatically using the same scoring method. Show the before and after scores only and make the revised DOCX available. There is no second confirmation, assess button, or automatic rewrite loop. A score that stays the same or increases does not block download. If the final assessment fails after bounded retries, retain the usable DOCX and state that its final score is unavailable.
+After rewriting, assess the revised document automatically using the same scoring method. Show the before and after scores in separate AI Rate circles and make the revised DOCX available. There is no second confirmation, assess button, or automatic rewrite loop. A score that stays the same or increases does not block download. If the final assessment fails after bounded retries, retain the usable DOCX and state that its final score is unavailable.
 
-Implementation defaults are a 0–100 estimated AI-style score and a rewrite-strength slider from 1 to 100, initially 50. Show Light, Balanced, and Thorough labels; do not label strength as a percentage reduction. Use a versioned scoring rubric for document-wide assessment. Do not derive a percentage from the existing capped example list or invent a lower result from the selected strength.
+Implementation defaults are a 0–100 estimated AI-style score and a rewrite-strength slider from 1 to 100, initially 50. Show Light, Balanced, and Thorough labels; do not label strength as a percentage reduction. AI Rate circles show the score as a percentage, with green for 0–33, amber for 34–66, and red for 67–100. Low, Moderate, and High labels make severity clear without relying on color. Missing scores stay neutral. Use a versioned scoring rubric for document-wide assessment. Do not derive a percentage from the existing capped example list or invent a lower result from the selected strength.
 
 The system uses DeepSeek with a server-side `DEEPSEEK_API_KEY`. Editing instructions come from the [Cursor pstack unslop skill](https://github.com/cursor/plugins/blob/bc697d0a5a163cec979e362b601e36f5616083fd/pstack/skills/unslop/SKILL.md), as selected by the owner. The selected source revision is `bc697d0a5a163cec979e362b601e36f5616083fd`.
 
@@ -52,7 +52,7 @@ Document content is input to edit, not instructions that can override the editin
 
 ## Progress and history
 
-Each sidebar entry represents one uploaded document and shows upload, assessment, ready-to-edit, editing, final-assessment, and download-ready states. The sidebar follows the conversation-history layout used by ChatGPT. The preview is readable and follows the original structure without promising exact Word pagination.
+Each sidebar entry represents one uploaded document and shows upload, assessment, ready-to-edit, editing, final-assessment, and download-ready states. The sidebar follows the conversation-history layout used by ChatGPT. Retry actions appear in the selected document panel, not in history rows.
 
 Upload progress uses transferred bytes when available. Editing progress uses completed work units, and assessment uses a named indeterminate state when no measurable total exists. Never invent a time-based percentage. Mark the whole operation complete only when the download is ready. Reduced-motion users receive the same information without movement.
 

@@ -25,7 +25,6 @@ import {
   type DocumentPhaseKey
 } from '../../data-access/documents.store';
 import { DeleteDocumentDialog } from '../../data-access/delete-document-dialog';
-import { DocumentPreview } from '../document-preview/document-preview';
 
 const phaseIcons: Record<DocumentPhaseKey, string> = {
   stored: 'file-text',
@@ -43,7 +42,6 @@ const phaseIcons: Record<DocumentPhaseKey, string> = {
   imports: [
     DatePipe,
     DecimalPipe,
-    DocumentPreview,
     MatIcon,
     MatSidenav,
     MatSidenavContainer,
@@ -173,6 +171,13 @@ export class Workspace {
     const file = input.files?.[0];
     input.value = '';
     if (file) this.store.upload(file);
+  }
+
+  protected rateAppearance(score: number | null): { tone: string; severity: string } {
+    if (score === null) return { tone: 'text-muted', severity: 'Not scored' };
+    if (score <= 33) return { tone: 'text-success', severity: 'Low' };
+    if (score <= 66) return { tone: 'text-warning', severity: 'Moderate' };
+    return { tone: 'text-danger', severity: 'High' };
   }
 
   protected setStrength(event: Event): void {
