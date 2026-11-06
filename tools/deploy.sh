@@ -2,6 +2,20 @@
 set -euo pipefail
 
 cd "$HOME/unslop-docs"
+
+report_failure() {
+  result=$?
+  docker compose -f compose.prod.yml -p unslopy ps --all >&2 || true
+  docker compose -f compose.prod.yml -p unslopy logs --tail 80 detector >&2 || true
+  for container in $(docker compose -f compose.prod.yml -p unslopy ps --all -q detector); do
+    docker inspect --format '{{json .State}}' "$container" >&2 || true
+  done
+  free -h >&2 || true
+  df -h . >&2 || true
+  exit "$result"
+}
+trap report_failure ERR
+
 git fetch origin main
 git checkout main
 git reset --hard origin/main
