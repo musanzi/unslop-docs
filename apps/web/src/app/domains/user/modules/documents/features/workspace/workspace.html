@@ -384,7 +384,8 @@
                     max="100"
                     step="1"
                     [value]="store.strength()"
-                    [style.--rewrite-strength.%]="store.strength()"
+                    [style.--rewrite-strength]="(store.strength() - 1) / 99"
+                    [attr.data-effort]="store.strengthLabel()"
                     [attr.aria-valuetext]="store.strength() + ', ' + store.strengthLabel()"
                     [disabled]="store.unslopifying() !== null"
                     (input)="setStrength($event)" />

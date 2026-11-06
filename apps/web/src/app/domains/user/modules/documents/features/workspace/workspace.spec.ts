@@ -890,7 +890,7 @@ describe('Rewrite strength and Unslopify', () => {
     store.strength.set(20);
     expect(store.strengthLabel()).toBe('Light');
     store.loadSelected(true);
-    http.expectOne(`/documents/${document.id}`).flush(assessed);
+    http.expectOne(`/documents/${document.id}`).flush({ ...assessed });
     expect(store.strength()).toBe(20);
     store.strength.set(80);
     expect(store.strengthLabel()).toBe('Thorough');
@@ -1106,6 +1106,23 @@ describe('Workspace flow', () => {
     expect(main.querySelector('document-preview, #preview-heading')).toBeNull();
     expect(main.textContent).not.toContain('Original preview');
     http.verify();
+  });
+
+  it('keeps the slider value and fill across fresh background responses', async () => {
+    const context = await mount([assessed]);
+    await open(context, assessed);
+    const slider = element<HTMLInputElement>(context.main, 'input[type="range"]');
+    for (const strength of [63, 80, 20]) {
+      slider.value = String(strength);
+      slider.dispatchEvent(new Event('input'));
+      await context.fixture.whenStable();
+      for (let refresh = 0; refresh < 2; refresh++) {
+        await poll(context, { ...assessed });
+        expect(slider.value).toBe(String(strength));
+        expect(Number(slider.style.getPropertyValue('--rewrite-strength'))).toBeCloseTo((strength - 1) / 99);
+      }
+    }
+    context.http.verify();
   });
 
   it('sends the chosen strength once for a double click and queues editing while keeping the score', async () => {
