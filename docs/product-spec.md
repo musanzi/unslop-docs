@@ -38,13 +38,13 @@ When a rewritten passage fails checks for quotations, citations, numbers, or ref
 
 ## Assessment and editing
 
-An accepted upload automatically starts a writing assessment. Show its estimated AI-style score in a circle labelled **AI Rate**, then wait for the user. The workspace does not display or load a document preview. Show the rate and severity label without the explanatory sentence or writing-pattern examples. Users can edit documents regardless of the score.
+An accepted upload automatically starts a local AI detection check, then waits for the user. Show the experimental model score out of 100 under **AI detection**, with a note that it is not an authorship percentage. The workspace does not display or load a document preview. Show unavailable results without a numeric score. Do not display results outside the local detector contract. Do not show writing-pattern examples. Users can edit documents regardless of the score.
 
 The user chooses rewrite strength, from light edits to thorough rewriting, and clicks **Unslopify**. The slider controls editing extent, not a promised score reduction. Save the chosen strength with the attempt so retries use the same instructions.
 
-After rewriting, assess the revised document automatically using the same scoring method. Show the before and after scores in separate AI Rate circles and make the revised DOCX available. There is no second confirmation, assess button, or automatic rewrite loop. A score that stays the same or increases does not block download. If the final assessment fails after bounded retries, retain the usable DOCX and state that its final score is unavailable.
+After rewriting, assess the revised document automatically using the same scoring method. Show the before and after model scores in separate circles and make the revised DOCX available. There is no second confirmation, assess button, or automatic rewrite loop. A score that stays the same or increases does not block download. If the final assessment fails after bounded retries, retain the usable DOCX and state that its final score is unavailable.
 
-Implementation defaults are a 0–100 estimated AI-style score and a rewrite-strength slider from 1 to 100, initially 50. Show Light, Balanced, and Thorough labels; do not label strength as a percentage reduction. AI Rate circles show the score as a percentage, with green for 0–33, amber for 34–66, and red for 67–100. Low, Moderate, and High labels make severity clear without relying on color. Missing scores stay neutral. Use a versioned scoring rubric for document-wide assessment. Do not derive a percentage from the existing capped example list or invent a lower result from the selected strength.
+The detector runs locally with the pinned Oculus 2.0 multilingual weights. No paid detection API or subscription is required. Its score is the token-weighted mean across all document windows. Do not describe the score as confidence in authorship or as a percentage of generated text. Show only the number inside each circle, colored green for 0–33, amber for 34–66, and red for 67–100. Accessible labels include the score out of 100 and Low, Moderate, or High severity. Unavailable results stay neutral. The rewrite-strength slider runs from 1 to 100, initially 50, with Light, Balanced, and Thorough labels. Strength does not promise a percentage reduction. Keep detector revision, method, and coverage metadata with each result.
 
 The system uses DeepSeek with a server-side `DEEPSEEK_API_KEY`. Editing instructions come from the [Cursor pstack unslop skill](https://github.com/cursor/plugins/blob/bc697d0a5a163cec979e362b601e36f5616083fd/pstack/skills/unslop/SKILL.md), as selected by the owner. The selected source revision is `bc697d0a5a163cec979e362b601e36f5616083fd`.
 
@@ -66,7 +66,7 @@ Deleting an active document prevents later results from being saved and releases
 
 ## Privacy and retention
 
-Documents remain available until the user deletes them. Downloads are private. The interface explains that document text goes to DeepSeek. Admin user management does not grant access to document contents.
+Documents remain available until the user deletes them. Downloads are private. The interface explains that detection runs on the app server and document text goes to DeepSeek when the user requests editing. Admin user management does not grant access to document contents.
 
 ## Deployment
 

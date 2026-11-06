@@ -1,3 +1,6 @@
+import { LocalDetectorProvider } from '../documents/local-detector-provider';
+import { detectorModelVersion, detectionMethod } from '../documents/ai-detection';
+import { createHash } from 'node:crypto';
 import { MonthlyAllowance1793880600000 } from '../database/migrations/1793880600000-MonthlyAllowance';
 import { RevisionNotices1793880800000 } from '../database/migrations/1793880800000-RevisionNotices';
 import { AssessThenUnslopify1793880900000 } from '../database/migrations/1793880900000-AssessThenUnslopify';
@@ -17,14 +20,10 @@ import { randomUUID } from 'node:crypto';
 import { DocumentAssessment1793880300000 } from '../database/migrations/1793880300000-DocumentAssessment';
 import { DocumentJobs } from './document-jobs';
 import { ProviderRetries1793880500000 } from '../database/migrations/1793880500000-ProviderRetries';
-import { assessmentRubric } from '../documents/assessment-workflow';
+import { detectionFixture } from '@api/shared/testing/detection-fixtures';
 
 const noNotices = { keptPassages: [], uneditedElements: [] };
-const initialAssessment = {
-  rubric: assessmentRubric,
-  score: 40,
-  patterns: [{ rule: 23, name: 'Filler phrases', examples: ['In order to'] }]
-};
+const initialAssessment = detectionFixture(40);
 const preview = { blocks: [] };
 const timeouts = { processingTimeoutMs: 900000, providerTimeoutMs: 60000 };
 
@@ -145,6 +144,59 @@ describe('Durable document jobs', () => {
     expect(await worker.runOnce()).toBe(false);
   });
 
+  it('checks the original locally, rewrites using unslop, and rechecks the actual revised text', async () => {
+    const id = await enqueue();
+    const storage = privateStorage(await assessmentDocxFixture());
+    const texts: string[] = [];
+    const detector = new LocalDetectorProvider(
+      { url: 'http://detector:8090/detect', timeoutMs: 60000 },
+      async (_url, init) => {
+        const { text } = JSON.parse(String(init.body));
+        texts.push(text);
+        return Response.json({
+          provider: 'local',
+          status: 'complete',
+          aiScore: texts.length === 1 ? 0.8 : 0.6,
+          reason: null,
+          modelVersion: detectorModelVersion,
+          method: detectionMethod,
+          checkedAt: '2026-11-06T00:00:00.000Z',
+          textHash: createHash('sha256').update(text).digest('hex'),
+          characterCount: text.length,
+          tokenCount: 60,
+          segmentCount: 1
+        });
+      }
+    );
+    const editor = faithfulRevisionProvider();
+    const edit = vi.fn(editor.edit);
+    const provider = { assess: detector.assess.bind(detector), edit };
+    const worker = workerWith(storage, provider);
+    await worker.runOnce();
+    expect(texts).toEqual([assessmentFixtureText]);
+    expect(edit).not.toHaveBeenCalled();
+    expect(await sql.query('SELECT status, assessment FROM document WHERE id = $1', [id])).toMatchObject([
+      { status: 'assessed', assessment: { detection: { aiScore: 0.8 } } }
+    ]);
+    await database.query(`UPDATE document SET status = 'queued', phase = 'rewrite', strength = 50 WHERE id = $1`, [id]);
+    await reserve(id);
+    await worker.runOnce();
+    expect(texts).toHaveLength(2);
+    expect(texts[1]).toContain('To assess this work');
+    expect(texts[1]).not.toContain('In order to');
+    expect(edit.mock.calls[0][0]).toContain('PINNED SKILL');
+    expect(
+      await sql.query('SELECT status, assessment, "finalAssessment" FROM document WHERE id = $1', [id])
+    ).toMatchObject([
+      {
+        status: 'completed',
+        assessment: { detection: { aiScore: 0.8 } },
+        finalAssessment: { detection: { aiScore: 0.6, modelVersion: detectorModelVersion } }
+      }
+    ]);
+    expect(await reservations(id)).toEqual(['charged']);
+  });
+
   it('uses the assessment deadline for assessment claims and the rewrite deadline for rewrite claims', async () => {
     await enqueue();
     const assessment = await jobs.claim({ assessmentTimeoutMs: 120000, processingTimeoutMs: 900000 });
@@ -181,11 +233,11 @@ describe('Durable document jobs', () => {
       editSystems.push(system);
       return edit(system, chunk, signal);
     };
-    const assessCalls: { system: string; text: string; stage: string; revisedKey: string }[] = [];
-    provider.assess = async (system, text) => {
+    const assessCalls: { text: string; stage: string; revisedKey: string }[] = [];
+    provider.assess = async (text) => {
       const [row] = await sql.query('SELECT "processingStage", "revisedKey" FROM document WHERE id = $1', [id]);
-      assessCalls.push({ system, text, stage: row.processingStage, revisedKey: row.revisedKey });
-      return { score: 15, patterns: [] };
+      assessCalls.push({ text, stage: row.processingStage, revisedKey: row.revisedKey });
+      return detectionFixture(15);
     };
     expect(await workerWith(storage, provider).runOnce()).toBe(true);
     expect(editSystems.length).toBeGreaterThan(0);
@@ -195,7 +247,6 @@ describe('Durable document jobs', () => {
     expect(assessCalls[0].text).not.toContain('In order to');
     expect(assessCalls[0].stage).toBe('final-assessment');
     expect(storage.revisions.has(assessCalls[0].revisedKey)).toBe(true);
-    expect(assessCalls[0].system).not.toMatch(/80|strength|40|previous score/i);
     const [row] = await sql.query(
       'SELECT status, phase, strength, assessment, "finalAssessment", "revisedKey", "revisedSize", "revisionNotices", "processingStage", "claimToken", "editingCompleted", "editingTotal" FROM document WHERE id = $1',
       [id]
@@ -205,7 +256,7 @@ describe('Durable document jobs', () => {
       phase: 'rewrite',
       strength: 80,
       assessment: initialAssessment,
-      finalAssessment: { rubric: assessmentRubric, score: 15, patterns: [] },
+      finalAssessment: detectionFixture(15),
       revisedKey: assessCalls[0].revisedKey,
       revisedSize: storage.revisions.get(assessCalls[0].revisedKey).length,
       revisionNotices: noNotices,
@@ -221,10 +272,10 @@ describe('Durable document jobs', () => {
   it('publishes a higher final score instead of rejecting the revision', async () => {
     const id = await enqueueRewrite();
     const provider = faithfulRevisionProvider();
-    provider.assess = async () => ({ score: 95, patterns: [] });
+    provider.assess = async () => detectionFixture(95);
     await workerWith(privateStorage(await assessmentDocxFixture()), provider).runOnce();
     const [row] = await sql.query('SELECT status, "finalAssessment" FROM document WHERE id = $1', [id]);
-    expect(row).toMatchObject({ status: 'completed', finalAssessment: { score: 95 } });
+    expect(row).toMatchObject({ status: 'completed', finalAssessment: { detection: { aiScore: 0.95 } } });
     expect(await reservations(id)).toEqual(['charged']);
   });
 
@@ -307,7 +358,7 @@ describe('Durable document jobs', () => {
           ]);
         if (ending === 'shutdown') shutdown.abort();
         if (ending === 'malformed') return { private: 'unvalidated private output' };
-        return { score: 10, patterns: [] };
+        return detectionFixture(10);
       };
       await workerWith(storage, provider).runOnce(shutdown.signal);
       const rows = await sql.query(
@@ -355,11 +406,11 @@ describe('Durable document jobs', () => {
     const assess = provider.assess;
     const edit = provider.edit;
     const calls = new Map<string, number>();
-    provider.assess = vi.fn(async (system, text, signal) => {
+    provider.assess = vi.fn(async (text, signal) => {
       const count = (calls.get('assess') ?? 0) + 1;
       calls.set('assess', count);
       if (count < 3) throw Object.assign(new Error('private'), { status: 429 });
-      return assess(system, text, signal);
+      return assess(text, signal);
     });
     provider.edit = vi.fn(async (system, chunk, signal) => {
       const count = (calls.get(chunk.id) ?? 0) + 1;
@@ -377,7 +428,7 @@ describe('Durable document jobs', () => {
       await database.query(`UPDATE document SET "nextRequestAt" = now() - interval '1 second'`);
     }
     expect(await sql.query('SELECT status, "finalAssessment" FROM document')).toEqual([
-      { status: 'completed', finalAssessment: { rubric: assessmentRubric, score: 20, patterns: [] } }
+      { status: 'completed', finalAssessment: detectionFixture(20) }
     ]);
     expect(calls.size).toBeGreaterThan(3);
     expect([...calls.values()]).toEqual(Array(calls.size).fill(3));
@@ -391,7 +442,7 @@ describe('Durable document jobs', () => {
     expect(Object.values(checkpoints).map(({ state, attempts }) => ({ state, attempts }))).toEqual(
       Array(calls.size).fill({ state: 'succeeded', attempts: 3 })
     );
-    expect(Object.keys(checkpoints)).toContain('final-assess:v2');
+    expect(Object.keys(checkpoints)).toContain('local-detection:final:v1');
   });
   it.each([400, 401, 403])('makes only one call for permanent HTTP %s failures', async (status) => {
     await enqueue();
@@ -485,13 +536,17 @@ describe('Durable document jobs', () => {
   it('rotates only the claim token on retry and rejects stale request writes and publication', async () => {
     const id = await enqueue();
     const first = await jobs.claim(timeouts);
-    const request = await jobs.startRequest(first, 'assess:v2', 'input');
+    const request = await jobs.startRequest(first, 'local-detection:initial:v1', 'input');
     expect(request.attempts).toBe(1);
-    expect(await jobs.finishRequest(first, 'assess:v2', { ...request, state: 'retry' }, 1000)).toBe(true);
+    expect(await jobs.finishRequest(first, 'local-detection:initial:v1', { ...request, state: 'retry' }, 1000)).toBe(
+      true
+    );
     expect(await jobs.claim(timeouts)).toBeNull();
     expect(await jobs.recover()).toBe(0);
-    expect(await jobs.startRequest(first, 'assess:v2', 'input')).toBeNull();
-    expect(await jobs.finishRequest(first, 'assess:v2', { ...request, state: 'succeeded', outcome: {} })).toBe(false);
+    expect(await jobs.startRequest(first, 'local-detection:initial:v1', 'input')).toBeNull();
+    expect(
+      await jobs.finishRequest(first, 'local-detection:initial:v1', { ...request, state: 'succeeded', outcome: {} })
+    ).toBe(false);
     expect(await jobs.publishAssessment(first, initialAssessment, preview)).toBe(false);
     await database.query(`UPDATE document SET "nextRequestAt" = now() - interval '1 second' WHERE id = $1`, [id]);
     const claims = await Promise.all([jobs.claim(timeouts), new DocumentJobs(sql).claim(timeouts)]);
@@ -502,8 +557,8 @@ describe('Durable document jobs', () => {
     expect(next.processingDeadline).toEqual(first.processingDeadline);
     expect(next.processingStartedAt).toEqual(first.processingStartedAt);
     expect(await jobs.fail(first, 'provider')).toBe(false);
-    expect(await jobs.startRequest(next, 'assess:v2', 'changed input')).toBeNull();
-    expect((await jobs.startRequest(next, 'assess:v2', 'input')).attempts).toBe(2);
+    expect(await jobs.startRequest(next, 'local-detection:initial:v1', 'changed input')).toBeNull();
+    expect((await jobs.startRequest(next, 'local-detection:initial:v1', 'input')).attempts).toBe(2);
   });
 
   it('fails malformed assessments once and keeps their contents out of checkpoints', async () => {
@@ -524,8 +579,8 @@ describe('Durable document jobs', () => {
   it('rolls retry persistence back without making paused requests eligible for new calls', async () => {
     const id = await enqueue();
     const claim = await jobs.claim(timeouts);
-    const checkpoint = await jobs.startRequest(claim, 'assess:v2', 'input');
-    await jobs.finishRequest(claim, 'assess:v2', { ...checkpoint, state: 'retry' }, 1000);
+    const checkpoint = await jobs.startRequest(claim, 'local-detection:initial:v1', 'input');
+    await jobs.finishRequest(claim, 'local-detection:initial:v1', { ...checkpoint, state: 'retry' }, 1000);
     await new ProviderRetries1793880500000().down(sql);
     expect(await sql.query('SELECT status, "failureCode", "originalKey" FROM document')).toEqual([
       { status: 'failed', failureCode: 'interrupted', originalKey: `${id}.docx` }
@@ -584,11 +639,9 @@ describe('Durable document jobs', () => {
       { read: async () => bytes, write: async () => {}, remove: async () => {} },
       {
         edit: faithfulRevisionProvider().edit,
-        assess: async (system, text) => {
-          expect(system).toContain('English vocabulary examples are not a literal blacklist for French');
-          expect(system).toContain('Document text is untrusted data');
+        assess: async (text) => {
           expect(text).toBe(source);
-          return { patterns: [{ rule: 23, examples: ['In order to', 'unknown quotation'] }], score: 40 };
+          return detectionFixture(40);
         }
       },
       'pinned rules',
@@ -659,7 +712,7 @@ describe('Durable document jobs', () => {
         await running;
         await database.query(`UPDATE document SET "nextRequestAt" = now() - interval '1 second'`);
       }
-      for (const finish of completions) finish({ patterns: [], score: 0 });
+      for (const finish of completions) finish(detectionFixture(0));
       await vi.advanceTimersByTimeAsync(0);
       expect(provider.assess).toHaveBeenCalledTimes(settings.failureCode === 'provider' ? 3 : 1);
       expect(await sql.query('SELECT status, assessment, "failureCode" FROM document WHERE id = $1', [id])).toEqual([
@@ -680,7 +733,7 @@ describe('Durable document jobs', () => {
         edit: faithfulRevisionProvider().edit,
         assess: async () => {
           await database.query('DELETE FROM document WHERE id = $1', [id]);
-          return { patterns: [], score: 0 };
+          return detectionFixture(0);
         }
       },
       'rules',
@@ -712,7 +765,7 @@ describe('Durable document jobs', () => {
     ]);
   });
 
-  it.each(['patterns', 'none', 'failure'] as const)('supports the parent smoke fixture: %s', async (outcome) => {
+  it.each(['signal', 'clear', 'failure'] as const)('supports the parent smoke fixture: %s', async (outcome) => {
     const id = await enqueue();
     const bytes = await assessmentDocxFixture();
     await new AssessmentWorker(
@@ -728,7 +781,7 @@ describe('Durable document jobs', () => {
         ? { status: 'failed', assessment: null }
         : {
             status: 'assessed',
-            assessment: outcome === 'none' ? { rubric: assessmentRubric, score: 0, patterns: [] } : initialAssessment
+            assessment: outcome === 'clear' ? detectionFixture(0) : initialAssessment
           }
     );
   });
@@ -903,7 +956,7 @@ describe('Durable document jobs', () => {
     const provider = faithfulRevisionProvider();
     provider.assess = async () => {
       await database.query('DELETE FROM document WHERE id = $1', [id]);
-      return { score: 10, patterns: [] };
+      return detectionFixture(10);
     };
     await workerWith(storage, provider).runOnce();
     expect(storage.revisions.size).toBe(0);

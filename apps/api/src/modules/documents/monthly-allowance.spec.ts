@@ -18,7 +18,7 @@ import { RetryDocumentHandler } from './commands/retry-document.handler';
 import { UnslopifyDocument, UnslopifyDocumentHandler } from './commands/unslopify-document.handler';
 import { DataSource } from 'typeorm';
 import { FindDocumentHandler } from './queries/find-document.handler';
-import { assessmentRubric } from './assessment-workflow';
+import { detectionFixture } from '@api/shared/testing/detection-fixtures';
 
 async function allowanceHarness(database: PGlite, allowance: MonthlyAllowance) {
   const files = new Map<string, Buffer>();
@@ -127,7 +127,7 @@ describe('Monthly allowance at Unslopify and worker boundaries', () => {
     expect(await detail(document.id)).toMatchObject({
       status: 'assessed',
       phase: 'assessment',
-      assessment: { rubric: assessmentRubric, score: 20, patterns: [] },
+      assessment: detectionFixture(20),
       finalAssessment: null
     });
     expect(await read()).toMatchObject({ used: 0, reserved: 0, remaining: 3 });
@@ -153,7 +153,7 @@ describe('Monthly allowance at Unslopify and worker boundaries', () => {
     expect(await detail(documents[3].id)).toMatchObject({
       status: 'assessed',
       strength: null,
-      assessment: { score: 20 }
+      assessment: { detection: { aiScore: 0.2 } }
     });
     for (let index = 0; index < 3; index++) expect((await harness.jobs.claim(timeouts))?.phase).toBe('rewrite');
     expect(await harness.jobs.claim(timeouts)).toBeNull();
@@ -235,8 +235,8 @@ describe('Monthly allowance at Unslopify and worker boundaries', () => {
     expect(await workerFor().runOnce()).toBe(true);
     expect(await detail(document.id)).toMatchObject({
       status: 'completed',
-      assessment: { score: 20 },
-      finalAssessment: { score: 20 },
+      assessment: { detection: { aiScore: 0.2 } },
+      finalAssessment: { detection: { aiScore: 0.2 } },
       finalScoreUnavailable: false
     });
     expect(await read()).toMatchObject({ month: '2027-02', used: 0, reserved: 0 });
@@ -262,7 +262,10 @@ describe('Monthly allowance at Unslopify and worker boundaries', () => {
     });
     expect(await read()).toMatchObject({ used: 0, reserved: 0, remaining: 3 });
     expect(await workerFor().runOnce()).toBe(true);
-    expect(await detail(document.id)).toMatchObject({ status: 'assessed', assessment: { score: 20 } });
+    expect(await detail(document.id)).toMatchObject({
+      status: 'assessed',
+      assessment: { detection: { aiScore: 0.2 } }
+    });
     expect(await read()).toMatchObject({ used: 0, reserved: 0, remaining: 3 });
   });
 
@@ -276,7 +279,7 @@ describe('Monthly allowance at Unslopify and worker boundaries', () => {
       status: 'failed',
       phase: 'rewrite',
       strength: 70,
-      assessment: { score: 20 },
+      assessment: { detection: { aiScore: 0.2 } },
       failure: expect.stringContaining('original is still available')
     });
     expect(await read()).toMatchObject({ used: 0, reserved: 0, remaining: 3 });
@@ -304,7 +307,11 @@ describe('Monthly allowance at Unslopify and worker boundaries', () => {
       status: 409,
       message: expect.stringMatching(/FREE allowance of 3/)
     });
-    expect(await detail(document.id)).toMatchObject({ status: 'failed', strength: 70, assessment: { score: 20 } });
+    expect(await detail(document.id)).toMatchObject({
+      status: 'failed',
+      strength: 70,
+      assessment: { detection: { aiScore: 0.2 } }
+    });
     expect(await read()).toMatchObject({ used: 0, reserved: 3, remaining: 0 });
   });
 
@@ -478,7 +485,7 @@ describe('Monthly allowance at Unslopify and worker boundaries', () => {
     await workerFor(provider).runOnce();
     expect(await detail(document.id)).toMatchObject({
       status: 'completed',
-      assessment: { score: 20 },
+      assessment: { detection: { aiScore: 0.2 } },
       finalAssessment: null,
       finalScoreUnavailable: true
     });

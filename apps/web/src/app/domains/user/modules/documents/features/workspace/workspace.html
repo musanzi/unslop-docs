@@ -1,13 +1,22 @@
-<ng-template #aiRate let-value let-label="label" let-compact="compact" let-emptyLabel="emptyLabel">
-  @let appearance = rateAppearance(value);
+<ng-template #detectorScore let-detection let-label="label" let-compact="compact" let-emptyLabel="emptyLabel">
+  @let value = detection ? modelScore(detection) : null;
   <div
     class="relative grid shrink-0 place-items-center"
     [class.size-32]="!compact"
     [class.size-24]="compact"
-    [class]="appearance.tone"
+    [class.text-success]="value !== null && value <= 33"
+    [class.text-warning]="value !== null && value > 33 && value <= 66"
+    [class.text-danger]="value !== null && value > 66"
+    [class.text-muted]="value === null"
     role="img"
     [attr.aria-label]="
-      label + ': ' + (value === null ? (emptyLabel ?? 'Not scored') : value + '%, ' + appearance.severity)
+      label +
+      ': ' +
+      (value === null
+        ? detection
+          ? 'Unavailable'
+          : (emptyLabel ?? 'Not scored')
+        : value + ' out of 100, ' + (value <= 33 ? 'Low' : value <= 66 ? 'Moderate' : 'High'))
     ">
     <svg class="absolute inset-0 size-full -rotate-90" viewBox="0 0 120 120" fill="none" aria-hidden="true">
       <circle cx="60" cy="60" r="52" stroke="currentColor" stroke-width="7" stroke-opacity="0.25" />
@@ -24,21 +33,23 @@
           [attr.stroke-dashoffset]="100 - value" />
       }
     </svg>
-    <div class="flex flex-col items-center gap-1" aria-hidden="true">
-      <span
-        class="leading-none font-semibold tracking-tight tabular-nums"
-        [class.text-4xl]="compact"
-        [class.text-5xl]="!compact">
-        {{ value ?? '–' }}
-        @if (value !== null) {
-          <span class="ml-0.5 text-[0.875rem] font-medium">%</span>
-        }
-      </span>
-      <span class="text-[0.6875rem] leading-4 font-medium">{{
-        value === null ? (emptyLabel ?? 'Not scored') : appearance.severity
-      }}</span>
-    </div>
+    <span
+      class="leading-none font-semibold tracking-tight tabular-nums"
+      [class.text-4xl]="compact"
+      [class.text-5xl]="!compact"
+      aria-hidden="true">
+      {{ value ?? '–' }}
+    </span>
   </div>
+  @if (detection?.reason) {
+    <p class="mt-2 text-center text-[0.75rem] text-muted">
+      @if (detection.reason === 'too_short') {
+        At least 50 words needed.
+      } @else if (detection.reason === 'too_long') {
+        Beyond the detector's length limit.
+      }
+    </p>
+  }
 </ng-template>
 <ng-template #originalDownload let-document let-spaced="spaced">
   <button
@@ -274,7 +285,9 @@
                         }
                       }
                     } @else {
-                      <p class="mt-1 text-[0.875rem] leading-6 text-muted">{{ phaseDetail() }}</p>
+                      @if (phaseDetail()) {
+                        <p class="mt-1 text-[0.875rem] leading-6 text-muted">{{ phaseDetail() }}</p>
+                      }
                     }
                     @if (editing(); as progress) {
                       <div class="mt-4 max-w-md">
@@ -313,18 +326,22 @@
                       <span class="text-[0.75rem] leading-4 text-muted">Before</span>
                       <ng-container
                         *ngTemplateOutlet="
-                          aiRate;
-                          context: { $implicit: score(), label: 'Before AI Rate', compact: true }
+                          detectorScore;
+                          context: {
+                            $implicit: detection(),
+                            label: 'Before AI detection',
+                            compact: true
+                          }
                         " />
                     </div>
                     <div class="celebrate-rise flex flex-col items-center gap-2">
                       <span class="text-[0.75rem] leading-4 text-muted">After</span>
                       <ng-container
                         *ngTemplateOutlet="
-                          aiRate;
+                          detectorScore;
                           context: {
-                            $implicit: finalScore(),
-                            label: 'After AI Rate',
+                            $implicit: finalDetection(),
+                            label: 'After AI detection',
                             compact: true,
                             emptyLabel: store.detail()?.finalScoreUnavailable ? 'Unavailable' : 'Not scored'
                           }
@@ -339,10 +356,10 @@
                 } @else {
                   <ng-container
                     *ngTemplateOutlet="
-                      aiRate;
+                      detectorScore;
                       context: {
-                        $implicit: score(),
-                        label: 'AI Rate',
+                        $implicit: detection(),
+                        label: 'AI detection',
                         emptyLabel: store.detail()?.assessment ? 'Not scored' : 'Pending'
                       }
                     " />
@@ -352,16 +369,25 @@
                   class="mt-3 text-center text-[0.9375rem] leading-5 font-medium"
                   [class.w-32]="document.status !== 'completed'"
                   [class.w-52]="document.status === 'completed'">
-                  AI Rate
+                  AI detection
                 </h2>
-                @if (!store.detail()?.assessment && document.status !== 'completed') {
+                @if (detectorChanged()) {
+                  <p class="mt-2 text-[0.8125rem] leading-5 text-muted">
+                    The detector version changed between checks; scores are not directly comparable.
+                  </p>
+                }
+                @if (
+                  !store.detail()?.assessment &&
+                  document.status !== 'completed' &&
+                  (store.detailLoading() || document.status === 'assessed' || phase()?.key === 'failed')
+                ) {
                   <p class="mt-2 text-[0.8125rem] leading-5 text-muted">
                     @if (store.detailLoading()) {
                       Loading the assessment…
+                    } @else if (document.status === 'assessed') {
+                      No local detector result is recorded for this document.
                     } @else if (phase()?.key === 'failed') {
                       No score until the assessment succeeds.
-                    } @else {
-                      The score appears once the assessment finishes.
                     }
                   </p>
                 }
@@ -571,6 +597,10 @@
                 Up to 10 MB · 10,000 words · English or French
               </p>
             </div>
+            <p class="mt-3 text-[0.8125rem] leading-5 text-muted">
+              AI detection runs on our server. When you choose Unslopify, document text is sent to DeepSeek for editing,
+              then checked locally again.
+            </p>
             @if (store.uploadError()) {
               <p id="upload-error" class="mt-3 text-[0.875rem] text-danger [overflow-wrap:anywhere]" role="alert">
                 {{ store.uploadError() }}

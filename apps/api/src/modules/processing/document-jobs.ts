@@ -1,6 +1,6 @@
 import { DocumentPhase, ProcessingFailure, ProcessingStage } from '../documents/document-processing';
 import { randomUUID } from 'node:crypto';
-import { WritingAssessment } from '../documents/assessment-workflow';
+import { DetectionAssessment } from '../documents/assessment-workflow';
 import { ProviderFailureCategory } from '../documents/provider-failure';
 import { RevisionNotices } from '../documents/revision-notices';
 import { DocumentPreview } from '../documents/document-preview';
@@ -138,7 +138,11 @@ export class DocumentJobs {
     return rows.length === 1;
   }
 
-  async publishAssessment(claim: JobClaim, assessment: WritingAssessment, preview: DocumentPreview): Promise<boolean> {
+  async publishAssessment(
+    claim: JobClaim,
+    assessment: DetectionAssessment,
+    preview: DocumentPreview
+  ): Promise<boolean> {
     const rows = await this.database.query(
       `WITH assessed AS (
       UPDATE document SET status = 'assessed', assessment = $3::jsonb, preview = $4::jsonb, "processingStage" = NULL,
@@ -167,7 +171,7 @@ export class DocumentJobs {
     return rows.length === 1;
   }
 
-  async complete(claim: JobClaim, finalAssessment: WritingAssessment | null): Promise<boolean> {
+  async complete(claim: JobClaim, finalAssessment: DetectionAssessment | null): Promise<boolean> {
     const rows = await this.database.query(
       `WITH completed AS (
       UPDATE document SET ${publication}, "finalAssessment" = $3::jsonb

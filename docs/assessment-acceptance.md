@@ -1,43 +1,22 @@
-# Verify background writing assessments
+# Verify local detection and rewriting
 
-This guide records the issue #6 assessment checks. After issue #7, use the [revision acceptance guide](revision-acceptance.md) for the complete workflow. The implementation worktree does not start servers, build images, apply live migrations, or mutate the parent's stack.
+Start the Docker development stack using the [local detector setup](../services/detector/README.md). Wait for the detector health check and worker startup. The first start downloads the model. Detection requires no subscription or API key. DeepSeek still requires its editing credentials.
 
-## Run deterministic smoke tests
-
-Run the API suite from the repository root:
+Run the focused backend checks:
 
 ```sh
-pnpm test:api
+pnpm exec vitest run --config apps/api/vitest.config.mts assessment-workflow local-detector-provider deepseek-provider document-jobs
 ```
 
-To run only the assessment and queue tests:
+Use synthetic documents for manual checks. Do not infer detector accuracy from the model score of a single fixture.
 
-```sh
-pnpm exec vitest run --config apps/api/vitest.config.mts assessment-workflow deepseek-provider document-jobs
-```
+1. Upload an English DOCX containing at least 50 words. Confirm that local detection finishes before editing starts and no allowance slot is reserved yet.
+2. Confirm that the result is labeled **AI detection** and shows a model score out of 100. It must not claim an authorship percentage or university acceptance.
+3. Choose a rewrite strength and select **Unslopify**. Confirm that DeepSeek edits with the pinned unslop instructions, a validated DOCX is saved, and local detection runs on the revised text.
+4. Confirm that the original remains byte-for-byte unchanged and both downloads are available. A final score that rises must not block the revised download.
+5. Repeat with a French DOCX and a document longer than one model window. Compare the recorded character count and text hash with the full extracted text. No tail may be silently omitted.
+6. Upload a document below 50 words. Confirm that detection says unavailable, does not display zero, and still allows editing.
+7. Stop the detector during a synthetic request. Confirm bounded retries and no published partial result. If final checking fails after a revision is saved, confirm that the revised download remains available with an unavailable final result.
+8. Delete a queued or processing document. Confirm that the worker accepts no late result, releases any active rewrite reservation, and removes its private files.
 
-These tests run the real DOCX reader, LangGraph nodes, validation, and queue SQL with fake provider responses and embedded PostgreSQL. They cover known and unknown examples, no patterns, malformed output, provider failure, finite waits, late responses, interrupted claims, shutdown, duplicate claims, and deletion during a request. The HTTP suite checks private reads and atomic upload publication without a provider dependency.
-
-Use the synthetic [injection DOCX](../apps/api/src/shared/testing/fixtures/assessment/injection.docx) for upload checks. Regenerate it with:
-
-```sh
-node tools/generate-assessment-fixture.cjs
-```
-
-`apps/api/src/shared/testing/assessment-fixtures.ts` exports `assessmentDocxFixture()` and `fakeAssessmentProvider(outcome, delayMs)`. Outcomes are `patterns`, `none`, and `failure`. A delay of 5000 ms makes the processing state visible. The `patterns` response includes an invented example that validation must drop. These helpers are test-only imports, with no environment switch in the deployed worker.
-
-For a parent's isolated integration fixture runner, construct `AssessmentWorker` with `DocumentJobs(testDataSource)`, the fixture storage (with `read`, `write`, and `remove`), `fakeAssessmentProvider('patterns', 5000)`, `await loadAssessmentSkill()`, and `{ processingTimeoutMs: 900000, providerTimeoutMs: 60000 }`. Call `runOnce()` to process one queued fixture. Use a dedicated test database and storage so the fake provider cannot claim a real user's queued document. The same worker, queue SQL, reader, and graph run in production. Authentication remains unchanged.
-
-## Collect live evidence
-
-1. Rebuild the changed containers and apply the migration through the parent's authorized deployment procedure. Confirm the worker starts separately and that the API still invokes Nest directly.
-2. Sign in through Google or the parent's isolated test-session setup. Upload the injection fixture and confirm that upload returns while the provider is pending.
-3. Capture desktop and phone screenshots with a queued or processing sidebar entry and its matching main panel.
-4. Complete the fake-provider fixture (it now also supplies faithful editing responses). Confirm that the panel says **Writing assessment**, shows **Filler phrases** with **In order to**, and omits the invented quote. Capture the completed state with its assessment and revised download.
-5. Run the `none` fixture and confirm **No writing patterns found**. Run the `failure` fixture and capture the failed state with its explanation and no partial assessment.
-6. Read the assessment as another user and as the admin. Confirm the same 404 body as a missing document.
-7. Queue a document while the worker is stopped, restart the API and worker, and confirm that the job remains available. Stop the worker during assessment, restart it, and confirm that the expired lease becomes failed rather than remaining in processing.
-8. Use a short configured deadline with a delayed fake provider. Confirm failure and no later publication. Run two workers against the isolated fixture database and confirm that only one claims each upload.
-9. Confirm the original still downloads byte-for-byte after assessment and failure. Check logs for fixed lifecycle messages without document text, examples, or credentials.
-
-The implementation's checks do not replace live migration, container restart, worker concurrency, browser polling, screenshots, or a real DeepSeek compatibility smoke test. The parent owns that evidence. No real provider call is made by the automated suite.
+Run the [detector service tests and real-model smoke test](../services/detector/README.md) to verify inference separately. The smoke test is not an accuracy benchmark. The current experimental detector can miss generated text, including French text.

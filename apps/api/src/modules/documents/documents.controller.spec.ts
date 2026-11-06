@@ -36,7 +36,7 @@ import { DownloadDocumentHandler } from './queries/download-document.handler';
 import { DeleteDocumentHandler } from './commands/delete-document.handler';
 import { UnslopifyDocumentHandler } from './commands/unslopify-document.handler';
 import { FindDocumentPreviewHandler } from './queries/find-document-preview.handler';
-import { assessmentRubric } from './assessment-workflow';
+import { detectionFixture } from '@api/shared/testing/detection-fixtures';
 import { DocumentStorage } from './document-storage';
 import { readerFixture, textParagraph } from '@api/shared/testing/docx-reader-fixture';
 import { languageSamples } from '@api/shared/testing/docx-language-fixtures';
@@ -221,11 +221,7 @@ describe('Private documents HTTP', () => {
   async function download(id: string, identity = 'owner') {
     return fetch(`${base}/documents/${id}/original`, { headers: identity ? { 'test-identity': identity } : {} });
   }
-  const assessment = {
-    rubric: assessmentRubric,
-    score: 40,
-    patterns: [{ rule: 23, name: 'Filler phrases', examples: ['In order to'] }]
-  };
+  const assessment = detectionFixture(40);
   const preview = {
     blocks: [{ kind: 'paragraph', level: null, text: 'Private student text.', inlines: [], rows: null, reason: null }]
   };
@@ -508,14 +504,14 @@ describe('Private documents HTTP', () => {
       status: 'completed',
       phase: 'rewrite',
       strength: null,
-      assessment: { patterns: [] },
+      assessment: { obsolete: true },
       finalAssessment: null
     });
     const response = await fetch(`${base}/documents/${document.id}`, { headers: { 'test-identity': 'owner' } });
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
       data: {
-        assessment: { rubric: null, score: null },
+        assessment: null,
         finalAssessment: null,
         finalScoreUnavailable: false
       }
@@ -858,7 +854,7 @@ describe('Private documents HTTP', () => {
       revisedKey: key,
       revisedSize: revised.length,
       assessment,
-      finalAssessment: { ...assessment, score: 10, patterns: [] }
+      finalAssessment: detectionFixture(10)
     });
     const response = await get(data.id);
     expect(response.status).toBe(200);

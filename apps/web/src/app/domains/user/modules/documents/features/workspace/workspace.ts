@@ -12,7 +12,7 @@ import {
 import { MatIcon } from '@angular/material/icon';
 import { MatSidenav, MatSidenavContainer, MatSidenavContent } from '@angular/material/sidenav';
 import { RouterLink } from '@angular/router';
-import type { IDocumentResponse } from '@unslop-docs/api-contracts';
+import type { IAiDetectionResponse, IDocumentResponse } from '@unslop-docs/api-contracts';
 import { Media } from '@web/core/media';
 import { AuthStore } from '@web/domains/auth/shared/data-access';
 import { User } from '@web/shared/ui/user/user';
@@ -97,7 +97,7 @@ export class Workspace {
           ? 'Editing starts automatically. You can leave and come back.'
           : 'Assessment starts automatically. You can leave and come back.';
       case 'assessing':
-        return 'Reading the original for AI-style writing patterns.';
+        return '';
       case 'ready-to-edit':
         return 'Choose a rewrite strength, then start Unslopify.';
       case 'editing': {
@@ -107,7 +107,7 @@ export class Workspace {
       case 'checking-result':
         return document.processingStage === 'validating'
           ? 'Comparing the revision with the original.'
-          : 'Scoring the revised document.';
+          : 'Rechecking the revised document with the local detector.';
       case 'download-ready':
         return 'Your revised DOCX is ready.';
       case 'failed':
@@ -119,13 +119,18 @@ export class Workspace {
   protected readonly retryLabel = computed(() =>
     this.store.selected()?.phase === 'rewrite' ? 'Retry editing' : 'Retry assessment'
   );
-  protected readonly score = computed(() => this.store.detail()?.assessment?.score ?? null);
-  protected readonly finalScore = computed(() => this.store.detail()?.finalAssessment?.score ?? null);
+  protected readonly detection = computed(() => this.store.detail()?.assessment?.detection ?? null);
+  protected readonly finalDetection = computed(() => this.store.detail()?.finalAssessment?.detection ?? null);
+  protected readonly detectorChanged = computed(() => {
+    const before = this.detection();
+    const after = this.finalDetection();
+    return !!before && !!after && before.modelVersion !== after.modelVersion;
+  });
   protected readonly finalScoreNote = computed(() => {
     const detail = this.store.detail();
     if (detail?.finalScoreUnavailable)
       return 'The revised document is ready, but its final score is unavailable: the final assessment did not finish.';
-    if (detail?.status === 'completed' && detail.strength === null && this.finalScore() === null)
+    if (detail?.status === 'completed' && detail.strength === null && this.finalDetection() === null)
       return 'Scores were not recorded for this document.';
     return null;
   });
@@ -173,11 +178,8 @@ export class Workspace {
     if (file) this.store.upload(file);
   }
 
-  protected rateAppearance(score: number | null): { tone: string; severity: string } {
-    if (score === null) return { tone: 'text-muted', severity: 'Not scored' };
-    if (score <= 33) return { tone: 'text-success', severity: 'Low' };
-    if (score <= 66) return { tone: 'text-warning', severity: 'Moderate' };
-    return { tone: 'text-danger', severity: 'High' };
+  protected modelScore(detection: IAiDetectionResponse): number | null {
+    return detection.aiScore === null ? null : Math.round(detection.aiScore * 100);
   }
 
   protected setStrength(event: Event): void {

@@ -1,3 +1,4 @@
+import { detectionFixture } from './detection-fixtures';
 import { DocumentProvider } from '../../modules/documents/document-workflow';
 import { docxFixtureCases } from './docx-fixture-catalog';
 import { readerFixture, textParagraph } from './docx-reader-fixture';
@@ -29,9 +30,9 @@ export async function revisionFixture(language: 'english' | 'french'): Promise<B
   });
 }
 
-export function faithfulRevisionProvider(patterns = false): DocumentProvider {
+export function faithfulRevisionProvider(highSignal = false): DocumentProvider {
   return {
-    assess: async () => ({ score: patterns ? 40 : 20, patterns: patterns ? [{ rule: 23, examples: ['In order to'] }] : [] }),
+    assess: async () => detectionFixture(highSignal ? 40 : 20),
     edit: async (_system, chunk) => ({
       edits: chunk.spans.map(({ id, text }) => ({
         id,

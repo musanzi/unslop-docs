@@ -7,19 +7,21 @@ import { RevisionValidationError } from '../documents/revision-validation';
 import { readDocx } from '../documents/validate-docx';
 import { DocumentJobs, JobClaim } from './document-jobs';
 import { classifyProviderFailure, ProviderFailure } from '../documents/provider-failure';
-import { createAssessmentWorkflow, validateAssessment, WritingAssessment } from '../documents/assessment-workflow';
+import { createAssessmentWorkflow, validateAssessment, DetectionAssessment } from '../documents/assessment-workflow';
 import { validateChunkResult } from '../documents/revise-docx';
 import { documentPreview } from '../documents/document-preview';
+import { detectionRubric } from '../documents/ai-detection';
 
 class RetryScheduled extends Error {}
 
-export const initialAssessmentOperation = 'assess:v2';
-export const finalAssessmentOperation = 'final-assess:v2';
+export const initialAssessmentOperation = 'local-detection:initial:v1';
+export const finalAssessmentOperation = 'local-detection:final:v1';
 
 export interface WorkerSettings {
   assessmentTimeoutMs?: number;
   processingTimeoutMs: number;
   providerTimeoutMs: number;
+  assessmentProviderTimeoutMs?: number;
 }
 
 interface ClaimRun {
@@ -88,7 +90,7 @@ export class AssessmentWorker {
           renewing = false;
         });
     }, 10000);
-    const invoke = async (call: (signal: AbortSignal) => Promise<unknown>): Promise<unknown> => {
+    const invoke = async (call: (signal: AbortSignal) => Promise<unknown>, timeoutMs: number): Promise<unknown> => {
       await active();
       const requestController = new AbortController();
       const abort = () => requestController.abort();
@@ -98,10 +100,7 @@ export class AssessmentWorker {
         rejectStopped = () => reject(new ProviderFailure(controller.signal.aborted ? 'cancelled' : 'timeout'));
         requestController.signal.addEventListener('abort', rejectStopped, { once: true });
       });
-      const providerTimer = setTimeout(
-        abort,
-        Math.min(this.settings.providerTimeoutMs, claim.processingDeadline.getTime() - Date.now())
-      );
+      const providerTimer = setTimeout(abort, Math.min(timeoutMs, claim.processingDeadline.getTime() - Date.now()));
       try {
         const result = await Promise.race([call(requestController.signal), stopped]);
         await active();
@@ -122,7 +121,12 @@ export class AssessmentWorker {
       if (!checkpoint) throw new Error('Provider request cannot start');
       let raw: unknown;
       try {
-        raw = await invoke(call);
+        raw = await invoke(
+          call,
+          operation.startsWith('local-detection:')
+            ? (this.settings.assessmentProviderTimeoutMs ?? this.settings.providerTimeoutMs)
+            : this.settings.providerTimeoutMs
+        );
       } catch (error) {
         await active();
         const providerFailure = classifyProviderFailure(error, controller.signal);
@@ -178,19 +182,16 @@ export class AssessmentWorker {
     return true;
   }
 
-  private assessText(run: ClaimRun, operation: string, text: string): Promise<WritingAssessment> {
-    const workflow = createAssessmentWorkflow(
-      {
-        assess: (system, assessed) =>
-          run.request(
-            operation,
-            { system, text: assessed },
-            (signal) => this.provider.assess(system, assessed, signal),
-            (raw) => validateAssessment(raw, assessed)
-          )
-      },
-      this.skill
-    );
+  private assessText(run: ClaimRun, operation: string, text: string): Promise<DetectionAssessment> {
+    const workflow = createAssessmentWorkflow({
+      assess: (assessed) =>
+        run.request(
+          operation,
+          { rubric: detectionRubric, text: assessed },
+          (signal) => this.provider.assess(assessed, signal),
+          (raw) => validateAssessment(raw)
+        )
+    });
     return workflow.invoke({ text }, { signal: run.signal }).then((result) => result.assessment);
   }
 
@@ -255,7 +256,7 @@ export class AssessmentWorker {
         }
         revised = result.revised;
       }
-      let finalAssessment: WritingAssessment | null = null;
+      let finalAssessment: DetectionAssessment | null = null;
       try {
         const revisedSource = await readDocx(revised);
         finalAssessment = await this.assessText(run, finalAssessmentOperation, revisedSource.text);

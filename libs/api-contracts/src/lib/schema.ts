@@ -608,17 +608,31 @@ export interface components {
             /** @description Read-only structure of the original in document order */
             blocks: components["schemas"]["PreviewBlockResponse"][];
         };
-        WritingPatternResponse: {
-            rule: number;
-            name: string;
-            examples: string[];
+        AiDetectionResponse: {
+            /** @enum {string} */
+            provider: "local";
+            /** @enum {string} */
+            status: "complete" | "unavailable";
+            /** @description Token-weighted mean of segment model scores. Not an authorship percentage or calibrated document probability */
+            aiScore: number | null;
+            /** @enum {string|null} */
+            reason: "too_short" | "too_long" | null;
+            modelVersion: string;
+            /** @enum {string} */
+            method: "token-weighted-mean-v1";
+            /** Format: date-time */
+            checkedAt: string;
+            /** @description SHA-256 of the full extracted text submitted for detection */
+            textHash: string;
+            /** @description Number of UTF-16 code units in the submitted text */
+            characterCount: number;
+            tokenCount: number;
+            segmentCount: number;
         };
-        WritingAssessmentResponse: {
-            /** @description Version of the document-wide scoring rubric; null for assessments recorded before scoring existed */
-            rubric: string | null;
-            /** @description Estimated AI-style score from 0 to 100. It measures writing patterns and does not establish who wrote the document. Null for assessments recorded before scoring existed */
-            score: number | null;
-            patterns: components["schemas"]["WritingPatternResponse"][];
+        DetectionAssessmentResponse: {
+            /** @enum {string} */
+            rubric: "local-detector-v1";
+            detection: components["schemas"]["AiDetectionResponse"];
         };
         KeptPassageResponse: {
             /** @description Preservation check that kept the original passage */
@@ -663,9 +677,9 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
             /** @description Initial assessment of the original, published when the document is assessed and retained afterwards */
-            assessment: components["schemas"]["WritingAssessmentResponse"] | null;
+            assessment: components["schemas"]["DetectionAssessmentResponse"] | null;
             /** @description Automatic assessment of the revised document; null until completed or when its score is unavailable */
-            finalAssessment: components["schemas"]["WritingAssessmentResponse"] | null;
+            finalAssessment: components["schemas"]["DetectionAssessmentResponse"] | null;
             /** @description True when the revised download is ready but its final assessment could not be completed */
             finalScoreUnavailable: boolean;
             /** @description Notices recorded with the revision */

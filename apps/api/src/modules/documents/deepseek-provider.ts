@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { DocumentProvider } from './document-workflow';
+import { EditProvider } from './revise-docx';
 import { EditChunk } from './revise-docx';
 import { classifyProviderFailure, ProviderFailure } from './provider-failure';
 
@@ -29,11 +29,11 @@ export function workerSettings(env: NodeJS.ProcessEnv) {
   };
 }
 
-export async function loadAssessmentSkill(): Promise<string> {
+export async function loadEditingSkill(): Promise<string> {
   let root = __dirname;
   while (!existsSync(join(root, 'vendor/cursor-pstack-unslop/SKILL.md'))) {
     const parent = dirname(root);
-    if (parent === root) throw new Error('Pinned assessment rules are missing.');
+    if (parent === root) throw new Error('Pinned editing rules are missing.');
     root = parent;
   }
   const bytes = await readFile(join(root, 'vendor/cursor-pstack-unslop/SKILL.md'));
@@ -41,11 +41,11 @@ export async function loadAssessmentSkill(): Promise<string> {
     createHash('sha256').update(bytes).digest('hex') !==
     'ccab208e315ce05e2fab8eeee2f7879f1289b5c6844840b2d307adf31c79144f'
   )
-    throw new Error('Pinned assessment rules failed integrity validation.');
+    throw new Error('Pinned editing rules failed integrity validation.');
   return bytes.toString('utf8');
 }
 
-export class DeepSeekProvider implements DocumentProvider {
+export class DeepSeekProvider implements EditProvider {
   private readonly model: ChatDeepSeek;
 
   constructor(settings: ReturnType<typeof workerSettings>, fetcher?: typeof fetch) {
@@ -60,10 +60,6 @@ export class DeepSeekProvider implements DocumentProvider {
       verbose: false,
       configuration: { maxRetries: 0, logLevel: 'off', ...(fetcher ? { fetch: fetcher } : {}) }
     });
-  }
-
-  async assess(system: string, text: string, signal?: AbortSignal): Promise<unknown> {
-    return this.request(system, { document: text }, signal);
   }
 
   async edit(system: string, chunk: EditChunk, signal?: AbortSignal): Promise<unknown> {

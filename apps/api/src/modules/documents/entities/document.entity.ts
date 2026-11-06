@@ -1,5 +1,5 @@
 import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryColumn } from 'typeorm';
-import type { WritingAssessment } from '../assessment-workflow';
+import type { DetectionAssessment } from '../assessment-workflow';
 import type { DocumentPhase, DocumentStatus, ProcessingFailure, ProcessingStage } from '../document-processing';
 import { User } from '../../users/entities';
 import type { ProviderRequestCheckpoint } from '../../processing/document-jobs';
@@ -77,10 +77,10 @@ export class Document {
   leaseExpiresAt: Date | null;
 
   @Column({ type: 'jsonb', nullable: true, select: false })
-  assessment: WritingAssessment | null;
+  assessment: DetectionAssessment | null;
 
   @Column({ type: 'jsonb', nullable: true, select: false })
-  finalAssessment: WritingAssessment | null;
+  finalAssessment: DetectionAssessment | null;
 
   @Column({ type: 'jsonb', nullable: true, select: false })
   preview: DocumentPreview | null;

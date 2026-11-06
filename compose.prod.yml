@@ -55,6 +55,8 @@ services:
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
+      LOCAL_DETECTOR_URL: http://detector:8090
+      LOCAL_DETECTOR_TIMEOUT_MS: ${LOCAL_DETECTOR_TIMEOUT_MS:-300000}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-}
       ASSESSMENT_TIMEOUT_MS: ${ASSESSMENT_TIMEOUT_MS:-300000}
@@ -65,8 +67,31 @@ services:
     volumes:
       - documents_data:/app/private-documents
     depends_on:
+      detector:
+        condition: service_healthy
       db:
         condition: service_healthy
+  detector:
+    build:
+      context: ./services/detector
+    restart: unless-stopped
+    environment:
+      DETECTOR_THREADS: ${DETECTOR_THREADS:-2}
+    volumes:
+      - detector_models:/models
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'python',
+          '-c',
+          'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8090/health", timeout=3)'
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15m
+    # Deliberately private: no host port or external inference service.
   web:
     build:
       context: .
@@ -105,6 +130,7 @@ services:
       timeout: 5s
       retries: 5
 volumes:
+  detector_models:
   postgres_data:
   redis_data:
   uploads_data:

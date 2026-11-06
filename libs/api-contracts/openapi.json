@@ -1879,58 +1879,100 @@
           "blocks"
         ]
       },
-      "WritingPatternResponse": {
+      "AiDetectionResponse": {
         "type": "object",
         "properties": {
-          "rule": {
-            "type": "number"
+          "provider": {
+            "type": "string",
+            "enum": [
+              "local"
+            ]
           },
-          "name": {
-            "type": "string"
+          "status": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "unavailable"
+            ]
           },
-          "examples": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "required": [
-          "rule",
-          "name",
-          "examples"
-        ]
-      },
-      "WritingAssessmentResponse": {
-        "type": "object",
-        "properties": {
-          "rubric": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Version of the document-wide scoring rubric; null for assessments recorded before scoring existed"
-          },
-          "score": {
+          "aiScore": {
             "type": [
               "number",
               "null"
             ],
             "minimum": 0,
-            "maximum": 100,
-            "description": "Estimated AI-style score from 0 to 100. It measures writing patterns and does not establish who wrote the document. Null for assessments recorded before scoring existed"
+            "maximum": 1,
+            "description": "Token-weighted mean of segment model scores. Not an authorship percentage or calibrated document probability"
           },
-          "patterns": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/WritingPatternResponse"
-            }
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "too_short",
+              "too_long",
+              null
+            ]
+          },
+          "modelVersion": {
+            "type": "string"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "token-weighted-mean-v1"
+            ]
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "textHash": {
+            "type": "string",
+            "description": "SHA-256 of the full extracted text submitted for detection"
+          },
+          "characterCount": {
+            "type": "number",
+            "description": "Number of UTF-16 code units in the submitted text"
+          },
+          "tokenCount": {
+            "type": "number"
+          },
+          "segmentCount": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "provider",
+          "status",
+          "aiScore",
+          "reason",
+          "modelVersion",
+          "method",
+          "checkedAt",
+          "textHash",
+          "characterCount",
+          "tokenCount",
+          "segmentCount"
+        ]
+      },
+      "DetectionAssessmentResponse": {
+        "type": "object",
+        "properties": {
+          "rubric": {
+            "type": "string",
+            "enum": [
+              "local-detector-v1"
+            ]
+          },
+          "detection": {
+            "$ref": "#/components/schemas/AiDetectionResponse"
           }
         },
         "required": [
           "rubric",
-          "score",
-          "patterns"
+          "detection"
         ]
       },
       "KeptPassageResponse": {
@@ -2074,7 +2116,7 @@
             "description": "Initial assessment of the original, published when the document is assessed and retained afterwards",
             "anyOf": [
               {
-                "$ref": "#/components/schemas/WritingAssessmentResponse"
+                "$ref": "#/components/schemas/DetectionAssessmentResponse"
               },
               {
                 "type": "null"
@@ -2085,7 +2127,7 @@
             "description": "Automatic assessment of the revised document; null until completed or when its score is unavailable",
             "anyOf": [
               {
-                "$ref": "#/components/schemas/WritingAssessmentResponse"
+                "$ref": "#/components/schemas/DetectionAssessmentResponse"
               },
               {
                 "type": "null"

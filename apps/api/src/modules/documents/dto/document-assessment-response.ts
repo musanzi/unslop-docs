@@ -1,40 +1,58 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { DocumentResponse } from './document-response';
-import { WritingAssessment } from '../assessment-workflow';
+import { validateAssessment, DetectionAssessment } from '../assessment-workflow';
 import { RevisionNotices } from '../revision-notices';
 import { Document } from '../entities/document.entity';
+import { detectionMethod } from '../ai-detection';
 
-export class WritingPatternResponse {
-  @ApiProperty()
-  rule: number;
+export class AiDetectionResponse {
+  @ApiProperty({ enum: ['local'] })
+  provider: 'local';
 
-  @ApiProperty()
-  name: string;
-
-  @ApiProperty({ type: [String] })
-  examples: string[];
-}
-
-export class WritingAssessmentResponse {
-  @ApiProperty({
-    type: String,
-    nullable: true,
-    description: 'Version of the document-wide scoring rubric; null for assessments recorded before scoring existed'
-  })
-  rubric: string | null;
+  @ApiProperty({ enum: ['complete', 'unavailable'] })
+  status: 'complete' | 'unavailable';
 
   @ApiProperty({
     type: Number,
-    nullable: true,
     minimum: 0,
-    maximum: 100,
+    maximum: 1,
+    nullable: true,
     description:
-      'Estimated AI-style score from 0 to 100. It measures writing patterns and does not establish who wrote the document. Null for assessments recorded before scoring existed'
+      'Token-weighted mean of segment model scores. Not an authorship percentage or calibrated document probability'
   })
-  score: number | null;
+  aiScore: number | null;
 
-  @ApiProperty({ type: [WritingPatternResponse] })
-  patterns: WritingPatternResponse[];
+  @ApiProperty({ type: String, enum: ['too_short', 'too_long'], nullable: true })
+  reason: 'too_short' | 'too_long' | null;
+
+  @ApiProperty()
+  modelVersion: string;
+
+  @ApiProperty({ enum: [detectionMethod] })
+  method: typeof detectionMethod;
+
+  @ApiProperty({ format: 'date-time' })
+  checkedAt: string;
+
+  @ApiProperty({ description: 'SHA-256 of the full extracted text submitted for detection' })
+  textHash: string;
+
+  @ApiProperty({ description: 'Number of UTF-16 code units in the submitted text' })
+  characterCount: number;
+
+  @ApiProperty()
+  tokenCount: number;
+
+  @ApiProperty()
+  segmentCount: number;
+}
+
+export class DetectionAssessmentResponse {
+  @ApiProperty({ enum: ['local-detector-v1'] })
+  rubric: 'local-detector-v1';
+
+  @ApiProperty({ type: AiDetectionResponse })
+  detection: AiDetectionResponse;
 }
 
 export class KeptPassageResponse {
@@ -66,18 +84,18 @@ export class RevisionNoticesResponse {
 
 export class DocumentAssessmentResponse extends DocumentResponse {
   @ApiProperty({
-    type: WritingAssessmentResponse,
+    type: DetectionAssessmentResponse,
     nullable: true,
     description: 'Initial assessment of the original, published when the document is assessed and retained afterwards'
   })
-  assessment: WritingAssessmentResponse | null;
+  assessment: DetectionAssessmentResponse | null;
 
   @ApiProperty({
-    type: WritingAssessmentResponse,
+    type: DetectionAssessmentResponse,
     nullable: true,
     description: 'Automatic assessment of the revised document; null until completed or when its score is unavailable'
   })
-  finalAssessment: WritingAssessmentResponse | null;
+  finalAssessment: DetectionAssessmentResponse | null;
 
   @ApiProperty({
     description: 'True when the revised download is ready but its final assessment could not be completed'
@@ -88,13 +106,13 @@ export class DocumentAssessmentResponse extends DocumentResponse {
   revisionNotices: RevisionNoticesResponse | null;
 }
 
-export function assessmentResponse(assessment: WritingAssessment | null): WritingAssessmentResponse | null {
+export function assessmentResponse(assessment: DetectionAssessment | null): DetectionAssessmentResponse | null {
   if (!assessment) return null;
-  return {
-    rubric: assessment.rubric ?? null,
-    score: Number.isInteger(assessment.score) ? assessment.score : null,
-    patterns: assessment.patterns
-  };
+  try {
+    return validateAssessment(assessment);
+  } catch {
+    return null;
+  }
 }
 
 export function noticesResponse(notices: RevisionNotices | null): RevisionNoticesResponse | null {

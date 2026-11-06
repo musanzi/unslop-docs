@@ -1,3 +1,4 @@
+import { detectionFixture } from './detection-fixtures';
 import type { DocumentProvider } from '../../modules/documents/document-workflow';
 import { faithfulRevisionProvider } from './revision-fixtures';
 import { readerFixture, textParagraph } from './docx-reader-fixture';
@@ -9,16 +10,13 @@ export function assessmentDocxFixture(): Promise<Buffer> {
   return readerFixture(textParagraph(assessmentFixtureText));
 }
 
-export function fakeAssessmentProvider(outcome: 'patterns' | 'none' | 'failure', delayMs = 0): DocumentProvider {
+export function fakeAssessmentProvider(outcome: 'signal' | 'clear' | 'failure', delayMs = 0): DocumentProvider {
   return {
     edit: faithfulRevisionProvider().edit,
     assess: async () => {
       if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
       if (outcome === 'failure') throw new Error('Synthetic provider failure');
-      return {
-        score: outcome === 'none' ? 0 : 40,
-        patterns: outcome === 'none' ? [] : [{ rule: 23, examples: ['In order to', 'unknown quotation'] }]
-      };
+      return detectionFixture(outcome === 'clear' ? 0 : 40);
     }
   };
 }
