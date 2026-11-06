@@ -515,6 +515,11 @@
               }
             </div>
           }
+        } @else if (store.detailLoading()) {
+          <p class="text-muted" role="status">Loading your document…</p>
+        } @else if (store.detailError()) {
+          <p class="text-danger" role="alert">{{ store.detailError() }}</p>
+          <button class="ui-button ui-ghost mt-2" type="button" (click)="store.loadSelected()">Try again</button>
         } @else {
           <h1
             class="mb-5 text-[1.5rem] leading-[1.3] font-medium tracking-tight text-balance text-ink [overflow-wrap:anywhere] md:text-[1.875rem]">

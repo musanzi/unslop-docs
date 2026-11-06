@@ -10,14 +10,14 @@ export const NAVIGATION: INavigationItem[] = [
         id: 'documents',
         label: 'Documents',
         icon: 'files',
-        route: '/user/documents',
+        route: '/documents',
         activeOptions: { exact: true }
       },
       {
         id: 'profile',
         label: 'My profile',
         icon: 'user-round',
-        route: '/user/profile',
+        route: '/profile',
         activeOptions: { exact: true }
       }
     ]

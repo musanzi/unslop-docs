@@ -26,7 +26,7 @@ function testPages(config: Routes): Routes {
 
 const pages: Record<string, Routes> = {
   auth: testPages(authRoutes),
-  user: testPages(userRoutes),
+  '': testPages(userRoutes),
   admin: testPages(adminRoutes)
 };
 
@@ -52,7 +52,7 @@ describe('Application navigation', () => {
 
   afterEach(() => TestBed.resetTestingModule());
 
-  it.each(['/', '/auth', '/auth/missing-page', '/missing-page', '/user/documents'])(
+  it.each(['/', '/auth', '/auth/missing-page', '/missing-page', '/documents', '/documents/document-1'])(
     'sends a signed-out visitor at %s to sign-in',
     async (url) => {
       await RouterTestingHarness.create(url);
@@ -64,13 +64,29 @@ describe('Application navigation', () => {
     auth.isUser.mockReturnValue(!admin);
     auth.isAdmin.mockReturnValue(admin);
     await RouterTestingHarness.create('/');
-    expect(TestBed.inject(Router).url).toBe('/user/documents');
+    expect(TestBed.inject(Router).url).toBe('/documents');
   });
 
   it('keeps the signed-in redirect when visiting sign-in directly', async () => {
     auth.isUser.mockReturnValue(true);
     await RouterTestingHarness.create('/auth/sign-in');
-    expect(TestBed.inject(Router).url).toBe('/user/documents');
+    expect(TestBed.inject(Router).url).toBe('/documents');
+  });
+
+  it('opens a document directly without a user prefix', async () => {
+    auth.isUser.mockReturnValue(true);
+    await RouterTestingHarness.create('/documents/document-1');
+    expect(TestBed.inject(Router).url).toBe('/documents/document-1');
+  });
+
+  it.each([
+    ['/user/documents', '/documents'],
+    ['/user/documents/document-1', '/documents/document-1'],
+    ['/user/profile', '/documents']
+  ])('redirects the old user URL %s', async (url, destination) => {
+    auth.isUser.mockReturnValue(true);
+    await RouterTestingHarness.create(url);
+    expect(TestBed.inject(Router).url).toBe(destination);
   });
 
   it('preserves Google callback error details on the sign-in route', async () => {
@@ -93,11 +109,11 @@ describe('Application navigation', () => {
   it('denies direct admin details to an ordinary account', async () => {
     auth.isUser.mockReturnValue(true);
     await RouterTestingHarness.create('/admin/users/user-1');
-    expect(TestBed.inject(Router).url).toBe('/user/documents');
+    expect(TestBed.inject(Router).url).toBe('/documents');
   });
 
   it.each([
-    ['/user/profile', '/user/documents'],
+    ['/profile', '/documents'],
     ['/admin/profile', '/admin']
   ])('redirects the obsolete profile page %s', async (url, destination) => {
     auth.isUser.mockReturnValue(true);

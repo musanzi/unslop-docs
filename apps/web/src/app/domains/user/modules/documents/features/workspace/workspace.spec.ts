@@ -1,7 +1,10 @@
 import { enableJitSignalInput } from '@web/shared/testing/signal-input';
 import { TestBed } from '@angular/core/testing';
 import { Provider, signal } from '@angular/core';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
+import { Location } from '@angular/common';
+import { provideLocationMocks } from '@angular/common/testing';
 import { HttpEventType, provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { MatIconRegistry } from '@angular/material/icon';
@@ -17,6 +20,7 @@ import { User } from '@web/shared/ui/user/user';
 import { testUser } from '@web/shared/testing/user-fixture';
 import { MatDialog } from '@angular/material/dialog';
 import DeleteDocument from '../delete-document/delete-document';
+import userRoutes from '../../../../routes';
 
 enableJitSignalInput(User, 'subscriptionStatus');
 
@@ -66,6 +70,161 @@ function expectNoPreview(http: HttpTestingController) {
   http.expectNone(`/documents/${document.id}/preview`);
 }
 
+describe('Workspace document URLs', () => {
+  async function render(url = '/documents') {
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter(userRoutes),
+        provideLocationMocks(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        {
+          provide: AuthStore,
+          useValue: {
+            user: signal(null),
+            isAdmin: () => false,
+            signOut: vi.fn(),
+            isSigningOut: signal(false),
+            signOutError: signal('')
+          }
+        },
+        { provide: Media, useValue: { match: () => signal(false) } }
+      ]
+    });
+    overrideTemplates();
+    const router = TestBed.inject(Router);
+    router.setUpLocationChangeListener();
+    const harness = await RouterTestingHarness.create(url);
+    await harness.fixture.whenStable();
+    const http = TestBed.inject(HttpTestingController);
+    const store = harness.routeDebugElement!.injector.get(DocumentsStore);
+    return { harness, router, http, store };
+  }
+
+  function flushHistory(http: HttpTestingController, items = [document]) {
+    http.expectOne((request) => request.url === '/documents').flush({ items, page: 1, pageSize: 20, total: 40 });
+    http.expectOne('/documents/allowance').flush({ status: 'FREE', remaining: 3 });
+  }
+
+  it('puts the selected document in the URL and restores it in a fresh workspace', async () => {
+    const first = await render();
+    flushHistory(first.http);
+    await first.harness.fixture.whenStable();
+    first.harness.routeNativeElement
+      ?.querySelector<HTMLButtonElement>('nav[aria-label="Document history"] button')
+      ?.click();
+    first.http.expectOne(`/documents/${document.id}`).flush(document);
+    await first.harness.fixture.whenStable();
+    const url = first.router.url;
+    expect(url).toBe(`/documents/${document.id}`);
+    first.http.verify();
+
+    TestBed.resetTestingModule();
+    const reloaded = await render(url);
+    flushHistory(reloaded.http, []);
+    reloaded.http.expectOne(`/documents/${document.id}`).flush(document);
+    await reloaded.harness.fixture.whenStable();
+    expect(reloaded.store.selected()?.id).toBe(document.id);
+    expect(reloaded.harness.routeNativeElement?.querySelector('h1')?.textContent).toContain(document.filename);
+    reloaded.http.verify();
+  });
+
+  it('follows browser history and clears the URL for a new document', async () => {
+    const { harness, http, router, store } = await render(`/documents/${document.id}`);
+    flushHistory(http);
+    http.expectOne(`/documents/${document.id}`).flush(document);
+    const second = { ...document, id: '00000000-0000-4000-8000-000000000002', filename: 'second.docx' };
+    store.select(second);
+    http.expectOne(`/documents/${second.id}`).flush(second);
+    await harness.fixture.whenStable();
+    expect(router.url).toBe(`/documents/${second.id}`);
+
+    TestBed.inject(Location).back();
+    await vi.waitFor(() => expect(router.url).toBe(`/documents/${document.id}`));
+    http.expectOne(`/documents/${document.id}`).flush(document);
+    expect(store.selected()?.id).toBe(document.id);
+
+    TestBed.inject(Location).forward();
+    await vi.waitFor(() => expect(router.url).toBe(`/documents/${second.id}`));
+    http.expectOne(`/documents/${second.id}`).flush(second);
+    expect(store.selected()?.id).toBe(second.id);
+
+    await harness.fixture.whenStable();
+    const newDocument = Array.from(harness.routeNativeElement!.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('New document')
+    );
+    expect(newDocument).toBeDefined();
+    newDocument!.click();
+    await harness.fixture.whenStable();
+    expect(router.url).toBe('/documents');
+    expect(store.selected()).toBeNull();
+    http.verify();
+  });
+
+  it('shows errors for a direct link and retries loading without needing a history entry', async () => {
+    const { harness, http, store } = await render(`/documents/${document.id}`);
+    flushHistory(http, []);
+    http.expectOne(`/documents/${document.id}`).flush(null, { status: 404, statusText: 'Not Found' });
+    await harness.fixture.whenStable();
+    expect(harness.routeNativeElement?.querySelector('main')?.textContent).toContain(
+      'This document is no longer available.'
+    );
+    store.loadSelected();
+    http.expectOne(`/documents/${document.id}`).flush(document);
+    await harness.fixture.whenStable();
+    expect(store.selected()?.id).toBe(document.id);
+    http.verify();
+  });
+
+  it('adds an uploaded document to the URL and removes it after deletion', async () => {
+    const { harness, http, router, store } = await render('/documents?source=history');
+    flushHistory(http, []);
+    store.upload(new File(['content'], 'river.docx'));
+    http.expectOne('/documents').flush(document);
+    http.expectOne(`/documents/${document.id}`).flush(document);
+    flushHistory(http);
+    await harness.fixture.whenStable();
+    expect(router.url).toBe(`/documents/${document.id}?source=history`);
+
+    const deleted = store.delete(document);
+    http.expectOne(`/documents/${document.id}`).flush(null);
+    expect(await deleted).toBe(true);
+    flushHistory(http, []);
+    await harness.fixture.whenStable();
+    expect(router.url).toBe('/documents?source=history');
+    expect(store.selected()).toBeNull();
+    http.verify();
+  });
+
+  it('ignores a late document response after navigating to a new document', async () => {
+    const { harness, http, store } = await render(`/documents/${document.id}`);
+    flushHistory(http, []);
+    const pending = http.expectOne(`/documents/${document.id}`);
+    await harness.fixture.whenStable();
+    expect(harness.routeNativeElement?.querySelector('main')?.textContent).toContain('Loading your document…');
+    await harness.navigateByUrl('/documents');
+    pending.flush(document);
+    await harness.fixture.whenStable();
+    expect(store.selected()).toBeNull();
+    expect(store.detail()).toBeNull();
+    expect(harness.routeNativeElement?.querySelector('main')?.textContent).toContain('Welcome back.');
+    http.verify();
+  });
+
+  it('keeps the new document view when selection is cleared before navigation finishes', async () => {
+    const { harness, http, router, store } = await render();
+    flushHistory(http);
+    store.select(document);
+    const pending = http.expectOne(`/documents/${document.id}`);
+    store.select(null);
+    await harness.fixture.whenStable();
+    pending.flush(document);
+    expect(router.url).toBe('/documents');
+    expect(store.selected()).toBeNull();
+    http.verify();
+  });
+});
+
 describe('Retry from the selected document', () => {
   function element<T extends Element = Element>(root: ParentNode, selector: string): T {
     const found = root.querySelector<T>(selector);
@@ -91,7 +250,7 @@ describe('Retry from the selected document', () => {
   async function render(detail = failed) {
     TestBed.configureTestingModule({
       providers: [
-        provideRouter([]),
+        provideRouter(userRoutes),
         provideHttpClient(),
         provideHttpClientTesting(),
         {
@@ -247,7 +406,7 @@ describe('Delete from document history', () => {
   async function render(items: IDocumentAssessmentResponse[] = [document, other]) {
     TestBed.configureTestingModule({
       providers: [
-        provideRouter([]),
+        provideRouter(userRoutes),
         provideHttpClient(),
         provideHttpClientTesting(),
         {
@@ -417,7 +576,7 @@ describe('Document workspace results', () => {
     };
     TestBed.configureTestingModule({
       providers: [
-        provideRouter([]),
+        provideRouter(userRoutes),
         provideHttpClient(),
         {
           provide: AuthStore,
@@ -588,7 +747,7 @@ describe('Private document downloads', () => {
         DocumentsStore,
         provideHttpClient(),
         provideHttpClientTesting(),
-        provideRouter([]),
+        provideRouter(userRoutes),
         { provide: AuthStore, useValue: { setUser: vi.fn() } }
       ]
     });
@@ -618,7 +777,7 @@ describe('Workspace allowance HTTP state', () => {
         DocumentsStore,
         provideHttpClient(),
         provideHttpClientTesting(),
-        provideRouter([]),
+        provideRouter(userRoutes),
         { provide: AuthStore, useValue: { setUser: vi.fn() } }
       ]
     });
@@ -703,7 +862,7 @@ describe('Document phases', () => {
         DocumentsStore,
         provideHttpClient(),
         provideHttpClientTesting(),
-        provideRouter([]),
+        provideRouter(userRoutes),
         { provide: AuthStore, useValue: { setUser: vi.fn() } }
       ]
     });
@@ -745,7 +904,7 @@ describe('Phase changes while watching', () => {
         DocumentsStore,
         provideHttpClient(),
         provideHttpClientTesting(),
-        provideRouter([]),
+        provideRouter(userRoutes),
         { provide: AuthStore, useValue: { setUser: vi.fn() } }
       ]
     });
@@ -826,7 +985,7 @@ describe('Upload progress', () => {
         DocumentsStore,
         provideHttpClient(),
         provideHttpClientTesting(),
-        provideRouter([]),
+        provideRouter(userRoutes),
         { provide: AuthStore, useValue: { setUser: vi.fn() } }
       ]
     });
@@ -866,7 +1025,7 @@ describe('Rewrite strength and Unslopify', () => {
         DocumentsStore,
         provideHttpClient(),
         provideHttpClientTesting(),
-        provideRouter([]),
+        provideRouter(userRoutes),
         { provide: AuthStore, useValue: { setUser: vi.fn() } }
       ]
     });
@@ -955,7 +1114,7 @@ describe('Assessment without document previews', () => {
         DocumentsStore,
         provideHttpClient(),
         provideHttpClientTesting(),
-        provideRouter([]),
+        provideRouter(userRoutes),
         { provide: AuthStore, useValue: { setUser: vi.fn() } }
       ]
     });
@@ -1033,7 +1192,7 @@ describe('Workspace flow', () => {
   async function mount(items: IDocumentAssessmentResponse[]) {
     TestBed.configureTestingModule({
       providers: [
-        provideRouter([]),
+        provideRouter(userRoutes),
         provideHttpClient(),
         provideHttpClientTesting(),
         {

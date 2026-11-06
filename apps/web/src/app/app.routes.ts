@@ -13,14 +13,17 @@ export const routes: Route[] = [
     loadChildren: () => import('./domains/admin/routes')
   },
   {
+    path: 'user/documents/:id',
+    redirectTo: '/documents/:id'
+  },
+  {
     path: 'user',
-    canActivate: [authGuard],
-    loadChildren: () => import('./domains/user/routes')
+    children: [{ path: '**', redirectTo: '/documents' }]
   },
   {
     path: '',
-    pathMatch: 'full',
-    redirectTo: '/auth/sign-in'
+    canActivate: [authGuard],
+    loadChildren: () => import('./domains/user/routes')
   },
   { path: '**', redirectTo: '/auth/sign-in' }
 ];

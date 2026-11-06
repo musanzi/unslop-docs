@@ -194,7 +194,7 @@ describe('Google-only HTTP surface', () => {
       headers: { cookie }
     });
     expect(response.status).toBe(302);
-    expect(response.headers.get('location')).toBe('http://localhost:4200/user/documents');
+    expect(response.headers.get('location')).toBe('http://localhost:4200/documents');
     const signedInCookie = response.headers.get('set-cookie').split(';')[0];
     expect(signedInCookie).not.toBe(cookie);
     return signedInCookie;

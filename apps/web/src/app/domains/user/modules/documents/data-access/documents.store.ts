@@ -2,7 +2,7 @@ import { DOCUMENT } from '@angular/common';
 import { HttpClient, HttpErrorResponse, HttpEventType } from '@angular/common/http';
 import { computed, DestroyRef, inject, Injectable, linkedSignal, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import type {
   IAllowanceResponse,
   IDocumentAssessmentResponse,
@@ -40,6 +40,8 @@ export class DocumentsStore {
   private readonly destroyRef = inject(DestroyRef);
   private readonly auth = inject(AuthStore);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
+  private selectedId: string | null = null;
   private request = 0;
   private allowanceRequest = 0;
   private detailRequest = 0;
@@ -131,6 +133,11 @@ export class DocumentsStore {
   readonly pageCount = computed(() => Math.max(1, Math.ceil(this.total() / 20)));
 
   start(): void {
+    this.route.paramMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
+      const id = params.get('id');
+      if (id === this.selectedId) return;
+      this.setSelection(this.items().find((document) => document.id === id) ?? null, id);
+    });
     this.load();
     const timer = setInterval(() => {
       if (this.browserDocument.hidden || this.loading() || this.uploading()) return;
@@ -189,6 +196,16 @@ export class DocumentsStore {
   }
 
   select(document: IDocumentResponse | null): void {
+    const id = document?.id ?? null;
+    this.setSelection(document, id);
+    void this.router.navigate(id ? ['/documents', id] : ['/documents'], {
+      queryParamsHandling: 'preserve',
+      preserveFragment: true
+    });
+  }
+
+  private setSelection(document: IDocumentResponse | null, id: string | null): void {
+    this.selectedId = id;
     this.selected.set(document);
     this.unslopifyError.set(null);
     this.celebrating.set(null);
@@ -198,20 +215,21 @@ export class DocumentsStore {
     this.downloadError.set('');
     this.announcement.set('');
     this.detailRequest++;
+    this.detailPending = false;
     this.detail.set(null);
     this.detailError.set('');
     this.detailLoading.set(false);
-    if (document) this.loadSelected();
+    if (id) this.loadSelected();
   }
 
   loadSelected(background = false): void {
-    const document = this.selected();
-    if (!document || (background && this.detailPending)) return;
+    const id = this.selectedId;
+    if (!id || (background && this.detailPending)) return;
     this.detailPending = true;
     const request = ++this.detailRequest;
     if (!background) this.detailLoading.set(true);
     this.http
-      .get<IDocumentAssessmentResponse>(`/documents/${document.id}`, { transferCache: false })
+      .get<IDocumentAssessmentResponse>(`/documents/${id}`, { transferCache: false })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (detail) => {
@@ -374,7 +392,7 @@ export class DocumentsStore {
     this.deleting.set(null);
     this.items.update((items) => items.filter((item) => item.id !== document.id));
     this.total.update((total) => Math.max(0, total - 1));
-    if (this.selected()?.id === document.id) this.select(null);
+    if (this.selectedId === document.id) this.select(null);
     this.announcement.set(`${document.filename} deleted.`);
     this.listPending = false;
     this.load(this.page(), true);
