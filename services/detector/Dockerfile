@@ -17,5 +17,6 @@ RUN pip install --no-cache-dir -r requirements.txt \
     && mkdir /models && chown detector:detector /models
 COPY core.py engine.py server.py ./
 USER detector
+RUN python -c "import engine; import torch; assert torch.isfinite(torch.ones(1)).all()"
 EXPOSE 8090
 CMD ["python", "server.py"]
