@@ -602,7 +602,7 @@
                 {{ store.uploadError() }}
               </p>
             }
-            <div class="mt-4 min-h-10">
+            <div [class.mt-4]="store.uploading() || !!store.announcement()">
               @if (store.uploading()) {
                 @let progress = store.uploadProgress();
                 <ng-container
