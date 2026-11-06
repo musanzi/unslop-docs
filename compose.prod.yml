@@ -74,6 +74,9 @@ services:
   detector:
     build:
       context: ./services/detector
+      network: host
+      entitlements:
+        - network.host
     restart: unless-stopped
     environment:
       DETECTOR_THREADS: ${DETECTOR_THREADS:-2}
