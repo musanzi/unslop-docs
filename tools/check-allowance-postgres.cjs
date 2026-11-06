@@ -59,7 +59,7 @@ async function main() {
         files.delete(key);
       }
     };
-    const upload = new UploadDocumentHandler(database.getRepository(Document), storage);
+    const upload = new UploadDocumentHandler(database.getRepository(Document), storage, { validate: async () => 1 });
     const unslopifyHandler = new UnslopifyDocumentHandler(database, allowance);
     const retry = new RetryDocumentHandler(database, allowance);
     const deletion = new DeleteDocumentHandler(database, storage);

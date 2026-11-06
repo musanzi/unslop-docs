@@ -2,6 +2,8 @@
 
 This document records the accepted workflow from the November 5, 2026 design interview. The interview is complete. Issue #15 implemented the document-support changes; see the [DOCX support reference](document-support.md). Issue #16 implemented the API lifecycle: automatic initial and final assessments with a scored rubric, the Unslopify request with rewrite strength, reservation at Unslopify, phase-aware retries, and progress data; see the [worker reference](assessment-worker.md). Issues #11 and #12 implemented deletion, and issue #13 implemented the workspace flow.
 
+The November 6 follow-up interview settled DeepSeek writing assessment, removal of the local detector and its stored results, and a five-page upload limit. [ADR 0006](adr/0006-assess-writing-patterns-with-deepseek.md) and [ADR 0007](adr/0007-limit-uploads-to-five-rendered-pages.md) record those decisions. Both decisions are implemented in the repository.
+
 ## Requested behavior
 
 The user uploads a document and sees upload progress. Assessment starts automatically. The user then sees the AI Rate, chooses rewrite strength with a slider, and clicks **Unslopify**. Editing and a second automatic assessment show progress until the revised DOCX is ready to download. No further user action is required before download.
@@ -16,7 +18,7 @@ The displayed rate is an estimated **AI-style score**. It measures writing patte
 
 On November 6, the owner removed the document preview from the workspace. The frontend neither displays nor requests a preview. Users download the revised DOCX and adjust it outside the app. The AI Rate appears inside a circle colored by severity: green for 0–33, amber for 34–66, and red for 67–100. Completed documents show before and after circles. Retry appears only in the selected document panel, not the sidebar.
 
-The existing limits remain: 10 MB, 10,000 words, and English/French. Formatting-based rejection is removed. These decisions describe the intended revision, not the current implementation.
+The accepted limits are 10 MB, five pages rendered on the server for new uploads, and English/French. Count cover pages, references, and blank pages. The five-page limit replaces the earlier 10,000-word product limit. Existing documents remain available, and revised downloads can exceed five pages. Formatting differences alone do not prevent download. These decisions describe the intended revision, not the current implementation.
 
 The slider controls rewrite strength, from light edits to thorough rewriting. It does not promise a specific score reduction. The resulting assessment reports the observed AI-style score after editing.
 

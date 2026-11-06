@@ -154,11 +154,11 @@ describe('DOCX reader', () => {
     await expect(readDocx(await readerFixture(`<w:p>${content}</w:p>`))).rejects.toThrow(reason);
   });
 
-  it('counts words inside content controls toward the limit', async () => {
+  it('counts words inside content controls without applying upload page limits', async () => {
     const bytes = await readerFixture(
       control(textParagraph('word '.repeat(5001)), 'Body') + textParagraph('word '.repeat(5000))
     );
-    await expect(readDocx(bytes)).rejects.toThrow('10,001 words. The limit is 10,000');
+    expect((await readDocx(bytes)).wordCount).toBe(10001);
   });
 
   it('keeps controls and revisions inside headers and notes byte for byte', async () => {
@@ -380,11 +380,11 @@ describe('DOCX reader', () => {
     expect(result.readXmlPart(result.mainPart)).not.toMatch(/conflict|Change/);
   });
 
-  it('counts words across runs and accepts exactly 10,000 but rejects 10,001 with the count', async () => {
+  it('counts words across runs and accepts existing documents above the former word limit', async () => {
     const bytes = await docxFixture({ 'word/document.xml': documentXml(paragraph('word '.repeat(10000))) });
     expect((await readDocx(bytes)).wordCount).toBe(10000);
     const oversized = await docxFixture({ 'word/document.xml': documentXml(paragraph('word '.repeat(10001))) });
-    await expect(readDocx(oversized)).rejects.toThrow('10,001 words. The limit is 10,000');
+    expect((await readDocx(oversized)).wordCount).toBe(10001);
     const split = await docxFixture({
       'word/document.xml': documentXml('<w:p><w:r><w:t>hel</w:t></w:r><w:r><w:t>lo world</w:t></w:r></w:p>')
     });

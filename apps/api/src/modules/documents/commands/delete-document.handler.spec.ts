@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import { DocumentStorage } from '../document-storage';
 import { MonthlyAllowance } from '../monthly-allowance';
-import { detectionFixture } from '@api/shared/testing/detection-fixtures';
+import { styleAssessmentFixture } from '@api/shared/testing/style-assessment-fixtures';
 import { DeleteDocument, DeleteDocumentHandler } from './delete-document.handler';
 import { AssessmentWorker } from '../../processing/assessment-worker';
 import { DocumentJobs } from '../../processing/document-jobs';
@@ -19,7 +19,7 @@ import { readDocx } from '../validate-docx';
 import { UnslopifyDocument, UnslopifyDocumentHandler } from './unslopify-document.handler';
 import { RetryDocument, RetryDocumentHandler } from './retry-document.handler';
 
-const assessment = detectionFixture(40);
+const assessment = styleAssessmentFixture(40);
 const preview = { blocks: [] };
 const notices = { keptPassages: [], uneditedElements: [] };
 
@@ -334,7 +334,7 @@ describe('Delete an active document', () => {
     const provider = faithfulRevisionProvider();
     provider.assess = vi.fn(async () => {
       await remove(id);
-      return detectionFixture(20);
+      return styleAssessmentFixture(20);
     });
     expect(await worker(provider).runOnce()).toBe(true);
     expect(provider.assess).toHaveBeenCalledTimes(1);
@@ -396,7 +396,7 @@ describe('Delete an active document', () => {
       provider.assess = vi.fn(async () => {
         await remove(id);
         if (outcome === 'unavailable') throw Object.assign(new Error('Bad request'), { status: 400 });
-        return detectionFixture(10);
+        return styleAssessmentFixture(10);
       });
       expect(await worker(provider).runOnce()).toBe(true);
       expect(provider.assess).toHaveBeenCalledTimes(1);

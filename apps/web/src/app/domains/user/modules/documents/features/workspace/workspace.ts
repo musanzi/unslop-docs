@@ -12,7 +12,7 @@ import {
 import { MatIcon } from '@angular/material/icon';
 import { MatSidenav, MatSidenavContainer, MatSidenavContent } from '@angular/material/sidenav';
 import { RouterLink } from '@angular/router';
-import type { IAiDetectionResponse, IDocumentResponse } from '@unslop-docs/api-contracts';
+import type { IStyleAssessmentResponse, IDocumentResponse } from '@unslop-docs/api-contracts';
 import { Media } from '@web/core/media';
 import { AuthStore } from '@web/domains/auth/shared/data-access';
 import { User } from '@web/shared/ui/user/user';
@@ -119,18 +119,18 @@ export class Workspace {
   protected readonly retryLabel = computed(() =>
     this.store.selected()?.phase === 'rewrite' ? 'Retry editing' : 'Retry assessment'
   );
-  protected readonly detection = computed(() => this.store.detail()?.assessment?.detection ?? null);
-  protected readonly finalDetection = computed(() => this.store.detail()?.finalAssessment?.detection ?? null);
-  protected readonly detectorChanged = computed(() => {
-    const before = this.detection();
-    const after = this.finalDetection();
+  protected readonly style = computed(() => this.store.detail()?.assessment?.style ?? null);
+  protected readonly finalStyle = computed(() => this.store.detail()?.finalAssessment?.style ?? null);
+  protected readonly assessmentChanged = computed(() => {
+    const before = this.style();
+    const after = this.finalStyle();
     return !!before && !!after && before.modelVersion !== after.modelVersion;
   });
   protected readonly finalScoreNote = computed(() => {
     const detail = this.store.detail();
     if (detail?.finalScoreUnavailable)
       return 'The revised document is ready, but its final score is unavailable: the final assessment did not finish.';
-    if (detail?.status === 'completed' && detail.strength === null && this.finalDetection() === null)
+    if (detail?.status === 'completed' && detail.strength === null && this.finalStyle() === null)
       return 'Scores were not recorded for this document.';
     return null;
   });
@@ -178,8 +178,8 @@ export class Workspace {
     if (file) this.store.upload(file);
   }
 
-  protected modelScore(detection: IAiDetectionResponse): number | null {
-    return detection.aiScore === null ? null : Math.round(detection.aiScore * 100);
+  protected modelScore(style: IStyleAssessmentResponse): number | null {
+    return style.score === null ? null : Math.round(style.score);
   }
 
   protected setStrength(event: Event): void {

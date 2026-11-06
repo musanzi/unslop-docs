@@ -1,3 +1,4 @@
+import { DocumentPageValidator } from './document-page-validator';
 import { createDocumentTestSchema } from '@api/shared/testing/document-database';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -18,7 +19,7 @@ import { RetryDocumentHandler } from './commands/retry-document.handler';
 import { UnslopifyDocument, UnslopifyDocumentHandler } from './commands/unslopify-document.handler';
 import { DataSource } from 'typeorm';
 import { FindDocumentHandler } from './queries/find-document.handler';
-import { detectionFixture } from '@api/shared/testing/detection-fixtures';
+import { styleAssessmentFixture } from '@api/shared/testing/style-assessment-fixtures';
 
 async function allowanceHarness(database: PGlite, allowance: MonthlyAllowance) {
   const files = new Map<string, Buffer>();
@@ -58,6 +59,7 @@ async function allowanceHarness(database: PGlite, allowance: MonthlyAllowance) {
   const module = await Test.createTestingModule({
     providers: [
       UploadDocumentHandler,
+      { provide: DocumentPageValidator, useValue: { validate: async () => 1 } },
       RetryDocumentHandler,
       UnslopifyDocumentHandler,
       FindDocumentHandler,
@@ -127,7 +129,7 @@ describe('Monthly allowance at Unslopify and worker boundaries', () => {
     expect(await detail(document.id)).toMatchObject({
       status: 'assessed',
       phase: 'assessment',
-      assessment: detectionFixture(20),
+      assessment: { rubric: styleAssessmentFixture(20).rubric, style: styleAssessmentFixture(20).style },
       finalAssessment: null
     });
     expect(await read()).toMatchObject({ used: 0, reserved: 0, remaining: 3 });
@@ -153,7 +155,7 @@ describe('Monthly allowance at Unslopify and worker boundaries', () => {
     expect(await detail(documents[3].id)).toMatchObject({
       status: 'assessed',
       strength: null,
-      assessment: { detection: { aiScore: 0.2 } }
+      assessment: { style: { score: 20 } }
     });
     for (let index = 0; index < 3; index++) expect((await harness.jobs.claim(timeouts))?.phase).toBe('rewrite');
     expect(await harness.jobs.claim(timeouts)).toBeNull();
@@ -235,8 +237,8 @@ describe('Monthly allowance at Unslopify and worker boundaries', () => {
     expect(await workerFor().runOnce()).toBe(true);
     expect(await detail(document.id)).toMatchObject({
       status: 'completed',
-      assessment: { detection: { aiScore: 0.2 } },
-      finalAssessment: { detection: { aiScore: 0.2 } },
+      assessment: { style: { score: 20 } },
+      finalAssessment: { style: { score: 20 } },
       finalScoreUnavailable: false
     });
     expect(await read()).toMatchObject({ month: '2027-02', used: 0, reserved: 0 });
@@ -264,7 +266,7 @@ describe('Monthly allowance at Unslopify and worker boundaries', () => {
     expect(await workerFor().runOnce()).toBe(true);
     expect(await detail(document.id)).toMatchObject({
       status: 'assessed',
-      assessment: { detection: { aiScore: 0.2 } }
+      assessment: { style: { score: 20 } }
     });
     expect(await read()).toMatchObject({ used: 0, reserved: 0, remaining: 3 });
   });
@@ -286,7 +288,7 @@ describe('Monthly allowance at Unslopify and worker boundaries', () => {
       status: 'failed',
       phase: 'rewrite',
       strength: 70,
-      assessment: { detection: { aiScore: 0.2 } },
+      assessment: { style: { score: 20 } },
       failure: expect.stringContaining('original is still available')
     });
     expect(await read()).toMatchObject({ used: 0, reserved: 0, remaining: 3 });
@@ -317,7 +319,7 @@ describe('Monthly allowance at Unslopify and worker boundaries', () => {
     expect(await detail(document.id)).toMatchObject({
       status: 'failed',
       strength: 70,
-      assessment: { detection: { aiScore: 0.2 } }
+      assessment: { style: { score: 20 } }
     });
     expect(await read()).toMatchObject({ used: 0, reserved: 3, remaining: 0 });
   });
@@ -492,7 +494,7 @@ describe('Monthly allowance at Unslopify and worker boundaries', () => {
     await workerFor(provider).runOnce();
     expect(await detail(document.id)).toMatchObject({
       status: 'completed',
-      assessment: { detection: { aiScore: 0.2 } },
+      assessment: { style: { score: 20 } },
       finalAssessment: null,
       finalScoreUnavailable: true
     });

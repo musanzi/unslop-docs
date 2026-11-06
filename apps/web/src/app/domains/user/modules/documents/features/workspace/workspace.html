@@ -1,5 +1,5 @@
-<ng-template #detectorScore let-detection let-label="label" let-compact="compact" let-emptyLabel="emptyLabel">
-  @let value = detection ? modelScore(detection) : null;
+<ng-template #styleScore let-style let-label="label" let-compact="compact" let-emptyLabel="emptyLabel">
+  @let value = style ? modelScore(style) : null;
   <div
     class="relative grid shrink-0 place-items-center"
     [class.size-32]="!compact"
@@ -13,7 +13,7 @@
       label +
       ': ' +
       (value === null
-        ? detection
+        ? style
           ? 'Unavailable'
           : (emptyLabel ?? 'Not scored')
         : value + ' out of 100, ' + (value <= 33 ? 'Low' : value <= 66 ? 'Moderate' : 'High'))
@@ -41,12 +41,10 @@
       {{ value ?? '–' }}
     </span>
   </div>
-  @if (detection?.reason) {
+  @if (style?.reason) {
     <p class="mt-2 text-center text-[0.75rem] text-muted">
-      @if (detection.reason === 'too_short') {
-        At least 50 words needed.
-      } @else if (detection.reason === 'too_long') {
-        Beyond the detector's length limit.
+      @if (style.reason === 'no_prose') {
+        No assessable prose found.
       }
     </p>
   }
@@ -326,10 +324,10 @@
                       <span class="text-[0.75rem] leading-4 text-muted">Before</span>
                       <ng-container
                         *ngTemplateOutlet="
-                          detectorScore;
+                          styleScore;
                           context: {
-                            $implicit: detection(),
-                            label: 'Before AI detection',
+                            $implicit: style(),
+                            label: 'Before AI-style score',
                             compact: true
                           }
                         " />
@@ -338,10 +336,10 @@
                       <span class="text-[0.75rem] leading-4 text-muted">After</span>
                       <ng-container
                         *ngTemplateOutlet="
-                          detectorScore;
+                          styleScore;
                           context: {
-                            $implicit: finalDetection(),
-                            label: 'After AI detection',
+                            $implicit: finalStyle(),
+                            label: 'After AI-style score',
                             compact: true,
                             emptyLabel: store.detail()?.finalScoreUnavailable ? 'Unavailable' : 'Not scored'
                           }
@@ -356,10 +354,10 @@
                 } @else {
                   <ng-container
                     *ngTemplateOutlet="
-                      detectorScore;
+                      styleScore;
                       context: {
-                        $implicit: detection(),
-                        label: 'AI detection',
+                        $implicit: style(),
+                        label: 'AI-style score',
                         emptyLabel: store.detail()?.assessment ? 'Not scored' : 'Pending'
                       }
                     " />
@@ -369,11 +367,11 @@
                   class="mt-3 text-center text-[0.9375rem] leading-5 font-medium"
                   [class.w-32]="document.status !== 'completed'"
                   [class.w-52]="document.status === 'completed'">
-                  AI detection
+                  AI-style score
                 </h2>
-                @if (detectorChanged()) {
+                @if (assessmentChanged()) {
                   <p class="mt-2 text-[0.8125rem] leading-5 text-muted">
-                    The detector version changed between checks; scores are not directly comparable.
+                    The assessment model changed between checks; scores are not directly comparable.
                   </p>
                 }
                 @if (
@@ -385,7 +383,7 @@
                     @if (store.detailLoading()) {
                       Loading the assessment…
                     } @else if (document.status === 'assessed') {
-                      No local detector result is recorded for this document.
+                      No AI-style score is recorded for this document.
                     } @else if (phase()?.key === 'failed') {
                       No score until the assessment succeeds.
                     }
@@ -593,8 +591,10 @@
                 [disabled]="store.uploading()"
                 hidden
                 aria-label="Choose a DOCX file" />
-              <p id="upload-limit" class="text-[0.8125rem] text-muted">
-                Up to 10 MB · 10,000 words · English or French
+              <p id="upload-limit" class="text-[0.8125rem] text-muted">Up to 10 MB · 5 pages · English or French</p>
+              <p class="mt-2 text-xs text-muted">
+                Pages include covers, references, and blank pages, counted on our server. The count may differ from
+                Word. Text is sent to DeepSeek automatically for assessment, and again when you request editing.
               </p>
             </div>
             @if (store.uploadError()) {

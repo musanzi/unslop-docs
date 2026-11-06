@@ -1,4 +1,4 @@
-import { detectionFixture } from './detection-fixtures';
+import { styleAssessmentFixture } from './style-assessment-fixtures';
 import type { DocumentProvider } from '../../modules/documents/document-workflow';
 import { faithfulRevisionProvider } from './revision-fixtures';
 import { readerFixture, textParagraph } from './docx-reader-fixture';
@@ -16,7 +16,7 @@ export function fakeAssessmentProvider(outcome: 'signal' | 'clear' | 'failure', 
     assess: async () => {
       if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
       if (outcome === 'failure') throw new Error('Synthetic provider failure');
-      return detectionFixture(outcome === 'clear' ? 0 : 40);
+      return styleAssessmentFixture(outcome === 'clear' ? 0 : 40);
     }
   };
 }

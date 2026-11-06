@@ -608,31 +608,31 @@ export interface components {
             /** @description Read-only structure of the original in document order */
             blocks: components["schemas"]["PreviewBlockResponse"][];
         };
-        AiDetectionResponse: {
+        StyleAssessmentResponse: {
             /** @enum {string} */
-            provider: "local";
+            provider: "deepseek";
             /** @enum {string} */
             status: "complete" | "unavailable";
-            /** @description Token-weighted mean of segment model scores. Not an authorship percentage or calibrated document probability */
-            aiScore: number | null;
+            /** @description AI-style score calculated from word-weighted sentence severity. Does not establish authorship */
+            score: number | null;
             /** @enum {string|null} */
-            reason: "too_short" | "too_long" | null;
+            reason: "no_prose" | null;
             modelVersion: string;
             /** @enum {string} */
-            method: "token-weighted-mean-v1";
+            method: "sentence-severity-word-weighted-v1";
             /** Format: date-time */
             checkedAt: string;
-            /** @description SHA-256 of the full extracted text submitted for detection */
+            /** @description SHA-256 of the text submitted for assessment */
             textHash: string;
-            /** @description Number of UTF-16 code units in the submitted text */
             characterCount: number;
-            tokenCount: number;
-            segmentCount: number;
+            wordCount: number;
+            sentenceCount: number;
+            weightedSeverity: number;
         };
-        DetectionAssessmentResponse: {
+        WritingAssessmentResponse: {
             /** @enum {string} */
-            rubric: "local-detector-v1";
-            detection: components["schemas"]["AiDetectionResponse"];
+            rubric: "unslop-style-v1";
+            style: components["schemas"]["StyleAssessmentResponse"];
         };
         KeptPassageResponse: {
             /** @description Preservation check that kept the original passage */
@@ -677,9 +677,9 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
             /** @description Initial assessment of the original, published when the document is assessed and retained afterwards */
-            assessment: components["schemas"]["DetectionAssessmentResponse"] | null;
+            assessment: components["schemas"]["WritingAssessmentResponse"] | null;
             /** @description Automatic assessment of the revised document; null until completed or when its score is unavailable */
-            finalAssessment: components["schemas"]["DetectionAssessmentResponse"] | null;
+            finalAssessment: components["schemas"]["WritingAssessmentResponse"] | null;
             /** @description True when the revised download is ready but its final assessment could not be completed */
             finalScoreUnavailable: boolean;
             /** @description Notices recorded with the revision */

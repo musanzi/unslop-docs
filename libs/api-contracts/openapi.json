@@ -1879,13 +1879,13 @@
           "blocks"
         ]
       },
-      "AiDetectionResponse": {
+      "StyleAssessmentResponse": {
         "type": "object",
         "properties": {
           "provider": {
             "type": "string",
             "enum": [
-              "local"
+              "deepseek"
             ]
           },
           "status": {
@@ -1895,14 +1895,14 @@
               "unavailable"
             ]
           },
-          "aiScore": {
+          "score": {
             "type": [
               "number",
               "null"
             ],
             "minimum": 0,
-            "maximum": 1,
-            "description": "Token-weighted mean of segment model scores. Not an authorship percentage or calibrated document probability"
+            "maximum": 100,
+            "description": "AI-style score calculated from word-weighted sentence severity. Does not establish authorship"
           },
           "reason": {
             "type": [
@@ -1910,8 +1910,7 @@
               "null"
             ],
             "enum": [
-              "too_short",
-              "too_long",
+              "no_prose",
               null
             ]
           },
@@ -1921,7 +1920,7 @@
           "method": {
             "type": "string",
             "enum": [
-              "token-weighted-mean-v1"
+              "sentence-severity-word-weighted-v1"
             ]
           },
           "checkedAt": {
@@ -1930,49 +1929,52 @@
           },
           "textHash": {
             "type": "string",
-            "description": "SHA-256 of the full extracted text submitted for detection"
+            "description": "SHA-256 of the text submitted for assessment"
           },
           "characterCount": {
-            "type": "number",
-            "description": "Number of UTF-16 code units in the submitted text"
-          },
-          "tokenCount": {
             "type": "number"
           },
-          "segmentCount": {
+          "wordCount": {
+            "type": "number"
+          },
+          "sentenceCount": {
+            "type": "number"
+          },
+          "weightedSeverity": {
             "type": "number"
           }
         },
         "required": [
           "provider",
           "status",
-          "aiScore",
+          "score",
           "reason",
           "modelVersion",
           "method",
           "checkedAt",
           "textHash",
           "characterCount",
-          "tokenCount",
-          "segmentCount"
+          "wordCount",
+          "sentenceCount",
+          "weightedSeverity"
         ]
       },
-      "DetectionAssessmentResponse": {
+      "WritingAssessmentResponse": {
         "type": "object",
         "properties": {
           "rubric": {
             "type": "string",
             "enum": [
-              "local-detector-v1"
+              "unslop-style-v1"
             ]
           },
-          "detection": {
-            "$ref": "#/components/schemas/AiDetectionResponse"
+          "style": {
+            "$ref": "#/components/schemas/StyleAssessmentResponse"
           }
         },
         "required": [
           "rubric",
-          "detection"
+          "style"
         ]
       },
       "KeptPassageResponse": {
@@ -2116,7 +2118,7 @@
             "description": "Initial assessment of the original, published when the document is assessed and retained afterwards",
             "anyOf": [
               {
-                "$ref": "#/components/schemas/DetectionAssessmentResponse"
+                "$ref": "#/components/schemas/WritingAssessmentResponse"
               },
               {
                 "type": "null"
@@ -2127,7 +2129,7 @@
             "description": "Automatic assessment of the revised document; null until completed or when its score is unavailable",
             "anyOf": [
               {
-                "$ref": "#/components/schemas/DetectionAssessmentResponse"
+                "$ref": "#/components/schemas/WritingAssessmentResponse"
               },
               {
                 "type": "null"

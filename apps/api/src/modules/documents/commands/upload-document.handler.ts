@@ -1,6 +1,7 @@
 import { documentFilename } from '../document-filename';
 import { MAX_DOCUMENT_BYTES } from '../document-upload.interceptor';
 import { validateDocx } from '../validate-docx';
+import { DocumentPageValidator } from '../document-page-validator';
 import { BadRequestException, Logger, PayloadTooLargeException, ServiceUnavailableException } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -22,7 +23,8 @@ export class UploadDocumentHandler implements ICommandHandler<UploadDocument, Do
   private readonly logger = new Logger(UploadDocumentHandler.name);
   constructor(
     @InjectRepository(Document) private readonly documents: Repository<Document>,
-    private readonly storage: DocumentStorage
+    private readonly storage: DocumentStorage,
+    private readonly pages: DocumentPageValidator
   ) {}
 
   async execute({ ownerId, file }: UploadDocument): Promise<DocumentResponse> {
@@ -30,6 +32,7 @@ export class UploadDocumentHandler implements ICommandHandler<UploadDocument, Do
     if (file.buffer.length > MAX_DOCUMENT_BYTES)
       throw new PayloadTooLargeException('Choose a DOCX file of 10 MB or less.');
     await validateDocx(file.buffer);
+    await this.pages.validate(file.buffer);
     const document = this.documents.create({
       id: randomUUID(),
       ownerId,

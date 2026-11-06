@@ -201,10 +201,6 @@ export async function readDocx(bytes: Buffer): Promise<DocxDocument> {
       let wordCount = 0;
       for (const segment of new Intl.Segmenter('en', { granularity: 'word' }).segment(model.text))
         if (segment.isWordLike) wordCount++;
-      if (wordCount > 10000)
-        throw new BadRequestException(
-          `This document has ${wordCount.toLocaleString('en-US')} words. The limit is 10,000. Shorten it and upload again.`
-        );
       const sources = new Map([...xml].map(([name, value]) => [name, value.source]));
       return freezeModel({
         mainPart: target,

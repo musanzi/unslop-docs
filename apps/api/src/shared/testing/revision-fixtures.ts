@@ -1,4 +1,4 @@
-import { detectionFixture } from './detection-fixtures';
+import { styleAssessmentFixture } from './style-assessment-fixtures';
 import { DocumentProvider } from '../../modules/documents/document-workflow';
 import { docxFixtureCases } from './docx-fixture-catalog';
 import { readerFixture, textParagraph } from './docx-reader-fixture';
@@ -32,7 +32,7 @@ export async function revisionFixture(language: 'english' | 'french'): Promise<B
 
 export function faithfulRevisionProvider(highSignal = false): DocumentProvider {
   return {
-    assess: async () => detectionFixture(highSignal ? 40 : 20),
+    assess: async () => styleAssessmentFixture(highSignal ? 40 : 20),
     edit: async (_system, chunk) => ({
       edits: chunk.spans.map(({ id, text }) => ({
         id,

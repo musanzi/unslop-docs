@@ -8,7 +8,7 @@ Ordinary Word content controls are normalized into their visible text or images.
 
 Tracked changes are read as their final version. Insertions, moved-to text, inserted rows, and co-authoring conflict insertions are kept. Deletions, moved-from text, deleted rows, and conflict deletions are dropped, so moved text appears once. Property-change history (`w:rPrChange`, `w:pPrChange`, `w:tblPrChange`, and similar), move range markers, and cell revision markers are removed. The revised DOCX contains no revision markup. The uploaded original is stored unchanged and remains downloadable, so users can recover the original controls and revision history.
 
-Images, equations, simple and complex reference fields, footnote, endnote, and comment references, and text boxes are protected elements. The reader keeps their XML unchanged and reports them as unedited elements in the revision notices. Visible text inside fields and text boxes counts toward the word limit but is never sent for editing.
+Images, equations, simple and complex reference fields, footnote, endnote, and comment references, and text boxes are protected elements. The reader keeps their XML unchanged and reports them as unedited elements in the revision notices. Visible text inside fields and text boxes contributes to the document word count but is never sent for editing.
 
 ## Normalization details
 
@@ -28,7 +28,7 @@ The API still rejects these files before creating a record or writing private st
 
 - Embedded OLE objects, imported content (`altChunk`), subdocuments, and relationships to such parts. Embedded objects are never executed.
 - Password-protected files, legacy Word containers, damaged ZIP or XML content, DTDs, damaged fields or hyperlinks, cyclic styles, unmodeled body structures such as `w:customXml`, and archives that exceed the safety limits (10 MB upload, 2,048 entries, 50 MB expanded, 20 MB per entry, 10 MB per XML part, 200:1 ratio above 1 MB, 100,000 elements, 128 nesting levels).
-- More than 10,000 words in the normalized main body. Text inside controls and tables counts, so wrappers cannot bypass the limit.
+- New uploads that render as more than five pages. This check runs after DOCX validation at the upload boundary, not in the shared reader. Covers, references, and blank pages count. Existing documents and longer revised downloads remain readable. See the [renderer reference](../services/renderer/README.md).
 - Clearly unsupported-language prose. English, French, and documents mixing both are supported.
 
 External entities are never resolved and linked resources are never fetched. Preserving an element does not bypass these checks: every XML part, including headers and notes, passes the same parser limits.

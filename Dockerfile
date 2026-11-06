@@ -40,6 +40,7 @@ COPY --from=production-dependencies /app/node_modules /app/node_modules
 COPY --from=production-dependencies /app/package.json /app/package.json
 COPY --from=api-build /app/dist/apps/api /app/dist/apps/api
 COPY vendor /app/vendor
+COPY tools/smoke-document-workflow.cjs /app/tools/smoke-document-workflow.cjs
 RUN mkdir -p "$UPLOADS_DIR" "$DOCUMENTS_DIR" && chown -R node:node "$UPLOADS_DIR" "$DOCUMENTS_DIR" && chmod 700 "$DOCUMENTS_DIR"
 USER node
 CMD ["node", "dist/apps/api/src/main.js"]

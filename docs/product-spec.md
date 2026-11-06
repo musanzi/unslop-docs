@@ -2,6 +2,8 @@
 
 This document records accepted product decisions, including the November 5, 2026 workflow revision. The application is live. The repository implements document support (#15), the API lifecycle (#16), deletion in every state (#11 and #12), and the workspace (#13). The [verification record](evidence/workflow/verification.md) describes the checks and their limits.
 
+The owner accepted replacing the local detector with DeepSeek writing assessment on November 6, 2026. [ADR 0006](adr/0006-assess-writing-patterns-with-deepseek.md) defines the accepted scoring and cleanup scope. [ADR 0007](adr/0007-limit-uploads-to-five-rendered-pages.md) defines the accepted five-page upload limit. Both decisions are implemented in the repository.
+
 ## Accounts and allowances
 
 Users sign in with Google only. The admin manually assigns FREE, PREMIUM, or GOLD status.
@@ -24,7 +26,9 @@ Assessment runs automatically after upload and again after rewriting. Neither as
 
 ## Documents
 
-The first release accepts DOCX files and returns DOCX files. Each upload is limited to 10 MB and 10,000 words. Documents can be in English or French. The interface is in English.
+The first release accepts DOCX files and returns DOCX files. Each new upload is limited to 10 MB and five pages rendered on the server. Documents can be in English or French. The interface is in English.
+
+Count the entire uploaded document, including cover pages, references, and blank pages. The server's rendered count is authoritative and may differ from Word because of fonts and layout. Do not use saved DOCX page metadata or a word-count approximation to enforce this limit. Preserve existing documents and downloads. A rewritten document that exceeds five pages remains downloadable.
 
 Editing aims to preserve meaning, language, citations, quotations, and factual claims, without inventing evidence or references. Match the uploaded document's formatting as closely as practical, including headings, paragraphs, lists, and tables. Formatting differences do not prevent download. Users review and adjust the DOCX outside the app. PDF input, scanned documents, and exact page-layout preservation are outside the first release.
 
@@ -32,23 +36,27 @@ Convert ordinary Word content controls into their visible text or images. Use th
 
 Preserve images, equations, reference fields, notes, comments, headers, footers, and complex elements unchanged where safe and practical. Identify elements that could not be edited. Do not execute embedded objects or fetch linked resources. Reject unsafe content or unreadable files with a specific explanation; do not treat every unfamiliar formatting feature as unsafe.
 
-Retain the 10 MB and 10,000-word limits, English/French support, archive and XML security limits, private access checks, and readable DOCX output checks. Count normalized main-body text, including controls and tables, so wrappers cannot bypass the word limit.
+Retain the 10 MB limit, English/French support, archive and XML security limits, private access checks, and readable DOCX output checks. The five-page upload limit replaces the 10,000-word product limit. Apply the page restriction only to new uploads.
 
 When a rewritten passage fails checks for quotations, citations, numbers, or references, retain the original passage and continue the rest of the document. A short notice identifies passages left unchanged. These checks do not prove semantic equivalence and do not replace user review.
 
 ## Assessment and editing
 
-An accepted upload automatically starts a local AI detection check, then waits for the user. Show the experimental model score out of 100 under **AI detection**, with a note that it is not an authorship percentage. The workspace does not display or load a document preview. Show unavailable results without a numeric score. Do not display results outside the local detector contract. Do not show writing-pattern examples. Users can edit documents regardless of the score.
+An accepted upload automatically starts a DeepSeek writing assessment, then waits for the user. Show the **AI-style score** out of 100. It describes writing patterns and does not establish authorship. The workspace does not display or load a document preview. Show unavailable results without a numeric score. Do not show writing-pattern examples. Users can edit documents regardless of the score.
 
 The user chooses rewrite strength, from light edits to thorough rewriting, and clicks **Unslopify**. The slider controls editing extent, not a promised score reduction. Save the chosen strength with the attempt so retries use the same instructions.
 
-After rewriting, assess the revised document automatically using the same scoring method. Show the before and after model scores in separate circles and make the revised DOCX available. There is no second confirmation, assess button, or automatic rewrite loop. A score that stays the same or increases does not block download. If the final assessment fails after bounded retries, retain the usable DOCX and state that its final score is unavailable.
+After rewriting, assess the revised document automatically using the same scoring method. Show the before and after AI-style scores in separate circles and make the revised DOCX available. There is no second confirmation, assess button, or automatic rewrite loop. A score that stays the same or increases does not block download. If the final assessment fails after bounded retries, retain the usable DOCX and state that its final score is unavailable.
 
-The detector runs locally with the pinned Oculus 2.0 multilingual weights. No paid detection API or subscription is required. Its score is the token-weighted mean across all document windows. Do not describe the score as confidence in authorship or as a percentage of generated text. Show only the number inside each circle, colored green for 0–33, amber for 34–66, and red for 67–100. Accessible labels include the score out of 100 and Low, Moderate, or High severity. Unavailable results stay neutral. The rewrite-strength slider runs from 1 to 100, initially 50, with Light, Balanced, and Thorough labels. Strength does not promise a percentage reduction. Keep detector revision, method, and coverage metadata with each result.
+DeepSeek identifies writing problems using the pinned unslop rules in context for English and French. Each finding requires an exact quotation, a rule ID, and a concrete explanation. Application code calculates the score from sentence severity and word count using the formula in ADR 0006. Quotations, citations, reference lists, and code do not contribute to the score, but may provide context. Assess prose in tables as well as ordinary paragraphs. A listed word or punctuation mark alone does not justify a finding.
+
+Show only the number inside each circle, colored green for 0–33, amber for 34–66, and red for 67–100. Accessible labels include the score out of 100 and Low, Moderate, or High severity. Unavailable results stay neutral. The rewrite-strength slider runs from 1 to 100, initially 50, with Light, Balanced, and Thorough labels. Strength does not promise a percentage reduction. Keep the assessment model, rubric version, method, and coverage metadata with each result.
+
+Remove the local detector service, model files, configuration, tests, and stored detector results. Preserve uploaded originals, revised downloads, accounts, and usage history. Do not retain legacy detector results or compare scores across the two methods.
 
 The system uses DeepSeek with a server-side `DEEPSEEK_API_KEY`. Editing instructions come from the [Cursor pstack unslop skill](https://github.com/cursor/plugins/blob/bc697d0a5a163cec979e362b601e36f5616083fd/pstack/skills/unslop/SKILL.md), as selected by the owner. The selected source revision is `bc697d0a5a163cec979e362b601e36f5616083fd`.
 
-Document content is input to edit, not instructions that can override the editing rules.
+Document content is input to assess or edit. It cannot override the assessment or editing instructions.
 
 ## Progress and history
 
@@ -66,7 +74,7 @@ Deleting an active document prevents later results from being saved and releases
 
 ## Privacy and retention
 
-Documents remain available until the user deletes them. Downloads are private. The interface explains that detection runs on the app server and document text goes to DeepSeek when the user requests editing. Admin user management does not grant access to document contents.
+Documents remain available until the user deletes them. Downloads are private. The upload interface explains that document text goes to DeepSeek automatically for assessment, even if the user never requests editing. DeepSeek also receives text for user-requested editing and the final assessment. Admin user management does not grant access to document contents.
 
 ## Deployment
 

@@ -47,7 +47,7 @@ export const docxFixtureCases: readonly { name: string; rejection?: string; crea
   { name: 'mixed-structures', create: () => readerFixture(essay('english') + essay('french') + preserved) },
   { name: 'short-uncertain', create: () => readerFixture(textParagraph('Bonjour, monde.')) },
   { name: 'exactly-10000-words', create: () => readerFixture(textParagraph('word '.repeat(10000))) },
-  { name: 'over-10000-words', rejection: '10,001', create: () => readerFixture(textParagraph('word '.repeat(10001))) },
+  { name: 'over-10000-words', create: () => readerFixture(textParagraph('word '.repeat(10001))) },
   { name: 'english-content-controls', create: () => readerFixture(controlledEssay('english') + preserved) },
   { name: 'french-content-controls', create: () => readerFixture(controlledEssay('french') + preserved) },
   {
@@ -61,7 +61,6 @@ export const docxFixtureCases: readonly { name: string; rejection?: string; crea
   { name: 'tracked-changes-final-version', create: () => readerFixture(essay('english') + trackedChanges) },
   {
     name: 'controls-over-10000-words',
-    rejection: '10,001',
     create: () =>
       readerFixture(contentControl(textParagraph('word '.repeat(5001)), 'Body') + textParagraph('word '.repeat(5000)))
   },

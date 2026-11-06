@@ -1,13 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { DocumentResponse } from './document-response';
-import { validateAssessment, DetectionAssessment } from '../assessment-workflow';
+import { validateAssessment, WritingAssessment } from '../assessment-workflow';
 import { RevisionNotices } from '../revision-notices';
 import { Document } from '../entities/document.entity';
-import { detectionMethod } from '../ai-detection';
+import { assessmentMethod } from '../style-assessment';
 
-export class AiDetectionResponse {
-  @ApiProperty({ enum: ['local'] })
-  provider: 'local';
+export class StyleAssessmentResponse {
+  @ApiProperty({ enum: ['deepseek'] })
+  provider: 'deepseek';
 
   @ApiProperty({ enum: ['complete', 'unavailable'] })
   status: 'complete' | 'unavailable';
@@ -15,44 +15,46 @@ export class AiDetectionResponse {
   @ApiProperty({
     type: Number,
     minimum: 0,
-    maximum: 1,
+    maximum: 100,
     nullable: true,
-    description:
-      'Token-weighted mean of segment model scores. Not an authorship percentage or calibrated document probability'
+    description: 'AI-style score calculated from word-weighted sentence severity. Does not establish authorship'
   })
-  aiScore: number | null;
+  score: number | null;
 
-  @ApiProperty({ type: String, enum: ['too_short', 'too_long'], nullable: true })
-  reason: 'too_short' | 'too_long' | null;
+  @ApiProperty({ type: String, enum: ['no_prose'], nullable: true })
+  reason: 'no_prose' | null;
 
   @ApiProperty()
   modelVersion: string;
 
-  @ApiProperty({ enum: [detectionMethod] })
-  method: typeof detectionMethod;
+  @ApiProperty({ enum: [assessmentMethod] })
+  method: typeof assessmentMethod;
 
   @ApiProperty({ format: 'date-time' })
   checkedAt: string;
 
-  @ApiProperty({ description: 'SHA-256 of the full extracted text submitted for detection' })
+  @ApiProperty({ description: 'SHA-256 of the text submitted for assessment' })
   textHash: string;
 
-  @ApiProperty({ description: 'Number of UTF-16 code units in the submitted text' })
+  @ApiProperty()
   characterCount: number;
 
   @ApiProperty()
-  tokenCount: number;
+  wordCount: number;
 
   @ApiProperty()
-  segmentCount: number;
+  sentenceCount: number;
+
+  @ApiProperty()
+  weightedSeverity: number;
 }
 
-export class DetectionAssessmentResponse {
-  @ApiProperty({ enum: ['local-detector-v1'] })
-  rubric: 'local-detector-v1';
+export class WritingAssessmentResponse {
+  @ApiProperty({ enum: ['unslop-style-v1'] })
+  rubric: 'unslop-style-v1';
 
-  @ApiProperty({ type: AiDetectionResponse })
-  detection: AiDetectionResponse;
+  @ApiProperty({ type: StyleAssessmentResponse })
+  style: StyleAssessmentResponse;
 }
 
 export class KeptPassageResponse {
@@ -84,18 +86,18 @@ export class RevisionNoticesResponse {
 
 export class DocumentAssessmentResponse extends DocumentResponse {
   @ApiProperty({
-    type: DetectionAssessmentResponse,
+    type: WritingAssessmentResponse,
     nullable: true,
     description: 'Initial assessment of the original, published when the document is assessed and retained afterwards'
   })
-  assessment: DetectionAssessmentResponse | null;
+  assessment: WritingAssessmentResponse | null;
 
   @ApiProperty({
-    type: DetectionAssessmentResponse,
+    type: WritingAssessmentResponse,
     nullable: true,
     description: 'Automatic assessment of the revised document; null until completed or when its score is unavailable'
   })
-  finalAssessment: DetectionAssessmentResponse | null;
+  finalAssessment: WritingAssessmentResponse | null;
 
   @ApiProperty({
     description: 'True when the revised download is ready but its final assessment could not be completed'
@@ -106,10 +108,11 @@ export class DocumentAssessmentResponse extends DocumentResponse {
   revisionNotices: RevisionNoticesResponse | null;
 }
 
-export function assessmentResponse(assessment: DetectionAssessment | null): DetectionAssessmentResponse | null {
+export function assessmentResponse(assessment: WritingAssessment | null): WritingAssessmentResponse | null {
   if (!assessment) return null;
   try {
-    return validateAssessment(assessment);
+    const { rubric, style } = validateAssessment(assessment);
+    return { rubric, style };
   } catch {
     return null;
   }

@@ -30,12 +30,15 @@ services:
       FRONTEND_URI: ${FRONTEND_URI}
       UPLOADS_DIR: /app/apps/api/uploads
       DOCUMENTS_DIR: /app/private-documents
+    networks: [default, rendering]
     ports:
       - ${API_PORT:-8000}:${API_PORT}
     volumes:
       - uploads_data:/app/apps/api/uploads
       - documents_data:/app/private-documents
     depends_on:
+      renderer:
+        condition: service_healthy
       db:
         condition: service_healthy
       redis:
@@ -55,8 +58,6 @@ services:
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
-      LOCAL_DETECTOR_URL: http://detector:8090
-      LOCAL_DETECTOR_TIMEOUT_MS: ${LOCAL_DETECTOR_TIMEOUT_MS:-300000}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-}
       ASSESSMENT_TIMEOUT_MS: ${ASSESSMENT_TIMEOUT_MS:-300000}
@@ -67,34 +68,34 @@ services:
     volumes:
       - documents_data:/app/private-documents
     depends_on:
-      detector:
-        condition: service_healthy
       db:
         condition: service_healthy
-  detector:
+  renderer:
     build:
-      context: ./services/detector
+      context: ./services/renderer
       network: host
-      entitlements:
-        - network.host
+      entitlements: [network.host]
     restart: unless-stopped
-    environment:
-      DETECTOR_THREADS: ${DETECTOR_THREADS:-2}
-    volumes:
-      - detector_models:/models
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    mem_limit: 768m
+    cpus: 1
+    pids_limit: 128
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    networks: [rendering]
     healthcheck:
       test:
         [
           'CMD',
           'python',
           '-c',
-          'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8090/health", timeout=3)'
+          'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8091/health", timeout=3)'
         ]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 15m
-    # Deliberately private: no host port or external inference service.
   web:
     build:
       context: .
@@ -133,8 +134,11 @@ services:
       timeout: 5s
       retries: 5
 volumes:
-  detector_models:
   postgres_data:
   redis_data:
   uploads_data:
   documents_data:
+
+networks:
+  rendering:
+    internal: true

@@ -13,11 +13,13 @@ import { DeleteDocumentHandler } from './commands/delete-document.handler';
 import { FindDocumentPreviewHandler } from './queries/find-document-preview.handler';
 import { FindDocumentsHandler } from './queries/find-documents.handler';
 import { DownloadDocumentHandler } from './queries/download-document.handler';
+import { DocumentPageValidator } from './document-page-validator';
 
 @Module({
   imports: [TypeOrmModule.forFeature([Document])],
   controllers: [DocumentsController],
   providers: [
+    DocumentPageValidator,
     { provide: DocumentStorage, useFactory: () => new DocumentStorage() },
     UploadDocumentHandler,
     RetryDocumentHandler,

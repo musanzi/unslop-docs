@@ -6,8 +6,8 @@ cd "$HOME/unslop-docs"
 report_failure() {
   result=$?
   docker compose -f compose.prod.yml -p unslopy ps --all >&2 || true
-  docker compose -f compose.prod.yml -p unslopy logs --tail 80 detector >&2 || true
-  for container in $(docker compose -f compose.prod.yml -p unslopy ps --all -q detector); do
+  docker compose -f compose.prod.yml -p unslopy logs --tail 80 renderer >&2 || true
+  for container in $(docker compose -f compose.prod.yml -p unslopy ps --all -q renderer); do
     docker inspect --format '{{json .State}}' "$container" >&2 || true
   done
   free -h >&2 || true
@@ -18,9 +18,9 @@ trap report_failure ERR
 
 git fetch origin main
 git checkout main
-git reset --hard origin/main
+git merge --ff-only origin/main
 docker compose -f compose.prod.yml -p unslopy build
-docker compose -f compose.prod.yml -p unslopy up -d --wait --wait-timeout 1200 db redis detector
+docker compose -f compose.prod.yml -p unslopy up -d --wait --wait-timeout 1200 db redis renderer
 docker compose -f compose.prod.yml -p unslopy stop worker api
 
 umask 077
@@ -32,7 +32,16 @@ echo "Database and document backup saved to $backup_dir"
 
 docker compose -f compose.prod.yml -p unslopy run --rm --no-deps -T api node_modules/.bin/typeorm migration:run -d dist/apps/api/src/modules/database/orm.config.js < /dev/null
 docker compose -f compose.prod.yml -p unslopy up -d --remove-orphans --wait --wait-timeout 120
-docker image prune -f
+docker compose -f compose.prod.yml -p unslopy run --rm --no-deps -T api node tools/smoke-document-workflow.cjs pages < /dev/null
+docker compose -f compose.prod.yml -p unslopy run --rm --no-deps -T worker node tools/smoke-document-workflow.cjs provider < /dev/null
+if docker volume inspect unslopy_detector_models > /dev/null 2>&1; then
+  docker volume rm unslopy_detector_models
+fi
+for image in unslopy-detector:latest unslop-docs-detector:latest; do
+  if docker image inspect "$image" > /dev/null 2>&1; then
+    docker image rm "$image"
+  fi
+done
 
 api_port="$(grep -E '^API_PORT=' .env | cut -d= -f2)"
 for _ in $(seq 1 30); do

@@ -188,3 +188,85 @@ describe('DeepSeek editing boundary', () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('DeepSeek writing assessment', () => {
+  function providerFor(reply: (data: { sentences: { id: string; text: string }[] }) => unknown) {
+    const fetcher = vi.fn(async (_url, init) => {
+      const request = JSON.parse(init.body.toString());
+      const data = JSON.parse(request.messages[1].content);
+      expect(request.messages[0].content).toContain('PINNED RULES');
+      expect(request.response_format).toEqual({ type: 'json_object' });
+      return Response.json({
+        id: 'test',
+        object: 'chat.completion',
+        created: 0,
+        model: 'explicit',
+        choices: [
+          { index: 0, message: { role: 'assistant', content: JSON.stringify(reply(data)) }, finish_reason: 'stop' }
+        ]
+      });
+    });
+    return {
+      provider: new DeepSeekProvider(workerSettings({ DEEPSEEK_API_KEY: 'fake', DEEPSEEK_MODEL: 'explicit' }), fetcher),
+      fetcher
+    };
+  }
+  it('computes severity and coverage itself, taking the maximum finding severity per sentence', async () => {
+    const { provider } = providerFor(({ sentences }) => ({
+      score: 100,
+      sentences: sentences.map((s, i) => ({
+        id: s.id,
+        excluded: null,
+        findings: i
+          ? []
+          : [
+              { ruleId: 23, quote: 'In order to', explanation: 'The phrase adds unnecessary words.', severity: 1 },
+              { ruleId: 27, quote: s.text, explanation: 'The sentence lacks a concrete purpose.', severity: 2 }
+            ]
+      }))
+    }));
+    const result = await provider.assess('In order to test. Results remained stable throughout.');
+    expect(result.style).toMatchObject({ score: 33, wordCount: 8, sentenceCount: 2, weightedSeverity: 8 });
+    expect(result.findings).toHaveLength(2);
+  });
+  it('covers every sentence across batches, including clean sentences in the denominator', async () => {
+    const { provider, fetcher } = providerFor(({ sentences }) => ({
+      sentences: sentences.map((s) => ({ id: s.id, excluded: null, findings: [] }))
+    }));
+    const result = await provider.assess('Measured results stayed stable. '.repeat(51));
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(result.style).toMatchObject({ score: 0, wordCount: 204, sentenceCount: 51 });
+  });
+  it.each(['missing', 'duplicate', 'quote', 'rule', 'severity', 'exclusion'])(
+    'rejects unsupported findings or incomplete coverage: %s',
+    async (failure) => {
+      const { provider } = providerFor(({ sentences }) => {
+        const rows = sentences.map((s) => ({
+          id: s.id,
+          excluded: failure === 'exclusion' ? 'unimportant' : null,
+          findings: [
+            {
+              ruleId: failure === 'rule' ? 999 : 23,
+              quote: failure === 'quote' ? 'invented text' : s.text,
+              explanation: 'Specific explanation.',
+              severity: failure === 'severity' ? 7 : 1
+            }
+          ]
+        }));
+        if (failure === 'missing') rows.pop();
+        if (failure === 'duplicate') rows[1].id = rows[0].id;
+        return { sentences: rows };
+      });
+      await expect(provider.assess('First sentence. Second sentence.')).rejects.toThrow();
+    }
+  );
+  it('reports no prose as unavailable without asking for an invented score', async () => {
+    const { provider, fetcher } = providerFor(() => ({}));
+    expect((await provider.assess('“Only a quotation.”')).style).toMatchObject({
+      score: null,
+      reason: 'no_prose',
+      wordCount: 0
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+});

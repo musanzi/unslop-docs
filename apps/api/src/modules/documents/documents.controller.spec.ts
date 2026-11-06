@@ -36,7 +36,8 @@ import { DownloadDocumentHandler } from './queries/download-document.handler';
 import { DeleteDocumentHandler } from './commands/delete-document.handler';
 import { UnslopifyDocumentHandler } from './commands/unslopify-document.handler';
 import { FindDocumentPreviewHandler } from './queries/find-document-preview.handler';
-import { detectionFixture } from '@api/shared/testing/detection-fixtures';
+import { styleAssessmentFixture } from '@api/shared/testing/style-assessment-fixtures';
+import { DocumentPageValidator } from './document-page-validator';
 import { DocumentStorage } from './document-storage';
 import { readerFixture, textParagraph } from '@api/shared/testing/docx-reader-fixture';
 import { languageSamples } from '@api/shared/testing/docx-language-fixtures';
@@ -152,6 +153,7 @@ describe('Private documents HTTP', () => {
         AuthGuard,
         RolesGuard,
         UploadDocumentHandler,
+        { provide: DocumentPageValidator, useValue: { validate: async () => 1 } },
         RetryDocumentHandler,
         UnslopifyDocumentHandler,
         FindDocumentPreviewHandler,
@@ -221,7 +223,7 @@ describe('Private documents HTTP', () => {
   async function download(id: string, identity = 'owner') {
     return fetch(`${base}/documents/${id}/original`, { headers: identity ? { 'test-identity': identity } : {} });
   }
-  const assessment = detectionFixture(40);
+  const assessment = styleAssessmentFixture(40);
   const preview = {
     blocks: [{ kind: 'paragraph', level: null, text: 'Private student text.', inlines: [], rows: null, reason: null }]
   };
@@ -399,7 +401,12 @@ describe('Private documents HTTP', () => {
     expect(
       await (await fetch(`${base}/documents/${documents[35].id}`, { headers: { 'test-identity': 'owner' } })).json()
     ).toMatchObject({
-      data: { status: 'assessed', phase: 'assessment', strength: null, assessment }
+      data: {
+        status: 'assessed',
+        phase: 'assessment',
+        strength: null,
+        assessment: { rubric: assessment.rubric, style: assessment.style }
+      }
     });
     expect((await previewOf(documents[35].id)).status).toBe(200);
   });
@@ -532,7 +539,7 @@ describe('Private documents HTTP', () => {
     expect(await response.json()).toMatchObject({
       data: {
         status: 'assessed',
-        assessment,
+        assessment: { rubric: assessment.rubric, style: assessment.style },
         finalAssessment: null,
         finalScoreUnavailable: false,
         revisionNotices: null
@@ -561,7 +568,7 @@ describe('Private documents HTTP', () => {
       data: {
         status: 'completed',
         progress: null,
-        assessment,
+        assessment: { rubric: assessment.rubric, style: assessment.style },
         finalAssessment: null,
         finalScoreUnavailable: true,
         revisionNotices: { keptPassages: [], uneditedElements: [{ reason: 'image', count: 1 }] }
@@ -602,7 +609,6 @@ describe('Private documents HTTP', () => {
 
   it('rejects unprocessable uploads without records or files and accepts an immediate retry', async () => {
     const rejected = [
-      [await readerFixture(textParagraph('word '.repeat(10001))), '10,001'],
       [await readerFixture('<w:p><w:r><w:object/></w:r></w:p>'), 'embedded objects'],
       [await readerFixture(textParagraph(languageSamples.spanish)), 'English or French'],
       [Buffer.from('d0cf11e0a1b11ae1', 'hex'), 'password'],
@@ -854,7 +860,7 @@ describe('Private documents HTTP', () => {
       revisedKey: key,
       revisedSize: revised.length,
       assessment,
-      finalAssessment: detectionFixture(10)
+      finalAssessment: styleAssessmentFixture(10)
     });
     const response = await get(data.id);
     expect(response.status).toBe(200);
@@ -881,7 +887,7 @@ describe('Private documents HTTP', () => {
         status: 'failed',
         phase: 'rewrite',
         strength: 50,
-        assessment,
+        assessment: { rubric: assessment.rubric, style: assessment.style },
         finalAssessment: null,
         finalScoreUnavailable: false,
         failure: expect.stringContaining('citation')

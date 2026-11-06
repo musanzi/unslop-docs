@@ -47,21 +47,22 @@ function overrideTemplates(workspaceProviders?: Provider[]) {
   );
 }
 
-function localAssessment(percent: number): NonNullable<IDocumentAssessmentResponse['assessment']> {
+function writingAssessment(percent: number): NonNullable<IDocumentAssessmentResponse['assessment']> {
   return {
-    rubric: 'local-detector-v1',
-    detection: {
-      provider: 'local',
+    rubric: 'unslop-style-v1',
+    style: {
+      provider: 'deepseek',
       status: 'complete',
-      aiScore: percent / 100,
+      score: percent,
       reason: null,
       modelVersion: 'test-model',
-      method: 'token-weighted-mean-v1',
+      method: 'sentence-severity-word-weighted-v1',
       checkedAt: '2026-11-06T00:00:00Z',
       textHash: 'a'.repeat(64),
       characterCount: 1000,
-      tokenCount: 250,
-      segmentCount: 1
+      wordCount: 250,
+      sentenceCount: 1,
+      weightedSeverity: 0
     }
   };
 }
@@ -640,28 +641,23 @@ describe('Document workspace results', () => {
   });
 
   it.each([
-    ['FREE', 'Free', 'leaf', 2],
-    ['PREMIUM', 'Premium', 'badge-check', 1],
-    ['GOLD', 'Gold', 'crown', 0]
-  ] as const)(
-    'shows the current %s plan in the sidebar and offers only upgrades',
-    async (status, name, icon, upgrades) => {
-      const page = await render(null, {
-        status,
-        limit: 35,
-        used: 0,
-        reserved: 0,
-        remaining: 35,
-        month: '2026-11',
-        resetsAt: '2026-12-01T00:00:00Z'
-      });
-      expect(page.textContent).toContain(`Your current plan is ${name}.`);
-      const badge = page.querySelector(`user [aria-label="${name} subscription"]`);
-      expect(badge?.textContent).toContain(name);
-      expect(badge?.querySelector('mat-icon')?.getAttribute('data-mat-icon-name')).toBe(icon);
-      expect(page.querySelectorAll('section[aria-label="Subscription plans"] a')).toHaveLength(upgrades);
-    }
-  );
+    ['FREE', 'Free', 2],
+    ['PREMIUM', 'Premium', 1],
+    ['GOLD', 'Gold', 0]
+  ] as const)('shows the current %s plan in the sidebar and offers only upgrades', async (status, name, upgrades) => {
+    const page = await render(null, {
+      status,
+      limit: 35,
+      used: 0,
+      reserved: 0,
+      remaining: 35,
+      month: '2026-11',
+      resetsAt: '2026-12-01T00:00:00Z'
+    });
+    expect(page.textContent).toContain(`Your current plan is ${name}.`);
+    expect(page.querySelector(`user [aria-label="Edit profile, ${name} subscription"]`)).not.toBeNull();
+    expect(page.querySelectorAll('section[aria-label="Subscription plans"] a')).toHaveLength(upgrades);
+  });
 
   it('uses a welcome without a name while user data is unavailable', async () => {
     const page = await render(null, undefined, null);
@@ -695,7 +691,7 @@ describe('Document workspace results', () => {
         status: 'assessed',
         phase: 'assessment',
         strength: null,
-        assessment: localAssessment(62),
+        assessment: writingAssessment(62),
         finalScoreUnavailable: false
       },
       exhausted
@@ -1055,7 +1051,7 @@ describe('Rewrite strength and Unslopify', () => {
     status: 'assessed',
     phase: 'assessment',
     strength: null,
-    assessment: localAssessment(62)
+    assessment: writingAssessment(62)
   };
 
   it('starts at 50, keeps the chosen strength across polls, and labels Light, Balanced and Thorough', () => {
@@ -1121,7 +1117,7 @@ describe('Rewrite strength and Unslopify', () => {
     expect(store.selected()?.status).toBe('assessed');
     http.expectOne('/documents/allowance').flush({});
     http.expectOne(`/documents/${document.id}`).flush(assessed);
-    expect(store.detail()?.assessment?.detection.aiScore).toBe(0.62);
+    expect(store.detail()?.assessment?.style.score).toBe(62);
     http.verify();
   });
 });
@@ -1143,7 +1139,7 @@ describe('Assessment without document previews', () => {
     ...document,
     status: 'assessed',
     phase: 'assessment',
-    assessment: localAssessment(62)
+    assessment: writingAssessment(62)
   };
   it('keeps the score without requesting a preview after assessment or polling', () => {
     const { store, http } = setup();
@@ -1154,11 +1150,11 @@ describe('Assessment without document previews', () => {
     store.loadSelected(true);
     http.expectOne(`/documents/${document.id}`).flush(assessed);
     expectNoPreview(http);
-    expect(store.detail()?.assessment?.detection.aiScore).toBe(0.62);
+    expect(store.detail()?.assessment?.style.score).toBe(62);
     store.loadSelected(true);
     http.expectOne(`/documents/${document.id}`).flush(assessed);
     expectNoPreview(http);
-    expect(store.detail()?.assessment?.detection.aiScore).toBe(0.62);
+    expect(store.detail()?.assessment?.style.score).toBe(62);
     http.verify();
   });
 });
@@ -1183,7 +1179,7 @@ describe('Workspace flow', () => {
     status: 'assessed',
     phase: 'assessment',
     strength: null,
-    assessment: localAssessment(62),
+    assessment: writingAssessment(62),
     finalScoreUnavailable: false
   };
   const editing: IDocumentAssessmentResponse = {
@@ -1199,7 +1195,7 @@ describe('Workspace flow', () => {
     status: 'completed',
     phase: 'rewrite',
     strength: 80,
-    finalAssessment: localAssessment(31),
+    finalAssessment: writingAssessment(31),
     revisionNotices: {
       keptPassages: [{ check: 'citation', span: 'p-4', excerpt: 'Smith (2020) argues that rivers remember.' }],
       uneditedElements: [
@@ -1257,28 +1253,29 @@ describe('Workspace flow', () => {
     await context.fixture.whenStable();
   }
 
-  it('shows local model scores before and after editing without calling them authorship percentages', async () => {
-    const detection = {
-      provider: 'local' as const,
+  it('shows AI-style scores before and after editing without calling them authorship percentages', async () => {
+    const style = {
+      provider: 'deepseek' as const,
       status: 'complete' as const,
-      aiScore: 0.82,
+      score: 82,
       reason: null,
       modelVersion: 'model@revision',
-      method: 'token-weighted-mean-v1' as const,
+      method: 'sentence-severity-word-weighted-v1' as const,
       checkedAt: '2026-11-06T00:00:00Z',
       textHash: 'a'.repeat(64),
       characterCount: 1200,
-      tokenCount: 300,
-      segmentCount: 1
+      wordCount: 300,
+      sentenceCount: 1,
+      weightedSeverity: 0
     };
     const detail: IDocumentAssessmentResponse = {
       ...assessed,
-      assessment: { rubric: 'local-detector-v1', detection }
+      assessment: { rubric: 'unslop-style-v1', style }
     };
     const context = await mount([detail]);
     await open(context, detail);
-    expect(context.main.textContent).toContain('AI detection');
-    expect(element(context.main, '[aria-label="AI detection: 82 out of 100, High"]')).toBeTruthy();
+    expect(context.main.textContent).toContain('AI-style score');
+    expect(element(context.main, '[aria-label="AI-style score: 82 out of 100, High"]')).toBeTruthy();
     expect(context.main.textContent).not.toContain('82%');
     await poll(context, {
       ...detail,
@@ -1286,11 +1283,11 @@ describe('Workspace flow', () => {
       phase: 'rewrite',
       strength: 50,
       finalAssessment: {
-        rubric: 'local-detector-v1',
-        detection: { ...detection, aiScore: 0.91 }
+        rubric: 'unslop-style-v1',
+        style: { ...style, score: 91 }
       }
     });
-    expect(element(context.main, '[aria-label="After AI detection: 91 out of 100, High"]')).toBeTruthy();
+    expect(element(context.main, '[aria-label="After AI-style score: 91 out of 100, High"]')).toBeTruthy();
     const download = [...context.main.querySelectorAll('button')].find((button) =>
       button.textContent?.includes('Download revised DOCX')
     )!;
@@ -1298,30 +1295,31 @@ describe('Workspace flow', () => {
     context.http.verify();
   });
 
-  it('keeps editing available when text is too short for local detection and never displays zero', async () => {
+  it('keeps editing available when there is no assessable prose and never displays zero', async () => {
     const detail: IDocumentAssessmentResponse = {
       ...assessed,
       assessment: {
-        rubric: 'local-detector-v1',
-        detection: {
-          provider: 'local',
+        rubric: 'unslop-style-v1',
+        style: {
+          provider: 'deepseek',
           status: 'unavailable',
-          aiScore: null,
-          reason: 'too_short',
+          score: null,
+          reason: 'no_prose',
           modelVersion: 'model@revision',
-          method: 'token-weighted-mean-v1',
+          method: 'sentence-severity-word-weighted-v1',
           checkedAt: '2026-11-06T00:00:00Z',
           textHash: 'a'.repeat(64),
           characterCount: 10,
-          tokenCount: 0,
-          segmentCount: 0
+          wordCount: 0,
+          sentenceCount: 0,
+          weightedSeverity: 0
         }
       }
     };
     const context = await mount([detail]);
     await open(context, detail);
-    expect(context.main.textContent).toContain('At least 50 words needed');
-    expect(element(context.main, '[aria-label="AI detection: Unavailable"]')).toBeTruthy();
+    expect(context.main.textContent).toContain('No assessable prose found');
+    expect(element(context.main, '[aria-label="AI-style score: Unavailable"]')).toBeTruthy();
     const edit = [...context.main.querySelectorAll('button')].find(
       (button) => button.textContent?.trim() === 'Unslopify'
     )!;
@@ -1337,9 +1335,9 @@ describe('Workspace flow', () => {
     expect(history.textContent).toContain('Ready to unslopify');
     expect(main.querySelector('[role="progressbar"]')).toBeNull();
     expect(main.innerHTML).not.toContain('animate-pulse');
-    expect(element(main, '#score-heading').textContent?.trim()).toBe('AI detection');
+    expect(element(main, '#score-heading').textContent?.trim()).toBe('AI-style score');
     expect(
-      element(main, '[role="img"][aria-label="AI detection: 62 out of 100, Moderate"]').classList.contains(
+      element(main, '[role="img"][aria-label="AI-style score: 62 out of 100, Moderate"]').classList.contains(
         'text-warning'
       )
     ).toBe(true);
@@ -1474,7 +1472,7 @@ describe('Workspace flow', () => {
     expect(scores.textContent).toMatch(/Before\s*62/);
     expect(scores.textContent).toMatch(/After\s*31/);
     expect(
-      element(scores, '[aria-label="After AI detection: 31 out of 100, Low"]').classList.contains('text-success')
+      element(scores, '[aria-label="After AI-style score: 31 out of 100, Low"]').classList.contains('text-success')
     ).toBe(true);
     expect(scores.textContent).not.toMatch(/Down|Up|points|Unchanged/);
     const buttons = [...main.querySelectorAll('button')].map((button) => button.textContent?.trim());
@@ -1499,12 +1497,12 @@ describe('Workspace flow', () => {
 
   it('allows download when the score rose or the final score is unavailable, without a success claim', async () => {
     const context = await mount([completed]);
-    await open(context, { ...completed, finalAssessment: localAssessment(80) });
+    await open(context, { ...completed, finalAssessment: writingAssessment(80) });
     const { main, http } = context;
     expect(main.querySelector('.workspace-celebrate')).toBeNull();
     expect(main.textContent).toMatch(/After\s*80/);
     expect(
-      element(main, '[aria-label="After AI detection: 80 out of 100, High"]').classList.contains('text-danger')
+      element(main, '[aria-label="After AI-style score: 80 out of 100, High"]').classList.contains('text-danger')
     ).toBe(true);
     expect(main.textContent).not.toMatch(/Up \d+ points/);
     expect(

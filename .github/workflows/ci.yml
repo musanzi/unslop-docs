@@ -43,6 +43,12 @@ jobs:
       - name: Run ${{ matrix.task }}
         run: pnpm ${{ matrix.task }}
 
-      - name: Test local detector service
+      - name: Test document renderer
         if: matrix.task == 'test'
-        run: python3 -m unittest discover -s services/detector -v
+        run: python3 -m unittest discover -s services/renderer -v
+
+      - name: Verify actual DOCX pagination
+        if: matrix.task == 'test'
+        run: |
+          docker build -t unslop-docx-renderer:test services/renderer
+          docker run --rm --network none --read-only --memory 768m --cpus 1 --pids-limit 128 --cap-drop ALL --security-opt no-new-privileges --tmpfs /tmp:size=256m,mode=1777 -v "$PWD/services/renderer:/tests:ro" unslop-docx-renderer:test python /tests/smoke.py

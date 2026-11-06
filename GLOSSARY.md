@@ -17,8 +17,12 @@ Unslop-docs helps students edit documents and download the revised documents.
 **Writing assessment**: A report of writing patterns with examples from a document. It does not establish whether AI wrote the document.
 _Avoid_: AI detection rate, AI authorship percentage.
 
-**AI-style score**: An estimate of how strongly a document exhibits AI-like writing patterns. It does not establish whether AI wrote the document.
+**Writing-pattern finding**: A passage quoted from a document, linked to an unslop rule, with an explanation of the writing problem in context. A word or punctuation mark alone does not establish a problem.
+
+**AI-style score**: An estimate of how strongly a document exhibits AI-like writing patterns, based on the severity and coverage of validated writing-pattern findings. It does not establish whether AI wrote the document.
 _Avoid_: AI authorship percentage, probability of AI authorship.
+
+**Assessed prose**: The document's own prose, including prose in tables, that contributes to its AI-style score. Quotations, citations, reference lists, and code are excluded from scoring but may provide context.
 
 **Final assessment**: The automatic writing assessment of a revised document, shown alongside its initial assessment. It requires no separate user action or allowance.
 
