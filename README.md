@@ -2,13 +2,13 @@
 
 Unslopy edits English and French DOCX files for students. Users sign in with Google, upload a document, and review an AI detection rate from a private Oculus detector. They choose a rewrite strength and click **Unslopify** to edit with DeepSeek. The app checks the revised document and offers both versions for download.
 
-Editing reserves one monthly allowance slot and charges it when the revised download is ready. The rate is an uncalibrated model score. New uploads are limited to thirty server-rendered pages and 10 MB. See the [renderer reference](services/renderer/README.md) and the [detector reference](services/detector/README.md).
+Editing reserves one monthly allowance slot and charges it when the revised download is ready. The rate is an uncalibrated model score. New uploads can have at most thirty pages, as rendered on the server, and at most 10 MB. See the [renderer reference](services/renderer/README.md) and the [detector reference](services/detector/README.md).
 
 The product name is Unslopy. Code, database, and Compose identifiers use `unslop-docs`.
 
 ## Run locally
 
-Use Docker with Compose, a Google OAuth web client, and a DeepSeek API key. The private DOCX renderer has a 768 MB memory limit and uses temporary storage for page counting. The private detector image contains its model, is about 4.5 GB, and has a 4 GB memory limit. Run these commands from the repository root.
+You need Docker with Compose, a Google OAuth web client, and a DeepSeek API key. The private DOCX renderer has a 768 MB memory limit and uses temporary storage for page counting. The private detector image contains its model, is about 4.5 GB, and has a 4 GB memory limit. Run these commands from the repository root.
 
 1. Create the environment file. Keep `.env` out of version control.
 
@@ -26,7 +26,7 @@ Use Docker with Compose, a Google OAuth web client, and a DeepSeek API key. The 
 
 3. Register `http://localhost:8000/auth/google/redirect` as a redirect URI in your Google OAuth client. If the consent screen is in testing mode, add your Google account as a test user.
 
-4. Start the stack. The API waits for the page renderer to become healthy.
+4. Start the stack. The API waits for the renderer to become healthy, and the worker waits for the detector.
 
    ```sh
    docker compose -f compose.dev.yml up -d --build
@@ -52,7 +52,7 @@ Use the [API reference](http://localhost:8000/docs) to inspect endpoints and [Ma
 If startup fails, check the service logs:
 
 ```sh
-docker compose -f compose.dev.yml logs --tail 100 api worker renderer
+docker compose -f compose.dev.yml logs --tail 100 api worker renderer detector
 ```
 
 Check that `ADMIN_EMAIL` and both DeepSeek settings are set. Keep `UPLOADS_DIR` for public profile images separate from `DOCUMENTS_DIR` for private documents. The API rejects overlapping paths.
@@ -109,7 +109,7 @@ Push to `main` to run CI. After CI passes, the [Deploy workflow](.github/workflo
 
 Configure the `VPS_HOST`, `VPS_USER`, and `VPS_SSH_KEY` repository secrets. Keep the checkout at `~/unslop-docs` on the VPS, with a production `.env` and an external SMTP service.
 
-The script rebuilds [compose.prod.yml](compose.prod.yml), stops the API and worker, and backs up PostgreSQL and private documents together under `~/unslop-backups`. It applies migrations, starts the updated services, and checks `/health`.
+The script rebuilds the images in [compose.prod.yml](compose.prod.yml), stops the API and worker, and backs up PostgreSQL and private documents together under `~/unslop-backups`. It then applies migrations, starts the updated services, runs `tools/smoke-document-workflow.cjs`, and checks `/health`.
 
 To redeploy, select **Run workflow** in the Deploy workflow. Preserve the database and document backups together. Avoid `docker compose down -v`, which deletes named volumes.
 
