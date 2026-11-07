@@ -1,0 +1,37 @@
+/* -------------------------------------------------------------------------- */
+/* Tailwind CSS                                                               */
+/* -------------------------------------------------------------------------- */
+@import 'tailwindcss' important;
+@import './tailwind/theme.css';
+@import './tailwind/utilities.css';
+@import './tailwind/animations.css';
+
+/* -------------------------------------------------------------------------- */
+/* Angular CDK                                                                */
+/* -------------------------------------------------------------------------- */
+@import '@angular/cdk/overlay-prebuilt.css';
+
+/* -------------------------------------------------------------------------- */
+/* Angular Material                                                           */
+/* -------------------------------------------------------------------------- */
+/* Provides the structural component styles; project tokens override it below. */
+@import '@angular/material/prebuilt-themes/azure-blue.css';
+
+/* -------------------------------------------------------------------------- */
+/* Base                                                                       */
+/* -------------------------------------------------------------------------- */
+@import './base/base.css';
+@import './base/typography.css';
+@import './base/fonts.css';
+
+/* -------------------------------------------------------------------------- */
+/* Components                                                                 */
+/* -------------------------------------------------------------------------- */
+@import './components/a.css';
+@import './components/input.css';
+@import './components/kbd.css';
+@import './components/material.css';
+@import './components/workspace-material.css';
+@import './components/workspace-animations.css';
+
+@import './components/controls.css';

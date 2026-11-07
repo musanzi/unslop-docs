@@ -1,0 +1,124 @@
+@utility ui-button {
+  @apply inline-flex min-h-11 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-lg border border-divider bg-transparent px-4 py-2.5 font-sans text-[0.875rem] font-medium leading-5 text-ink no-underline transition-colors hover:bg-hover motion-reduce:transition-none;
+  &:focus-visible {
+    @apply outline-2 outline-offset-2 outline-ink;
+  }
+  &:disabled,
+  &[aria-disabled='true'] {
+    @apply pointer-events-none cursor-default opacity-50;
+  }
+  & mat-icon {
+    @apply size-4.5;
+  }
+}
+@utility ui-primary {
+  @apply border-ink text-ink hover:bg-hover active:bg-hover;
+}
+@utility ui-text-action {
+  @apply ui-button min-w-0 shrink justify-start border-0 px-0 text-left underline decoration-muted/60 underline-offset-4 hover:bg-transparent hover:decoration-ink;
+}
+@utility ui-secondary {
+  @apply border-divider text-ink hover:bg-hover;
+}
+@utility ui-ghost {
+  @apply text-muted hover:bg-hover hover:text-ink;
+}
+@utility ui-icon {
+  @apply size-11 p-0;
+}
+@utility ui-destructive {
+  @apply border-danger text-danger hover:bg-danger/10;
+}
+@utility ui-logout {
+  @apply text-muted hover:border-danger hover:bg-danger/10 hover:text-danger;
+}
+@utility ui-sidebar-item {
+  @apply ui-button min-w-0 justify-start gap-3 border-0 px-3 text-muted hover:text-ink;
+  &[aria-current='page'],
+  &[aria-current='true'] {
+    @apply bg-hover text-ink;
+  }
+}
+@utility ui-field {
+  @apply min-h-11 w-full rounded-lg border border-divider bg-canvas px-3 py-2.5 font-sans text-[1rem] leading-6 text-ink placeholder:text-muted;
+  &:focus-visible {
+    @apply border-ink outline-2 outline-offset-2 outline-ink;
+  }
+  &:disabled {
+    @apply cursor-default opacity-50;
+  }
+  &[aria-invalid='true'] {
+    @apply border-danger;
+  }
+}
+@utility ui-alert {
+  @apply rounded-xl border border-danger/30 bg-danger/5 p-4 text-[0.875rem] leading-6 text-danger;
+}
+@utility ui-badge {
+  @apply inline-flex rounded-md border border-divider bg-canvas px-2 py-1 text-[0.75rem] font-medium leading-4 text-muted;
+}
+@utility ui-table {
+  @apply w-full border-collapse text-left text-[0.875rem] leading-6;
+  & th {
+    @apply border-b border-divider px-3 py-3 font-medium text-muted sm:px-5;
+  }
+  & td {
+    @apply border-b border-divider/60 px-3 py-4 align-middle sm:px-5;
+  }
+  & tbody tr:last-child td {
+    @apply border-b-0;
+  }
+  & tbody tr:hover {
+    @apply bg-hover/40;
+  }
+}
+@utility ui-range {
+  @apply h-11 w-full cursor-pointer appearance-none bg-transparent;
+  --range-color: var(--color-ink);
+  &[data-effort='Light'] {
+    --range-color: var(--color-success);
+  }
+  &[data-effort='Balanced'] {
+    --range-color: var(--color-warning);
+  }
+  &[data-effort='Thorough'] {
+    --range-color: var(--color-danger);
+  }
+  &::-webkit-slider-runnable-track {
+    @apply h-1.5 rounded-full;
+    /* The thumb's center travels between half a thumb width and the opposite inset. */
+    --fill-end: calc(0.625rem + (100% - 1.25rem) * var(--rewrite-strength, 0.5));
+    background: linear-gradient(to right, var(--range-color) var(--fill-end), var(--color-hover) var(--fill-end));
+  }
+  &::-webkit-slider-thumb {
+    @apply -mt-[0.4375rem] size-5 appearance-none rounded-full border-2 border-canvas shadow-[0_1px_4px_rgb(0_0_0/0.6)] transition-transform motion-reduce:transition-none;
+    background: var(--range-color);
+  }
+  &::-moz-range-track {
+    @apply h-1.5 rounded-full bg-hover;
+  }
+  &::-moz-range-progress {
+    @apply h-1.5 rounded-full;
+    background: var(--range-color);
+  }
+  &::-moz-range-thumb {
+    @apply box-border size-5 rounded-full border-2 border-canvas;
+    background: var(--range-color);
+  }
+  &:hover::-webkit-slider-thumb,
+  &:focus-visible::-webkit-slider-thumb {
+    @apply scale-110;
+  }
+  &:focus-visible {
+    @apply outline-none;
+  }
+  &:focus-visible::-webkit-slider-thumb {
+    @apply outline-2 outline-offset-2 outline-ink;
+  }
+  &:focus-visible::-moz-range-thumb {
+    @apply outline-2 outline-offset-2 outline-ink;
+  }
+  &:disabled {
+    @apply cursor-default opacity-50;
+  }
+}

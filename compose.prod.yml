@@ -1,0 +1,180 @@
+name: unslop-docs
+services:
+  api:
+    build:
+      context: .
+      target: api-production
+      network: host
+      entitlements:
+        - network.host
+    restart: unless-stopped
+    environment:
+      API_PORT: ${API_PORT}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      REDIS_URL: ${REDIS_URL}
+      MAIL_HOST: ${MAIL_HOST}
+      MAIL_PORT: ${MAIL_PORT}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      SESSION_SECRET: ${SESSION_SECRET}
+      SESSION_MAX_AGE: ${SESSION_MAX_AGE:-86400000}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_SECRET: ${GOOGLE_SECRET}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI}
+      FRONTEND_URI: ${FRONTEND_URI}
+      UPLOADS_DIR: /app/apps/api/uploads
+      DOCUMENTS_DIR: /app/private-documents
+    networks: [default, rendering]
+    ports:
+      - ${API_PORT:-8000}:${API_PORT}
+    volumes:
+      - uploads_data:/app/apps/api/uploads
+      - documents_data:/app/private-documents
+    depends_on:
+      renderer:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+  worker:
+    build:
+      context: .
+      target: api-production
+      network: host
+      entitlements:
+        - network.host
+    command: ['node', 'dist/apps/api/src/worker.js']
+    restart: unless-stopped
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-}
+      ASSESSMENT_TIMEOUT_MS: ${ASSESSMENT_TIMEOUT_MS:-600000}
+      PROCESSING_TIMEOUT_MS: ${PROCESSING_TIMEOUT_MS:-900000}
+      DEEPSEEK_TIMEOUT_MS: ${DEEPSEEK_TIMEOUT_MS:-60000}
+      LOCAL_DETECTOR_URL: http://detector:8090
+      LOCAL_DETECTOR_TIMEOUT_MS: ${LOCAL_DETECTOR_TIMEOUT_MS:-600000}
+      UPLOADS_DIR: /app/apps/api/uploads
+      DOCUMENTS_DIR: /app/private-documents
+    volumes:
+      - documents_data:/app/private-documents
+    networks: [default, detection]
+    depends_on:
+      db:
+        condition: service_healthy
+      detector:
+        condition: service_healthy
+  detector:
+    build:
+      context: ./services/detector
+      network: host
+      entitlements: [network.host]
+    restart: unless-stopped
+    environment:
+      DETECTOR_THREADS: ${DETECTOR_THREADS:-4}
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    mem_limit: 4g
+    cpus: 4
+    pids_limit: 256
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    networks: [detection]
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'python',
+          '-c',
+          'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8090/health", timeout=3)'
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 5m
+  renderer:
+    build:
+      context: ./services/renderer
+      network: host
+      entitlements: [network.host]
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    mem_limit: 768m
+    cpus: 1
+    pids_limit: 128
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    networks: [rendering]
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'python',
+          '-c',
+          'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8091/health", timeout=3)'
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  web:
+    build:
+      context: .
+      target: web-production
+      network: host
+      entitlements:
+        - network.host
+    restart: unless-stopped
+    environment:
+      WEB_PORT: ${WEB_PORT:-4200}
+    ports:
+      - ${WEB_PORT:-4200}:${WEB_PORT}
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USERNAME:?DB_USERNAME is required}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      POSTGRES_DB: ${DB_NAME:?DB_NAME is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+volumes:
+  postgres_data:
+  redis_data:
+  uploads_data:
+  documents_data:
+
+networks:
+  rendering:
+    internal: true
+  detection:
+    internal: true

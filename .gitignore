@@ -1,0 +1,24 @@
+node_modules/
+.pnpm-store/
+dist/
+out-tsc/
+.angular/
+.nx/
+coverage/
+*.tsbuildinfo
+**/.env
+**/.env.*
+!**/.env.example
+**/uploads/
+**/private-documents/
+*.log
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Python runtime
+**/__pycache__/

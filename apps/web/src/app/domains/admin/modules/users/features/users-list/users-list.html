@@ -1,0 +1,95 @@
+<section>
+  <header class="mb-8 flex flex-wrap items-end justify-between gap-5">
+    <div>
+      <h1 class="text-[1.75rem] font-medium tracking-tight">Users</h1>
+      <p class="mt-2 text-[0.9375rem] text-muted">Account details, status, and change history.</p>
+    </div>
+    <button class="ui-button ui-secondary" type="button" [disabled]="store.isExporting()" (click)="store.exportUsers()">
+      <mat-icon svgIcon="download" />{{ store.isExporting() ? 'Exporting...' : 'Export CSV' }}
+    </button>
+  </header>
+  <div class="mb-6 max-w-md">
+    <label class="mb-2 block text-[0.875rem] text-muted" for="user-search">Search users</label
+    ><input
+      class="ui-field"
+      id="user-search"
+      type="search"
+      placeholder="Name or email address"
+      [(ngModel)]="data.query" />
+  </div>
+  @if (data.error()) {
+    <div class="ui-alert mb-5" role="alert">
+      <p>{{ data.error() }}</p>
+      <button class="ui-button ui-secondary mt-3" type="button" (click)="data.reload()">Try again</button>
+    </div>
+  }
+  @if (store.error()) {
+    <p class="ui-alert mb-5" role="alert">{{ store.error() }}</p>
+  }
+  @if (data.list.isLoading()) {
+    <p class="py-16 text-muted" role="status">Loading users...</p>
+  } @else if (!data.error()) {
+    <div class="overflow-x-auto rounded-xl border border-divider">
+      <table class="ui-table">
+        <caption class="sr-only">
+          Registered users
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Name</th>
+            <th scope="col" class="hidden md:table-cell">Email</th>
+            <th scope="col">Status</th>
+            <th scope="col" class="hidden lg:table-cell">Registered</th>
+            <th scope="col"><span class="sr-only">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (user of data.users(); track user.id) {
+            <tr>
+              <td class="font-medium [overflow-wrap:anywhere] md:min-w-40">
+                <a class="rounded underline-offset-4 hover:underline" [routerLink]="['/admin/users', user.id]">{{
+                  user.name
+                }}</a>
+              </td>
+              <td class="hidden text-muted md:table-cell">{{ user.email }}</td>
+              <td>
+                <span class="ui-badge">{{ user.status }}</span>
+              </td>
+              <td class="hidden whitespace-nowrap text-muted lg:table-cell">{{ user.createdAt | date: 'MMM d, y' }}</td>
+              <td>
+                <a
+                  class="ui-button ui-ghost size-11 px-0 sm:w-auto sm:px-4"
+                  [routerLink]="['/admin/users', user.id]"
+                  [attr.aria-label]="'View details for ' + user.email"
+                  ><span class="hidden sm:inline">View details</span><mat-icon svgIcon="arrow-up-right"
+                /></a>
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="5" class="py-12 text-center text-muted">No users found.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    @if (data.hasPagination()) {
+      <nav class="mt-5 flex items-center justify-between gap-3" aria-label="User pages">
+        <button
+          class="ui-button ui-secondary"
+          type="button"
+          [disabled]="data.page() <= 1"
+          (click)="data.page.set(data.page() - 1)">
+          Previous</button
+        ><span class="text-[0.875rem] text-muted">Page {{ data.page() }}</span
+        ><button
+          class="ui-button ui-secondary"
+          type="button"
+          [disabled]="data.page() * data.pageSize() >= data.usersCount()"
+          (click)="data.page.set(data.page() + 1)">
+          Next
+        </button>
+      </nav>
+    }
+  }
+</section>

@@ -1,0 +1,9 @@
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "skipLibCheck": true,
+    "paths": {
+      "@unslop-docs/api-contracts": ["./libs/api-contracts/src/index.ts"]
+    }
+  }
+}

@@ -1,0 +1,70 @@
+<section class="flex max-h-[calc(100dvh-2rem)] min-h-0 flex-col bg-panel text-ink">
+  <header class="flex shrink-0 items-center justify-between gap-4 border-b border-divider px-6 py-4">
+    <h2 id="profile-dialog-heading" tabindex="-1" class="text-[1.125rem] font-medium">Edit profile</h2>
+    <button
+      class="ui-button ui-ghost ui-icon"
+      type="button"
+      aria-label="Close profile"
+      (click)="ref.close()"
+      [disabled]="isSaving()">
+      <mat-icon svgIcon="x" />
+    </button>
+  </header>
+  <div class="min-h-0 overflow-y-auto overscroll-contain p-6">
+    <div class="mb-7 flex items-center gap-4">
+      <img class="size-16 rounded-full object-cover" [src]="profileImageUrl()" alt="Profile photo" />
+      <div>
+        <input
+          #profileImageInput
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          (change)="onProfileImageSelected($event)"
+          [disabled]="isSaving()"
+          hidden
+          aria-label="Choose a profile photo" />
+        <button
+          class="ui-button ui-secondary"
+          type="button"
+          (click)="profileImageInput.click()"
+          [disabled]="isSaving()">
+          {{ store.isUpdatingProfileImage() ? 'Uploading...' : 'Change photo' }}
+        </button>
+        <p class="mt-2 text-[0.75rem] text-muted">Photo changes save immediately.</p>
+      </div>
+    </div>
+    @if (store.profileImageError()) {
+      <p class="ui-alert mb-4" role="alert">{{ store.profileImageError() }}</p>
+    }
+    @if (store.profileImageUpdated()) {
+      <p class="mb-4 text-[0.875rem] text-muted" role="status">Photo saved.</p>
+    }
+    <form [id]="profileFormId" class="flex flex-col gap-3" (submit)="onUpdateProfile($event)">
+      <label for="profile-name" class="text-[0.875rem] font-medium">Display name</label>
+      <input
+        id="profile-name"
+        class="ui-field"
+        [formField]="profileForm.name"
+        autocomplete="name"
+        aria-describedby="profile-name-error" />
+      <p id="profile-name-error" class="text-[0.875rem] text-danger" role="status">
+        @if (profileForm.name().touched() && profileForm.name().errors()[0]; as error) {
+          {{ error.message }}
+        }
+      </p>
+      <p class="text-[0.875rem] text-muted break-words">Google account: {{ user?.email }}</p>
+      @if (store.profileError()) {
+        <p class="ui-alert" role="alert">{{ store.profileError() }}</p>
+      }
+    </form>
+  </div>
+  <footer class="flex shrink-0 justify-end gap-3 border-t border-divider p-5">
+    <button class="ui-button ui-ghost" type="button" [disabled]="isSaving()" (click)="ref.close()">Cancel</button>
+    <button
+      class="ui-button ui-primary"
+      type="submit"
+      [attr.form]="profileFormId"
+      [disabled]="isSaving() || profileForm().invalid()">
+      {{ isSaving() ? 'Saving...' : 'Save changes' }}
+    </button>
+  </footer>
+</section>

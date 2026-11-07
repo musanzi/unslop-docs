@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: ${{ matrix.task }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        task: [lint, typecheck, test, build]
+    env:
+      HUSKY: '0'
+      NX_DAEMON: 'false'
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run ${{ matrix.task }}
+        run: pnpm ${{ matrix.task }}
+
+      - name: Test document renderer
+        if: matrix.task == 'test'
+        run: python3 -m unittest discover -s services/renderer -v
+
+      - name: Test local detector service
+        if: matrix.task == 'test'
+        run: python3 -m unittest discover -s services/detector -v
+
+      - name: Verify actual DOCX pagination
+        if: matrix.task == 'test'
+        run: |
+          docker build -t unslop-docx-renderer:test services/renderer
+          docker run --rm --network none --read-only --memory 768m --cpus 1 --pids-limit 128 --cap-drop ALL --security-opt no-new-privileges --tmpfs /tmp:size=256m,mode=1777 -v "$PWD/services/renderer:/tests:ro" unslop-docx-renderer:test python /tests/smoke.py

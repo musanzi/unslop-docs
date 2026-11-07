@@ -1,0 +1,11 @@
+input,
+textarea,
+select {
+  accent-color: var(--color-ink);
+  caret-color: var(--color-ink);
+}
+
+input:-webkit-autofill {
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: var(--color-ink);
+}

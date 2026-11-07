@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.nx/
+.angular/
+out-tsc/
+libs/api-contracts/src/lib/schema.ts
+pnpm-lock.yaml
+
+vendor/cursor-pstack-unslop/SKILL.md

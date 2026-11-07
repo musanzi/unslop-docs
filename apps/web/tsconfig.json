@@ -1,0 +1,36 @@
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "rootDir": "../..",
+    "types": ["node"],
+    "strict": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "experimentalDecorators": true,
+    "importHelpers": true,
+    "target": "ES2022",
+    "module": "preserve",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@core/*": ["./src/core/*"],
+      "@web/core/*": ["./src/app/core/*"],
+      "@web/domains/*": ["./src/app/domains/*"],
+      "@web/shared/*": ["./src/app/shared/*"],
+      "@web/environments/*": ["./src/environments/*"],
+      "@unslop-docs/api-contracts": ["../../libs/api-contracts/src/index.ts"]
+    }
+  },
+  "angularCompilerOptions": {
+    "strictInjectionParameters": true,
+    "strictInputAccessModifiers": true,
+    "strictTemplates": true
+  },
+  "include": ["*.config.ts", "*.config.mts", "test-setup.ts", "src/**/*.ts"],
+  "files": [],
+  "references": [],
+  "extends": "../../tsconfig.base.json"
+}

@@ -1,0 +1,16 @@
+/* -------------------------------------------------------------------------- */
+/* Base typographic styles                                                    */
+/* -------------------------------------------------------------------------- */
+@layer base {
+  html,
+  :host {
+    -webkit-font-smoothing: var(--font-smoothing);
+    font-optical-sizing: var(--font-optical-sizing);
+  }
+
+  body {
+    font-size: var(--text-base);
+    line-height: var(--leading-5);
+    font-weight: var(--font-weight-normal);
+  }
+}

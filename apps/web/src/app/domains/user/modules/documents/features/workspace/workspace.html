@@ -1,0 +1,604 @@
+<ng-template #rateDial let-detection let-label="label" let-emptyLabel="emptyLabel">
+  @let value = detection ? detectionRate(detection) : null;
+  <div
+    class="relative grid size-32 shrink-0 place-items-center"
+    [class.text-success]="value !== null && value <= 33"
+    [class.text-warning]="value !== null && value > 33 && value <= 66"
+    [class.text-danger]="value !== null && value > 66"
+    [class.text-muted]="value === null"
+    role="img"
+    [attr.aria-label]="
+      label +
+      ': ' +
+      (value === null
+        ? detection
+          ? 'Unavailable'
+          : (emptyLabel ?? 'Not scored')
+        : value + ' out of 100, ' + (value <= 33 ? 'Low' : value <= 66 ? 'Moderate' : 'High'))
+    ">
+    <svg class="absolute inset-0 size-full -rotate-90" viewBox="0 0 120 120" fill="none" aria-hidden="true">
+      <circle cx="60" cy="60" r="52" stroke="currentColor" stroke-width="7" stroke-opacity="0.25" />
+      @if (value !== null && value > 0) {
+        <circle
+          cx="60"
+          cy="60"
+          r="52"
+          pathLength="100"
+          stroke="currentColor"
+          stroke-width="7"
+          stroke-linecap="round"
+          stroke-dasharray="100"
+          [attr.stroke-dashoffset]="100 - value" />
+      }
+    </svg>
+    <span class="text-5xl leading-none font-semibold tracking-tight tabular-nums" aria-hidden="true">
+      {{ value ?? '–' }}
+    </span>
+  </div>
+  @if (detection?.reason) {
+    <p class="mt-2 text-center text-[0.75rem] text-muted">
+      @if (detection.reason === 'no_prose') {
+        No assessable prose found.
+      }
+    </p>
+  }
+</ng-template>
+<ng-template #originalDownload let-document let-spaced="spaced">
+  <button
+    class="ui-button ui-secondary w-full sm:w-auto"
+    [class.mt-4]="spaced"
+    type="button"
+    (click)="download(document)"
+    [disabled]="store.downloading()">
+    <mat-icon svgIcon="download" />
+    Download original
+  </button>
+</ng-template>
+<a href="#workspace-content" class="fixed top-2 left-2 z-10 translate-y-[-200%] bg-canvas p-3 focus:translate-y-0"
+  >Skip to document</a
+>
+<ng-template #bar let-value let-max="max" let-label="label">
+  <div
+    class="h-1.5 w-full overflow-hidden rounded-full bg-hover"
+    role="progressbar"
+    aria-valuemin="0"
+    [attr.aria-label]="label"
+    [attr.aria-valuemax]="value === null ? null : max"
+    [attr.aria-valuenow]="value"
+    [attr.aria-valuetext]="value === null ? label : null">
+    @if (value === null) {
+      <div class="h-full w-1/3 rounded-full bg-ink motion-safe:animate-progress-sweep"></div>
+    } @else {
+      <div
+        class="h-full rounded-full bg-ink motion-safe:transition-[width] motion-safe:duration-500"
+        [style.width.%]="max ? (value / max) * 100 : 0"></div>
+    }
+  </div>
+</ng-template>
+<mat-sidenav-container class="h-dvh bg-panel text-inherit">
+  <mat-sidenav
+    #history
+    id="document-history"
+    class="w-[min(17rem,85vw)] rounded-none border-r border-divider bg-canvas text-ink"
+    [mode]="isMobile() ? 'over' : 'side'"
+    [opened]="!isMobile()"
+    [disableClose]="!isMobile()"
+    [autoFocus]="isMobile()"
+    aria-label="Your documents">
+    <div class="flex size-full flex-col px-3 py-4">
+      <div class="mb-4 flex min-h-12 items-center justify-between gap-2 px-2">
+        <a
+          routerLink="/"
+          class="flex items-center gap-2.5 rounded-lg text-[1.125rem] font-medium"
+          aria-label="Unslopy home"
+          ><img src="/brand/unslopy-mark.svg" width="28" height="28" alt="" />Unslopy</a
+        >
+        @if (isMobile()) {
+          <button class="ui-sidebar-item ui-icon" type="button" (click)="history.close()" aria-label="Close documents">
+            <mat-icon svgIcon="x" />
+          </button>
+        }
+      </div>
+      <button
+        #newDocument
+        class="ui-button w-full justify-start gap-3 bg-panel px-3 hover:border-muted active:bg-hover"
+        type="button"
+        (click)="select(null)"
+        [disabled]="store.uploading()">
+        <mat-icon svgIcon="plus" /> New document
+      </button>
+      <nav
+        class="min-h-0 flex-1 overflow-y-auto pt-6 [&>p]:px-3"
+        aria-label="Document history"
+        [attr.aria-busy]="store.loading()">
+        @for (document of store.items(); track document.id) {
+          @let phase = store.phase(document);
+          @let selected = store.selected()?.id === document.id;
+          @let deleting = store.deleting() === document.id;
+          <div class="group relative mb-0.5">
+            <button
+              class="ui-sidebar-item h-auto w-full flex-col items-stretch gap-0.5 py-2 pr-11 text-left font-normal"
+              type="button"
+              [class.bg-hover]="selected"
+              [attr.aria-current]="selected ? 'true' : null"
+              (click)="select(document)">
+              <span class="truncate text-[0.875rem] leading-5 text-ink">{{ document.filename }}</span>
+              <span class="flex min-w-0 items-center gap-1.5 text-[0.75rem] leading-4 text-muted">
+                @if (
+                  phase.key === 'queued' ||
+                  phase.key === 'assessing' ||
+                  phase.key === 'editing' ||
+                  phase.key === 'checking-result'
+                ) {
+                  <span
+                    class="size-1.5 shrink-0 rounded-full bg-current motion-safe:animate-pulse"
+                    aria-hidden="true"></span>
+                }
+                <span class="truncate" [class.text-danger]="phase.key === 'failed'">{{ phase.label }}</span>
+                <span aria-hidden="true">·</span>
+                <time class="shrink-0" [attr.datetime]="document.createdAt">{{
+                  document.createdAt | date: 'MMM d'
+                }}</time>
+              </span>
+            </button>
+            <button
+              class="ui-sidebar-item absolute top-1/2 right-1.5 size-9 min-h-0 -translate-y-1/2 justify-center p-0 opacity-0 transition-opacity group-hover:opacity-100 hover:text-danger focus-visible:opacity-100 motion-reduce:transition-none pointer-coarse:opacity-100"
+              [class.opacity-100]="deleting"
+              type="button"
+              (click)="remove(document)"
+              [disabled]="store.deleting() !== null"
+              [attr.aria-busy]="deleting"
+              [attr.aria-label]="'Delete ' + document.filename">
+              <mat-icon
+                [svgIcon]="deleting ? 'loader-circle' : 'trash-2'"
+                [class.motion-safe:animate-spin]="deleting" />
+            </button>
+          </div>
+          @if (store.deleteError(); as error) {
+            @if (error.id === document.id) {
+              <p class="mb-3 px-3 text-xs text-danger wrap-anywhere" role="alert">{{ error.message }}</p>
+            }
+          }
+        }
+        @if (store.loading() && !store.items().length) {
+          <p class="text-muted" role="status">Loading documents…</p>
+        } @else if (!store.loading() && !store.listError() && !store.items().length) {
+          <p class="text-muted">Your uploads appear here.</p>
+        }
+        @if (store.listError()) {
+          <p class="mt-3 text-[0.875rem] text-danger wrap-anywhere" role="alert">{{ store.listError() }}</p>
+          <button class="ui-sidebar-item" type="button" (click)="store.load()" [disabled]="store.loading()">
+            Try again
+          </button>
+        }
+      </nav>
+      @if (store.pageCount() > 1) {
+        <nav
+          class="flex items-center justify-between pt-2 text-[0.8125rem] text-muted tabular-nums"
+          aria-label="Document pages">
+          <button
+            class="ui-sidebar-item ui-icon"
+            type="button"
+            aria-label="Newer documents"
+            (click)="store.load(store.page() - 1)"
+            [disabled]="store.page() === 1 || store.loading()">
+            <mat-icon svgIcon="chevron-left" />
+          </button>
+          <span>{{ store.page() }} / {{ store.pageCount() }}</span>
+          <button
+            class="ui-sidebar-item ui-icon"
+            type="button"
+            aria-label="Older documents"
+            (click)="store.load(store.page() + 1)"
+            [disabled]="store.page() === store.pageCount() || store.loading()">
+            <mat-icon svgIcon="chevron-right" />
+          </button>
+        </nav>
+      }
+      @if (auth.isAdmin()) {
+        <a class="ui-sidebar-item mb-3" routerLink="/admin"><mat-icon svgIcon="layout-dashboard" />Administration</a>
+      }
+      <user [subscriptionStatus]="planStatus()" />
+    </div>
+  </mat-sidenav>
+  <mat-sidenav-content class="flex flex-col text-inherit">
+    <header
+      class="flex min-h-16 shrink-0 items-center gap-3 border-b border-divider/60 px-4 text-[0.875rem] text-muted md:px-8">
+      @if (isMobile()) {
+        <button
+          type="button"
+          (click)="history.open()"
+          aria-controls="document-history"
+          [attr.aria-expanded]="history.opened"
+          aria-label="Open documents">
+          <mat-icon svgIcon="panel-left" />
+        </button>
+      }
+      <span class="truncate">{{ store.selected()?.filename ?? 'Your documents' }}</span>
+    </header>
+    <main id="workspace-content" tabindex="-1" class="flex flex-1 justify-center px-5 py-10 md:px-10 md:py-14">
+      <p class="sr-only" role="status">{{ store.phaseAnnouncement() }}</p>
+      @if (store.selected()) {
+        <p class="sr-only" role="status">{{ store.announcement() }}</p>
+      }
+      @if (store.selected()) {
+        <p class="sr-only" role="status">{{ store.announcement() }}</p>
+      }
+      <div class="w-full max-w-3xl">
+        @if (store.selected(); as document) {
+          <h1
+            class="mb-2 text-[1.5rem] leading-[1.3] font-medium tracking-tight text-balance text-ink wrap-anywhere md:text-[1.875rem]">
+            {{ document.filename }}
+          </h1>
+          <p class="text-[0.875rem] text-muted">
+            Original · {{ document.createdAt | date: 'mediumDate' }} ·
+            {{ document.size / 1000000 | number: '1.0-2' }} MB
+          </p>
+
+          @if (phase(); as phase) {
+            <section
+              class="mt-8 border-t border-divider/60 pt-6"
+              [class.workspace-celebrate]="celebrating()"
+              aria-labelledby="phase-heading">
+              @for (row of [phase]; track row.key) {
+                <div class="flex items-start gap-4 motion-safe:animate-phase-in">
+                  <span
+                    class="phase-icon relative flex size-10 shrink-0 items-center justify-center rounded-full border"
+                    [class]="
+                      row.key === 'download-ready'
+                        ? 'border-success/40 bg-success/10 text-success'
+                        : row.key === 'failed'
+                          ? 'border-danger/40 bg-danger/10 text-danger'
+                          : 'border-divider bg-canvas text-ink'
+                    "
+                    aria-hidden="true">
+                    <mat-icon [svgIcon]="phaseIcon()" class="size-5" />
+                  </span>
+                  <div class="min-w-0 flex-1 pt-1.5">
+                    <h2 id="phase-heading" class="text-[1.0625rem] leading-6 font-medium">{{ row.label }}</h2>
+                    @if (row.key === 'failed') {
+                      <p class="mt-1 text-[0.875rem] leading-6 text-danger wrap-anywhere" role="alert">
+                        {{ phaseDetail() }} {{ document.failure }}
+                      </p>
+                      <button
+                        class="ui-button ui-secondary mt-4"
+                        type="button"
+                        (click)="store.retry(document)"
+                        [disabled]="store.retrying() !== null">
+                        <mat-icon svgIcon="refresh-cw" />
+                        {{ store.retrying() === document.id ? 'Retrying…' : retryLabel() }}
+                      </button>
+                      @if (store.retryError(); as error) {
+                        @if (error.id === document.id) {
+                          <p class="mt-3 text-[0.875rem] text-danger wrap-anywhere" role="alert">
+                            {{ error.message }}
+                          </p>
+                        }
+                      }
+                    } @else {
+                      @if (phaseDetail()) {
+                        <p class="mt-1 text-[0.875rem] leading-6 text-muted">{{ phaseDetail() }}</p>
+                      }
+                    }
+                    @if (editing(); as progress) {
+                      <div class="mt-4 max-w-md">
+                        <ng-container
+                          *ngTemplateOutlet="
+                            bar;
+                            context: { $implicit: progress.completed, max: progress.total, label: 'Editing progress' }
+                          " />
+                      </div>
+                    } @else if (row.key === 'assessing' || row.key === 'checking-result') {
+                      <div class="mt-4 max-w-md">
+                        <ng-container
+                          *ngTemplateOutlet="bar; context: { $implicit: null, max: null, label: row.label }" />
+                      </div>
+                    }
+                  </div>
+                </div>
+              }
+            </section>
+          }
+
+          @if (store.detailError()) {
+            <p class="mt-4 text-[0.875rem] text-danger wrap-anywhere" role="alert">
+              {{ store.detailError() }}
+            </p>
+            <button class="ui-button ui-ghost mt-2" type="button" (click)="store.loadSelected()">Try again</button>
+          }
+
+          @if (document.status !== 'stored') {
+            <div
+              class="mt-8 grid gap-8 border-t border-divider/60 pt-8 md:grid-cols-[minmax(0,13rem)_minmax(0,1fr)] md:gap-12">
+              <section aria-labelledby="score-heading" class="min-w-0">
+                <ng-container
+                  *ngTemplateOutlet="
+                    rateDial;
+                    context: {
+                      $implicit: detection(),
+                      label: 'AI detection rate',
+                      emptyLabel: store.detail()?.assessment ? 'Not scored' : 'Pending'
+                    }
+                  " />
+                <h2 id="score-heading" class="mt-3 w-32 text-center text-[0.9375rem] leading-5 font-medium">
+                  AI detection rate
+                </h2>
+                @if (
+                  !store.detail()?.assessment &&
+                  document.status !== 'completed' &&
+                  (store.detailLoading() || document.status === 'assessed')
+                ) {
+                  <p class="mt-2 text-[0.8125rem] leading-5 text-muted">
+                    @if (store.detailLoading()) {
+                      Loading the assessment…
+                    } @else if (document.status === 'assessed') {
+                      No AI detection rate is recorded for this document.
+                    }
+                  </p>
+                }
+              </section>
+
+              <section aria-labelledby="action-heading" class="min-w-0">
+                @if (document.status === 'assessed') {
+                  <h2 id="action-heading" class="text-[0.9375rem] leading-5 font-medium">
+                    <label for="rewrite-strength">Rewrite strength</label>
+                  </h2>
+                  <div class="mt-4 flex items-baseline justify-between gap-4">
+                    <span class="text-[1.0625rem] font-medium" aria-live="polite">{{ store.strengthLabel() }}</span>
+                    <span class="text-[0.8125rem] text-muted tabular-nums">{{ store.strength() }}</span>
+                  </div>
+                  <input
+                    id="rewrite-strength"
+                    class="ui-range mt-1"
+                    type="range"
+                    min="1"
+                    max="100"
+                    step="1"
+                    [value]="store.strength()"
+                    [style.--rewrite-strength]="(store.strength() - 1) / 99"
+                    [attr.data-effort]="store.strengthLabel()"
+                    [attr.aria-valuetext]="store.strength() + ', ' + store.strengthLabel()"
+                    [disabled]="store.unslopifying() !== null"
+                    (input)="setStrength($event)" />
+                  <div class="flex justify-between text-[0.75rem] leading-4 text-muted" aria-hidden="true">
+                    <span [class.text-ink]="store.strengthLabel() === 'Light'">Light</span>
+                    <span [class.text-ink]="store.strengthLabel() === 'Balanced'">Balanced</span>
+                    <span [class.text-ink]="store.strengthLabel() === 'Thorough'">Thorough</span>
+                  </div>
+                  <div class="mt-6 flex flex-wrap items-center gap-3">
+                    <button
+                      class="ui-button min-h-12 w-full gap-2.5 border-0 bg-ink px-5 py-3 font-semibold text-canvas hover:bg-paper-hover active:bg-paper-pressed sm:w-auto"
+                      type="button"
+                      (click)="store.unslopify(document)"
+                      [disabled]="store.unslopifying() !== null || store.allowanceBlocked()"
+                      [attr.aria-busy]="store.unslopifying() === document.id"
+                      [attr.aria-describedby]="unslopifyNote()">
+                      <mat-icon svgIcon="sparkles" />
+                      {{ store.unslopifying() === document.id ? 'Starting…' : 'Unslopify' }}
+                    </button>
+                    <ng-container *ngTemplateOutlet="originalDownload; context: { $implicit: document }" />
+                  </div>
+                  @if (unslopifyNote() === 'unslopify-error') {
+                    <p
+                      id="unslopify-error"
+                      class="mt-3 text-[0.875rem] leading-6 text-danger wrap-anywhere"
+                      role="alert">
+                      {{ store.unslopifyError()?.message }}
+                    </p>
+                  } @else if (unslopifyNote() === 'allowance-limit') {
+                    <p id="allowance-limit" class="mt-3 text-[0.875rem] leading-6 text-danger">
+                      Your monthly document limit is reached. Try again when a slot becomes available.
+                    </p>
+                  }
+                } @else if (document.status === 'completed') {
+                  <h2 id="action-heading" class="text-[0.9375rem] leading-5 font-medium">Revised document</h2>
+                  <div class="celebrate-rise mt-4 flex flex-wrap items-center gap-3">
+                    <button
+                      class="ui-button min-h-12 w-full gap-2.5 border-0 bg-ink px-5 py-3 font-semibold text-canvas hover:bg-paper-hover active:bg-paper-pressed sm:w-auto"
+                      type="button"
+                      (click)="download(document, 'revised')"
+                      [disabled]="store.downloading()">
+                      <mat-icon svgIcon="download" />
+                      Download revised DOCX
+                    </button>
+                    <ng-container *ngTemplateOutlet="originalDownload; context: { $implicit: document }" />
+                  </div>
+                  <p class="celebrate-rise mt-4 text-[0.875rem] leading-6 text-muted">
+                    Review the revised document before submitting it.
+                  </p>
+                  @if (keptPassages().length || uneditedSummary()) {
+                    <div
+                      class="celebrate-rise mt-5 space-y-2 border-t border-divider/60 pt-4 text-[0.875rem] leading-6">
+                      @if (uneditedSummary(); as unedited) {
+                        <p class="flex items-start gap-2 text-muted">
+                          <mat-icon svgIcon="ban" class="mt-1 size-4 shrink-0" aria-hidden="true" />
+                          <span>Left unedited: {{ unedited }}.</span>
+                        </p>
+                      }
+                      @if (keptPassages().length) {
+                        <details class="group text-muted">
+                          <summary
+                            class="flex cursor-pointer list-none items-start gap-2 rounded-md hover:text-ink [&::-webkit-details-marker]:hidden">
+                            <mat-icon
+                              svgIcon="chevron-right"
+                              class="mt-1 size-4 shrink-0 group-open:rotate-90"
+                              aria-hidden="true" />
+                            <span
+                              >{{
+                                keptPassages().length === 1 ? '1 passage' : keptPassages().length + ' passages'
+                              }}
+                              kept unchanged after a content check</span
+                            >
+                          </summary>
+                          <ul class="mt-2 ml-6 space-y-2">
+                            @for (passage of keptPassages(); track passage.span) {
+                              <li class="border-l border-divider pl-3 wrap-anywhere">
+                                <span class="block text-[0.75rem] text-muted">{{ passage.check }}</span>
+                                <span class="text-ink/90">{{ passage.excerpt }}</span>
+                              </li>
+                            }
+                          </ul>
+                        </details>
+                      }
+                    </div>
+                  }
+                } @else {
+                  <h2 id="action-heading" class="text-[0.9375rem] leading-5 font-medium">
+                    {{ document.phase === 'rewrite' ? 'Rewrite strength' : 'Original' }}
+                  </h2>
+                  @if (savedStrength(); as strength) {
+                    <p class="mt-1 text-[0.8125rem] leading-5 text-muted">
+                      <span class="font-medium text-ink">{{ strength.label }}</span> · {{ strength.value }} of 100
+                    </p>
+                  }
+                  <ng-container *ngTemplateOutlet="originalDownload; context: { $implicit: document, spaced: true }" />
+                }
+                @if (store.downloading()) {
+                  <p class="mt-3 text-[0.875rem] text-muted" role="status">Downloading…</p>
+                }
+                @if (store.downloadError()) {
+                  <p class="mt-3 text-[0.875rem] text-danger wrap-anywhere" role="alert">
+                    {{ store.downloadError() }}
+                  </p>
+                }
+              </section>
+            </div>
+          } @else {
+            <div class="mt-8 border-t border-divider/60 pt-8">
+              <ng-container *ngTemplateOutlet="originalDownload; context: { $implicit: document }" />
+              @if (store.downloading()) {
+                <p class="mt-3 text-[0.875rem] text-muted" role="status">Downloading…</p>
+              }
+              @if (store.downloadError()) {
+                <p class="mt-3 text-[0.875rem] text-danger wrap-anywhere" role="alert">
+                  {{ store.downloadError() }}
+                </p>
+              }
+            </div>
+          }
+        } @else if (store.detailLoading()) {
+          <p class="text-muted" role="status">Loading your document…</p>
+        } @else if (store.detailError()) {
+          <p class="text-danger" role="alert">{{ store.detailError() }}</p>
+          <button class="ui-button ui-ghost mt-2" type="button" (click)="store.loadSelected()">Try again</button>
+        } @else {
+          <h1
+            class="mb-5 text-[1.5rem] leading-[1.3] font-medium tracking-tight text-balance text-ink wrap-anywhere md:text-[1.875rem]">
+            {{ welcomeName() ? 'Welcome, ' + welcomeName() + '.' : 'Welcome back.' }}
+          </h1>
+          <div class="rounded-2xl border border-divider bg-canvas p-5 sm:p-7">
+            <section class="mb-6 text-[0.875rem] leading-6" aria-label="Your subscription" aria-live="polite">
+              @if (currentPlan(); as plan) {
+                <p class="text-muted">
+                  Your current plan is <span class="font-medium text-ink">{{ plan.name }}</span
+                  >.
+                </p>
+                <p class="mt-1 flex flex-wrap items-center gap-2 text-muted">
+                  <span>{{ planStatus() === 'GOLD' ? 'Need help with your plan?' : 'Need an upgrade?' }}</span>
+                  <a class="ui-text-action" [href]="contactUrl" target="_blank" rel="noopener noreferrer">
+                    <img src="/brand/whatsapp.svg" class="size-4.5 shrink-0" width="18" height="18" alt="" />
+                    <span>Contact Musanzi on WhatsApp</span>
+                  </a>
+                </p>
+              } @else if (!store.allowanceError()) {
+                <p class="text-muted">Loading your plan…</p>
+              }
+              @if (store.allowanceError()) {
+                <p class="text-danger">{{ store.allowanceError() }}</p>
+                <button class="ui-button ui-ghost mt-2" type="button" (click)="store.loadAllowance()">Try again</button>
+              }
+            </section>
+
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-3">
+              <button
+                class="ui-button min-h-12 w-full gap-2.5 border-0 bg-ink px-5 py-3 font-semibold text-canvas hover:bg-paper-hover active:bg-paper-pressed sm:w-auto"
+                type="button"
+                (click)="fileInput.click()"
+                [disabled]="store.uploading()"
+                [attr.aria-busy]="store.uploading()"
+                [attr.aria-describedby]="'upload-limit' + (store.uploadError() ? ' upload-error' : '')">
+                <mat-icon svgIcon="paperclip" />
+                {{ store.uploading() ? 'Uploading…' : 'Upload DOCX' }}
+              </button>
+              <input
+                #fileInput
+                type="file"
+                accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                (change)="upload($event)"
+                [disabled]="store.uploading()"
+                hidden
+                aria-label="Choose a DOCX file" />
+              <p id="upload-limit" class="text-[0.8125rem] text-muted">Up to 10 MB · 30 pages · English or French</p>
+            </div>
+            @if (store.uploadError()) {
+              <p id="upload-error" class="mt-3 text-[0.875rem] text-danger wrap-anywhere" role="alert">
+                {{ store.uploadError() }}
+              </p>
+            }
+            <div [class.mt-4]="store.uploading() || !!store.announcement()">
+              @if (store.uploading()) {
+                @let progress = store.uploadProgress();
+                <ng-container
+                  *ngTemplateOutlet="
+                    bar;
+                    context: { $implicit: progress?.percent ?? null, max: 100, label: 'Upload' }
+                  " />
+                <p class="sr-only" role="status">Uploading your original…</p>
+                <p class="mt-2 text-[0.875rem] text-muted tabular-nums">
+                  {{
+                    progress?.percent !== null && progress?.percent !== undefined
+                      ? 'Uploading… ' + progress?.percent + '%'
+                      : 'Uploading your original…'
+                  }}
+                </p>
+              } @else {
+                <p class="text-[0.875rem] text-muted" role="status">{{ store.announcement() }}</p>
+              }
+            </div>
+          </div>
+          <details class="subscription-disclosure group mt-4">
+            <summary class="ui-button ui-ghost w-fit list-none border-0 [&::-webkit-details-marker]:hidden">
+              View plans
+              <mat-icon
+                svgIcon="chevron-down"
+                class="group-open:rotate-180 motion-safe:transition-transform motion-safe:duration-200" />
+            </summary>
+            <section class="mt-3 px-1" aria-label="Subscription plans">
+              <p class="mb-2 text-[0.8125rem] text-muted">Monthly plans, priced in USD.</p>
+              <ul class="divide-y divide-divider">
+                @for (plan of plans; track plan.status) {
+                  <li class="flex flex-wrap items-center justify-between gap-x-5 gap-y-3 py-4">
+                    <div class="flex items-center gap-3">
+                      <mat-icon [svgIcon]="plan.icon" class="text-muted" />
+                      <div>
+                        <p class="font-medium">{{ plan.name }}</p>
+                        <p class="text-[0.8125rem] text-muted">{{ plan.documents }} documents / month</p>
+                      </div>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-3">
+                      <p class="text-[0.875rem] tabular-nums">
+                        ${{ plan.price }}<span class="text-muted"> / month</span>
+                      </p>
+                      @if (plan.status === planStatus()) {
+                        <span class="ui-badge items-center gap-1.5"><mat-icon svgIcon="check" />Current plan</span>
+                      } @else if (plan.price > (currentPlan()?.price ?? 0)) {
+                        <a
+                          class="ui-button ui-secondary"
+                          [href]="plan.contactUrl"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          [attr.aria-label]="'Upgrade to ' + plan.name + ' on WhatsApp'">
+                          Upgrade<mat-icon svgIcon="arrow-up-right" />
+                        </a>
+                      }
+                    </div>
+                  </li>
+                }
+              </ul>
+            </section>
+          </details>
+        }
+      </div>
+    </main>
+  </mat-sidenav-content>
+</mat-sidenav-container>

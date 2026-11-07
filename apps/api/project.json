@@ -1,0 +1,112 @@
+{
+  "name": "api",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "sourceRoot": "apps/api/src",
+  "tags": ["scope:api", "type:app"],
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "nest build",
+        "cwd": "apps/api"
+      },
+      "outputs": ["{workspaceRoot}/dist/apps/api"]
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "nest start --watch",
+        "cwd": "apps/api"
+      },
+      "continuous": true
+    },
+    "start": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node ../../dist/apps/api/src/main.js",
+        "cwd": "apps/api"
+      },
+      "continuous": true
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "eslint \"apps/api/src/**/*.ts\" \"apps/api/vitest.config.mts\" \"apps/api/test-setup.ts\""
+      }
+    },
+    "db-migrate": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "typeorm migration:generate ./src/modules/database/migrations/$name -d ../../dist/apps/api/src/modules/database/orm.config.js",
+        "cwd": "apps/api"
+      },
+      "dependsOn": ["build"],
+      "cache": false
+    },
+    "db-up": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "typeorm migration:run -d ../../dist/apps/api/src/modules/database/orm.config.js",
+        "cwd": "apps/api"
+      },
+      "dependsOn": ["build"],
+      "cache": false
+    },
+    "db-down": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "typeorm migration:revert -d ../../dist/apps/api/src/modules/database/orm.config.js",
+        "cwd": "apps/api"
+      },
+      "dependsOn": ["build"],
+      "cache": false
+    },
+    "db-seed": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node ../../dist/apps/api/src/modules/database/seeds/index.js",
+        "cwd": "apps/api"
+      },
+      "dependsOn": ["build"],
+      "cache": false
+    },
+    "openapi": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node tools/export-openapi.cjs"
+      },
+      "cache": false,
+      "outputs": ["{workspaceRoot}/libs/api-contracts/openapi.json"]
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc --noEmit --incremental false -p apps/api/tsconfig.build.json"
+      },
+      "dependsOn": ["typecheck-spec"]
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vitest run --config apps/api/vitest.config.mts"
+      },
+      "cache": true,
+      "inputs": ["default", "^default"]
+    },
+    "test-watch": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vitest --watch --config apps/api/vitest.config.mts"
+      },
+      "continuous": true,
+      "cache": false
+    },
+    "typecheck-spec": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc --noEmit -p apps/api/tsconfig.spec.json"
+      }
+    }
+  }
+}

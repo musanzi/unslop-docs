@@ -1,0 +1,41 @@
+<a href="#admin-content" class="sr-only z-50 bg-ink p-3 text-canvas focus:fixed focus:not-sr-only"
+  >Skip to main content</a
+>
+<mat-sidenav-container class="h-dvh bg-panel text-ink">
+  <mat-sidenav
+    #sidenav
+    class="w-[min(17rem,85vw)] rounded-none border-r border-divider bg-canvas"
+    [mode]="isMobile() ? 'over' : 'side'"
+    [opened]="!isMobile()"
+    [disableClose]="!isMobile()"
+    [autoFocus]="isMobile()"
+    aria-label="Administration navigation">
+    @if (isMobile()) {
+      <button
+        class="ui-button ui-ghost ui-icon absolute right-3 top-4 z-10"
+        type="button"
+        (click)="sidenav.close()"
+        aria-label="Close navigation">
+        <mat-icon svgIcon="x" />
+      </button>
+    }
+    <sidebar class="block h-full" />
+  </mat-sidenav>
+  <mat-sidenav-content class="flex h-full flex-col bg-panel text-ink">
+    <header class="flex min-h-16 shrink-0 items-center gap-3 border-b border-divider/60 px-4 md:px-8">
+      @if (isMobile()) {
+        <button
+          type="button"
+          (click)="sidenav.open()"
+          aria-label="Open navigation"
+          [attr.aria-expanded]="sidenav.opened">
+          <mat-icon svgIcon="panel-left" />
+        </button>
+      }
+      <span class="text-[0.875rem] text-muted">Administration</span>
+    </header>
+    <main id="admin-content" tabindex="-1" class="mx-auto w-full max-w-6xl flex-1 px-5 py-8 sm:px-8 lg:py-12">
+      <router-outlet />
+    </main>
+  </mat-sidenav-content>
+</mat-sidenav-container>

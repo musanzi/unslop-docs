@@ -1,0 +1,2107 @@
+{
+  "openapi": "3.1.0",
+  "paths": {
+    "/health": {
+      "get": {
+        "description": "Pings the database and checks disk storage.",
+        "operationId": "HealthController_check",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Service is healthy\n\nThe Health Check is successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ok",
+                        "degraded"
+                      ],
+                      "example": "ok"
+                    },
+                    "info": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "example": {
+                        "database": {
+                          "status": "up",
+                          "responseTime": 12
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "up",
+                              "degraded",
+                              "down"
+                            ]
+                          },
+                          "responseTime": {
+                            "type": "number",
+                            "description": "Time the health indicator took to respond, in ms"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    },
+                    "error": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "example": {},
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "up",
+                              "degraded",
+                              "down"
+                            ]
+                          },
+                          "responseTime": {
+                            "type": "number",
+                            "description": "Time the health indicator took to respond, in ms"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    },
+                    "details": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up",
+                          "responseTime": 12
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "up",
+                              "degraded",
+                              "down"
+                            ]
+                          },
+                          "responseTime": {
+                            "type": "number",
+                            "description": "Time the health indicator took to respond, in ms"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The Health Check is not successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "error",
+                        "shutting_down"
+                      ],
+                      "example": "error"
+                    },
+                    "info": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "example": {
+                        "database": {
+                          "status": "up",
+                          "responseTime": 12
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "up",
+                              "degraded",
+                              "down"
+                            ]
+                          },
+                          "responseTime": {
+                            "type": "number",
+                            "description": "Time the health indicator took to respond, in ms"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    },
+                    "error": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "example": {
+                        "redis": {
+                          "status": "down",
+                          "message": "Could not connect",
+                          "responseTime": 3005
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "up",
+                              "degraded",
+                              "down"
+                            ]
+                          },
+                          "responseTime": {
+                            "type": "number",
+                            "description": "Time the health indicator took to respond, in ms"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    },
+                    "details": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up",
+                          "responseTime": 12
+                        },
+                        "redis": {
+                          "status": "down",
+                          "message": "Could not connect",
+                          "responseTime": 3005
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "up",
+                              "degraded",
+                              "down"
+                            ]
+                          },
+                          "responseTime": {
+                            "type": "number",
+                            "description": "Time the health indicator took to respond, in ms"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Check service health",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/auth/signin/google": {
+      "get": {
+        "operationId": "AuthController_googleAuth",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Start Google OAuth sign in",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/google/redirect": {
+      "get": {
+        "operationId": "AuthController_googleCallback",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Google OAuth redirect callback",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/signout": {
+      "post": {
+        "operationId": "AuthController_signOut",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Signed out"
+          }
+        },
+        "summary": "Sign out the current user",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "operationId": "AuthController_profile",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Current user profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get the current user profile",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/me/update": {
+      "patch": {
+        "operationId": "AuthController_updateProfile",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProfileDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Profile updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Update the current user profile",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/users": {
+      "get": {
+        "operationId": "UsersController_findAll",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Page number (1-based)",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "example": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Items per page. Takes precedence over take. Defaults to 20 when neither limit nor take is supplied.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "example": 20,
+              "type": "integer"
+            }
+          },
+          {
+            "name": "take",
+            "required": false,
+            "in": "query",
+            "description": "Alias for limit, used only when limit is not supplied.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "example": 20,
+              "type": "integer"
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "john",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated users as a [items, total] tuple. Defaults to page 1 and 20 items per page.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "enum": [
+                        200
+                      ]
+                    },
+                    "data": {
+                      "type": "array",
+                      "minItems": 2,
+                      "maxItems": 2,
+                      "prefixItems": [
+                        {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/UserResponse"
+                          },
+                          "description": "Items on the requested page"
+                        },
+                        {
+                          "type": "integer",
+                          "minimum": 0,
+                          "description": "Total number of matching items before pagination"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid pagination or filter parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "message",
+                    "error"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        false
+                      ]
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "enum": [
+                        400
+                      ]
+                    },
+                    "message": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      ]
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "Bad Request"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "List users with pagination (admin only)",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/users/export/csv": {
+      "get": {
+        "operationId": "UsersController_exportCSV",
+        "parameters": [
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "john",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "CSV file",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Export users as a CSV file (admin only)",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/users/profile/avatar": {
+      "post": {
+        "operationId": "UsersController_uploadImage",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "avatar": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Avatar uploaded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Upload the current user avatar",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/users/{id}/status": {
+      "patch": {
+        "operationId": "UsersController_updateStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateStatusDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Change a user status and record the change (admin only)",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/users/{id}/status-changes": {
+      "get": {
+        "operationId": "UsersController_findStatusChanges",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StatusChangeResponse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Read status changes, newest first (admin only)",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/users/by-id/{id}": {
+      "get": {
+        "operationId": "UsersController_findOneById",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Find a user by ID (admin only)",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/users/{email}": {
+      "get": {
+        "operationId": "UsersController_findOneByEmail",
+        "parameters": [
+          {
+            "name": "email",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Find a user by email (admin only)",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/roles": {
+      "get": {
+        "operationId": "RolesController_findAll",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Page number (1-based)",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "example": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Items per page. Takes precedence over take. Defaults to 20 when neither limit nor take is supplied.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "example": 20,
+              "type": "integer"
+            }
+          },
+          {
+            "name": "take",
+            "required": false,
+            "in": "query",
+            "description": "Alias for limit, used only when limit is not supplied.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "example": 20,
+              "type": "integer"
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "admin",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Roles as a [items, total] tuple. With no query parameters, returns all roles. Otherwise, defaults to page 1 and 20 items per page.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "enum": [
+                        200
+                      ]
+                    },
+                    "data": {
+                      "type": "array",
+                      "minItems": 2,
+                      "maxItems": 2,
+                      "prefixItems": [
+                        {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/RoleResponse"
+                          },
+                          "description": "Items on the requested page"
+                        },
+                        {
+                          "type": "integer",
+                          "minimum": 0,
+                          "description": "Total number of matching items before pagination"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid pagination or filter parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "statusCode",
+                    "message",
+                    "error"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        false
+                      ]
+                    },
+                    "statusCode": {
+                      "type": "integer",
+                      "enum": [
+                        400
+                      ]
+                    },
+                    "message": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      ]
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "Bad Request"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "List roles with pagination (admin only)",
+        "tags": [
+          "roles"
+        ]
+      }
+    },
+    "/roles/{id}": {
+      "get": {
+        "operationId": "RolesController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Role found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Find a role by id (admin only)",
+        "tags": [
+          "roles"
+        ]
+      }
+    },
+    "/stats": {
+      "get": {
+        "operationId": "StatsController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "List of statistics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StatItem"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get statistics (admin only)",
+        "tags": [
+          "stats"
+        ]
+      }
+    },
+    "/documents/{id}/unslopify": {
+      "post": {
+        "description": "Reserves one monthly allowance slot in the same transaction that queues rewriting. The slot is charged only when the revised download is ready.",
+        "operationId": "DocumentsController_unslopify",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnslopifyDocumentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Rewrite strength is not an integer from 1 to 100"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "404": {
+            "description": "Document does not exist or belongs to another user"
+          },
+          "409": {
+            "description": "Document is not assessed, rewriting is already queued or complete, or the monthly allowance is fully used or reserved"
+          },
+          "503": {
+            "description": "Unslopify could not be confirmed. Refresh history before retrying."
+          }
+        },
+        "summary": "Start rewriting your assessed document with the chosen strength",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/documents/{id}/retry": {
+      "post": {
+        "description": "A failed initial assessment is queued again without a reservation. A failed rewrite keeps its assessment and strength and reserves a new slot.",
+        "operationId": "DocumentsController_retry",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "404": {
+            "description": "Document does not exist or belongs to another user"
+          },
+          "409": {
+            "description": "Document is not failed, or monthly allowance is fully used or reserved"
+          },
+          "503": {
+            "description": "Retry could not be confirmed. Refresh history before retrying."
+          }
+        },
+        "summary": "Retry your failed document using its stored original",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/documents": {
+      "post": {
+        "operationId": "DocumentsController_upload",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Original saved and queued for its initial assessment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing, invalid or unsafe DOCX content"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "413": {
+            "description": "Original exceeds 10,000,000 bytes"
+          },
+          "503": {
+            "description": "Upload could not be confirmed; refresh history before retrying"
+          }
+        },
+        "summary": "Upload a private original DOCX and queue its initial assessment",
+        "tags": [
+          "documents"
+        ]
+      },
+      "get": {
+        "operationId": "DocumentsController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid pagination"
+          },
+          "401": {
+            "description": "Sign-in required"
+          }
+        },
+        "summary": "List your documents, newest first",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/documents/allowance": {
+      "get": {
+        "operationId": "DocumentsController_allowance",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AllowanceResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required"
+          }
+        },
+        "summary": "Read your current UTC monthly allowance",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/documents/{id}/preview": {
+      "get": {
+        "description": "Available once the initial assessment is published. Blocks follow the original structure in order.",
+        "operationId": "DocumentsController_preview",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentPreviewResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "404": {
+            "description": "Document does not exist, belongs to another user, or is not assessed yet"
+          },
+          "503": {
+            "description": "Preview could not be loaded"
+          }
+        },
+        "summary": "Read the private read-only preview of your original",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/documents/{id}": {
+      "get": {
+        "operationId": "DocumentsController_detail",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentAssessmentResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "404": {
+            "description": "Document does not exist or belongs to another user"
+          },
+          "503": {
+            "description": "Document could not be loaded"
+          }
+        },
+        "summary": "Read your document status, assessments and revision notices",
+        "tags": [
+          "documents"
+        ]
+      },
+      "delete": {
+        "description": "Removes the record, original, preview, assessments, revised DOCX, revision notices and processing checkpoints in any state. A queued or processing document stops: no later result is saved, an active rewrite reservation is released once, and the worker sends no further requests for it, but text already sent to DeepSeek may still be processed there and its answer is discarded. Usage records stay unchanged, so deleting a completed document never restores allowance. Once the document is gone, repeating the request returns the same 404 as a document that never existed.",
+        "operationId": "DocumentsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Document and its stored files are deleted"
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "404": {
+            "description": "Document does not exist, belongs to another user, or was already deleted"
+          },
+          "503": {
+            "description": "A stored file could not be removed; the record remains so the deletion can be repeated"
+          }
+        },
+        "summary": "Delete your document and everything stored for it",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/documents/{id}/original": {
+      "get": {
+        "operationId": "DocumentsController_original",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Original DOCX bytes",
+            "content": {
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "404": {
+            "description": "Document does not exist or belongs to another user"
+          }
+        },
+        "summary": "Download your original document",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/documents/{id}/revised": {
+      "get": {
+        "operationId": "DocumentsController_revised",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required"
+          },
+          "404": {
+            "description": "Document or validated revision unavailable"
+          }
+        },
+        "summary": "Download your validated revised DOCX",
+        "tags": [
+          "documents"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "Unslopy API",
+    "description": "Google-only sign-in with Redis sessions. Admin access requires the verified Google account configured by ADMIN_EMAIL.",
+    "version": "1.0.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "schemas": {
+      "UserResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "FREE",
+              "PREMIUM",
+              "GOLD"
+            ],
+            "example": "FREE"
+          },
+          "isAdmin": {
+            "type": "boolean",
+            "description": "Admin access derived from the verified Google account and ADMIN_EMAIL",
+            "example": false
+          },
+          "id": {
+            "type": "string",
+            "example": "b7f2c1e0-4a5d-4c8e-9f1a-2b3c4d5e6f7a"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-09-21T10:00:00.000Z"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-09-21T10:00:00.000Z"
+          },
+          "email": {
+            "type": "string",
+            "example": "john.doe@example.com"
+          },
+          "name": {
+            "type": "string",
+            "example": "John Doe"
+          },
+          "avatar": {
+            "example": "https://example.com/avatar.png",
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "roles": {
+            "example": [
+              "user"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "status",
+          "isAdmin",
+          "id",
+          "createdAt",
+          "updatedAt",
+          "email",
+          "name",
+          "roles"
+        ]
+      },
+      "UpdateProfileDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Alice Student"
+          }
+        }
+      },
+      "UpdateStatusDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "FREE",
+              "PREMIUM",
+              "GOLD"
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "StatusChangeResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "1"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "adminId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "adminEmail": {
+            "type": "string",
+            "example": "admin@example.com"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-11-05T12:00:00.000Z"
+          },
+          "previousStatus": {
+            "type": "string",
+            "enum": [
+              "FREE",
+              "PREMIUM",
+              "GOLD"
+            ]
+          },
+          "newStatus": {
+            "type": "string",
+            "enum": [
+              "FREE",
+              "PREMIUM",
+              "GOLD"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "userId",
+          "adminId",
+          "adminEmail",
+          "createdAt",
+          "previousStatus",
+          "newStatus"
+        ]
+      },
+      "RoleResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "b7f2c1e0-4a5d-4c8e-9f1a-2b3c4d5e6f7a"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-09-21T10:00:00.000Z"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-09-21T10:00:00.000Z"
+          },
+          "name": {
+            "type": "string",
+            "example": "admin"
+          }
+        },
+        "required": [
+          "id",
+          "createdAt",
+          "updatedAt",
+          "name"
+        ]
+      },
+      "StatItem": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "example": "users"
+          },
+          "total": {
+            "type": "number",
+            "example": 42
+          }
+        },
+        "required": [
+          "label",
+          "total"
+        ]
+      },
+      "UnslopifyDocumentDto": {
+        "type": "object",
+        "properties": {
+          "strength": {
+            "type": "number",
+            "default": 50,
+            "minimum": 1,
+            "maximum": 100,
+            "description": "Rewrite strength from light edits (1) to thorough rewriting (100). It controls editing extent, not a promised score reduction"
+          }
+        }
+      },
+      "EditingProgressResponse": {
+        "type": "object",
+        "properties": {
+          "completed": {
+            "type": "number",
+            "description": "Editing chunks finished so far",
+            "minimum": 0
+          },
+          "total": {
+            "type": "number",
+            "description": "Editing chunks planned for this rewrite",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "completed",
+          "total"
+        ]
+      },
+      "DocumentResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "size": {
+            "type": "number",
+            "description": "Original size in bytes",
+            "maximum": 10000000
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "stored",
+              "queued",
+              "processing",
+              "assessed",
+              "completed",
+              "failed"
+            ]
+          },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "assessment",
+              "rewrite"
+            ],
+            "description": "Processing attempt the status refers to: the automatic AI detection, or the user-requested rewrite"
+          },
+          "processingStage": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "assessing",
+              "editing",
+              "validating",
+              null
+            ],
+            "description": "Active stage while processing; assessing has no measurable total, editing exposes progress"
+          },
+          "progress": {
+            "description": "Completed and total editing work units while a rewrite is processing",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EditingProgressResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "strength": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 100,
+            "description": "Rewrite strength saved with the Unslopify request; null before the first request"
+          },
+          "failure": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "filename",
+          "size",
+          "status",
+          "phase",
+          "processingStage",
+          "progress",
+          "strength",
+          "failure",
+          "createdAt"
+        ]
+      },
+      "Object": {
+        "type": "object",
+        "properties": {}
+      },
+      "DocumentPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DocumentResponse"
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "page": {
+            "type": "number"
+          },
+          "pageSize": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "pageSize"
+        ]
+      },
+      "AllowanceResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "FREE",
+              "PREMIUM",
+              "GOLD"
+            ]
+          },
+          "limit": {
+            "type": "number"
+          },
+          "used": {
+            "type": "number",
+            "description": "Successful documents charged to this reservation month"
+          },
+          "reserved": {
+            "type": "number",
+            "description": "Active reservations created in this month"
+          },
+          "remaining": {
+            "type": "number"
+          },
+          "month": {
+            "type": "string",
+            "example": "2026-11"
+          },
+          "resetsAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "First instant of the next UTC calendar month"
+          }
+        },
+        "required": [
+          "status",
+          "limit",
+          "used",
+          "reserved",
+          "remaining",
+          "month",
+          "resetsAt"
+        ]
+      },
+      "PreviewInlineResponse": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "bold": {
+            "type": "boolean"
+          },
+          "italic": {
+            "type": "boolean"
+          },
+          "protected": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Protected element kind rendered as a placeholder, such as image, equation or footnote; null for text"
+          }
+        },
+        "required": [
+          "text",
+          "bold",
+          "italic",
+          "protected"
+        ]
+      },
+      "PreviewCellResponse": {
+        "type": "object",
+        "properties": {
+          "blocks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PreviewBlockResponse"
+            }
+          }
+        },
+        "required": [
+          "blocks"
+        ]
+      },
+      "PreviewRowResponse": {
+        "type": "object",
+        "properties": {
+          "cells": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PreviewCellResponse"
+            }
+          }
+        },
+        "required": [
+          "cells"
+        ]
+      },
+      "PreviewBlockResponse": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "heading",
+              "paragraph",
+              "list-item",
+              "table",
+              "protected"
+            ]
+          },
+          "level": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Heading level from 1, or list nesting level from 1; null for other blocks"
+          },
+          "text": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Plain text of the block; null for tables"
+          },
+          "inlines": {
+            "description": "Formatted runs of a heading, paragraph or list item in document order; null for other blocks",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/PreviewInlineResponse"
+            }
+          },
+          "rows": {
+            "description": "Rows of a table; null for other blocks",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/PreviewRowResponse"
+            }
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Protected block kind, such as image or equation; null for other blocks"
+          }
+        },
+        "required": [
+          "kind",
+          "level",
+          "text",
+          "inlines",
+          "rows",
+          "reason"
+        ]
+      },
+      "DocumentPreviewResponse": {
+        "type": "object",
+        "properties": {
+          "blocks": {
+            "description": "Read-only structure of the original in document order",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PreviewBlockResponse"
+            }
+          }
+        },
+        "required": [
+          "blocks"
+        ]
+      },
+      "DetectionRateResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "unavailable"
+            ]
+          },
+          "rate": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 100,
+            "description": "AI detection rate from the Oculus model: the token-weighted mean of its window scores, scaled to 100"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "no_prose",
+              "too_short",
+              "too_long",
+              null
+            ]
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "token-weighted-mean-v1"
+            ]
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "status",
+          "rate",
+          "reason",
+          "method",
+          "checkedAt"
+        ]
+      },
+      "KeptPassageResponse": {
+        "type": "object",
+        "properties": {
+          "check": {
+            "type": "string",
+            "description": "Preservation check that kept the original passage"
+          },
+          "span": {
+            "type": "string",
+            "description": "Identifier of the kept span"
+          },
+          "excerpt": {
+            "type": "string",
+            "description": "Excerpt of the original passage, at most 120 characters"
+          }
+        },
+        "required": [
+          "check",
+          "span",
+          "excerpt"
+        ]
+      },
+      "UneditedElementResponse": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "Protected element kind, such as image, equation or footnote"
+          },
+          "count": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "reason",
+          "count"
+        ]
+      },
+      "RevisionNoticesResponse": {
+        "type": "object",
+        "properties": {
+          "keptPassages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KeptPassageResponse"
+            }
+          },
+          "uneditedElements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UneditedElementResponse"
+            }
+          }
+        },
+        "required": [
+          "keptPassages",
+          "uneditedElements"
+        ]
+      },
+      "DocumentAssessmentResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "size": {
+            "type": "number",
+            "description": "Original size in bytes",
+            "maximum": 10000000
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "stored",
+              "queued",
+              "processing",
+              "assessed",
+              "completed",
+              "failed"
+            ]
+          },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "assessment",
+              "rewrite"
+            ],
+            "description": "Processing attempt the status refers to: the automatic AI detection, or the user-requested rewrite"
+          },
+          "processingStage": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "assessing",
+              "editing",
+              "validating",
+              null
+            ],
+            "description": "Active stage while processing; assessing has no measurable total, editing exposes progress"
+          },
+          "progress": {
+            "description": "Completed and total editing work units while a rewrite is processing",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EditingProgressResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "strength": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 100,
+            "description": "Rewrite strength saved with the Unslopify request; null before the first request"
+          },
+          "failure": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "assessment": {
+            "description": "AI detection result for the original, published when the document is assessed and retained afterwards",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DetectionRateResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revisionNotices": {
+            "description": "Notices recorded with the revision",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RevisionNoticesResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "filename",
+          "size",
+          "status",
+          "phase",
+          "processingStage",
+          "progress",
+          "strength",
+          "failure",
+          "createdAt",
+          "assessment",
+          "revisionNotices"
+        ]
+      }
+    }
+  }
+}

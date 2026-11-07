@@ -1,0 +1,114 @@
+{
+  "name": "web",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "sourceRoot": "apps/web/src",
+  "prefix": "app",
+  "tags": ["scope:web", "type:app"],
+  "targets": {
+    "build": {
+      "options": {
+        "browser": "apps/web/src/main.ts",
+        "tsConfig": "apps/web/tsconfig.app.json",
+        "assets": [
+          {
+            "glob": "**/*",
+            "input": "apps/web/public"
+          }
+        ],
+        "styles": ["apps/web/src/styles/styles.css"],
+        "server": "apps/web/src/main.server.ts",
+        "outputMode": "server",
+        "ssr": {
+          "entry": "apps/web/src/server.ts"
+        },
+        "index": "apps/web/src/index.html",
+        "outputPath": "dist/apps/web"
+      },
+      "configurations": {
+        "production": {
+          "budgets": [
+            {
+              "type": "initial",
+              "maximumWarning": "1Mb"
+            },
+            {
+              "type": "anyComponentStyle",
+              "maximumWarning": "4kB"
+            }
+          ],
+          "outputHashing": "all"
+        },
+        "development": {
+          "optimization": false,
+          "extractLicenses": false,
+          "sourceMap": true,
+          "fileReplacements": [
+            {
+              "replace": "apps/web/src/environments/environment.ts",
+              "with": "apps/web/src/environments/environment.development.ts"
+            }
+          ]
+        }
+      },
+      "defaultConfiguration": "production",
+      "executor": "@angular/build:application",
+      "outputs": ["{workspaceRoot}/dist/apps/web"],
+      "dependsOn": ["^generate"]
+    },
+    "serve": {
+      "configurations": {
+        "production": {
+          "buildTarget": "web:build:production"
+        },
+        "development": {
+          "buildTarget": "web:build:development"
+        }
+      },
+      "defaultConfiguration": "development",
+      "executor": "@angular/build:dev-server",
+      "continuous": true,
+      "dependsOn": ["^generate"]
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "eslint \"apps/web/src/**/*.{ts,html}\" \"apps/web/vitest.config.mts\" \"apps/web/test-setup.ts\""
+      }
+    },
+    "start": {
+      "executor": "nx:run-commands",
+      "continuous": true,
+      "options": {
+        "command": "node dist/apps/web/server/server.mjs"
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "ngc --noEmit -p apps/web/tsconfig.app.json"
+      },
+      "dependsOn": ["^generate", "typecheck-spec"]
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vitest run --config apps/web/vitest.config.mts"
+      }
+    },
+    "test-reload": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "node --test tools/document-reload.test.mjs"
+      }
+    },
+    "typecheck-spec": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc --noEmit -p apps/web/tsconfig.spec.json"
+      }
+    }
+  },
+  "implicitDependencies": ["api-contracts"]
+}
