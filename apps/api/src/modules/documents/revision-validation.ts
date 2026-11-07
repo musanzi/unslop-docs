@@ -44,19 +44,37 @@ const citations = (text: string) =>
   matches(
     text,
     /\[[^\]\r\n]+\]|\([^()\r\n]*(?:\d{4}|\bet al\.|\bs\.[^\S\r\n]?d\.|\bn\.d\.)[^()\r\n]*\)|\p{Lu}[\p{L}'’-]+(?:[^\S\r\n]+(?:et al\.|and|et|&|\p{Lu}[\p{L}'’-]+)){0,4}[^\S\r\n]*\(\d{4}[^)\r\n]*\)/gu
-  );
+  ).map((citation) => citation.replace(/^As[^\S\r\n]+(?=\p{Lu})/u, ''));
 const quotations = (text: string) =>
   matches(text, /"[^"\n]+"|“[^”]+”|«[^»]+»|(?<!\p{L})‘[^’]+’(?!\p{L})|(?<!\p{L})'[^'\n]+'(?!\p{L})/gu);
-const facts = (text: string) =>
-  matches(
+function facts(text: string): string[] {
+  const pattern =
+    /(?:https?:\/\/|www\.)[^\s<>"“”«»]+|\b\d+(?:[.,:/–-]\d+)*(?:\s?%)?|\b(?:January|February|March|April|May|June|July|August|September|October|November|December|janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)\b/giu;
+  return [...text.matchAll(pattern)]
+    .filter((match) => {
+      if (match[0] !== 'may') return true;
+      const before = text.slice(0, match.index);
+      const after = text.slice(match.index + match[0].length);
+      return (
+        /\b(?:in|during|by|before|after|since|until|through|from|to|of|next|last|this|early|late|mid|\d{1,2}(?:st|nd|rd|th)?)[^\S\r\n]+$/iu.test(
+          before
+        ) ||
+        /^[^\S\r\n]+\d{1,4}\b/u.test(after) ||
+        text.trim() === 'may'
+      );
+    })
+    .map((match) => match[0]);
+}
+const references = (text: string) => [
+  ...matches(
     text,
-    /(?:https?:\/\/|www\.)[^\s<>"“”«»]+|\b\d+(?:[.,:/–-]\d+)*(?:\s?%)?|\b(?:January|February|March|April|May|June|July|August|September|October|November|December|janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)\b/giu
-  );
-const references = (text: string) =>
-  matches(
+    /\b(?:doi\s*:\s*\S+|ISBN[\s:\d-]+|(?:source|references?|références?|bibliography|bibliographie)[^\S\r\n]*:[^.!?\n]*)/giu
+  ),
+  ...matches(
     text,
-    /\b(?:doi\s*:\s*\S+|ISBN[\s:\d-]+|(?:according to|selon|d'après|source|references?|références?|bibliography|bibliographie)\b[^.!?\n]*)/giu
-  );
+    /\b(?:[Aa]ccording to|[Ss]elon|[Dd]['’]après)[^\S\r\n]+\p{Lu}[\p{L}'’-]+(?:[^\S\r\n]+(?:et al\.|and|et|&|\p{Lu}[\p{L}'’-]+)){0,4}/gu
+  )
+];
 
 export function validateTextPreservation(original: string, revised: string): void {
   if (original === revised) return;
