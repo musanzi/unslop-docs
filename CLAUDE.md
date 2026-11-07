@@ -58,5 +58,3 @@ In pull requests, describe the problem, the resulting behavior, and how you chec
 ## Running servers
 
 The user keeps the development stack running in Docker with `compose.dev.yml`: web on port 4200 (`WEB_PORT`) and API on port 8000. Do not run `pnpm dev`, `pnpm dev:api`, `pnpm dev:web`, `nx serve`, or `docker compose up`, because a second copy of the stack can exhaust the machine's memory. To check behavior, send requests to the running servers with curl. If a server you need is down, ask the user to start it. To validate a change, run `pnpm lint`, `pnpm typecheck`, or `pnpm test:api` instead of a build.
-
-I want to reduce the AI detection rate. The revised document from this app should beat my local AI detection rate check. If a document scored 93% after the app humanize it, if I upload the fixed version it should be less than 10% AI rate. Can you do that ?
