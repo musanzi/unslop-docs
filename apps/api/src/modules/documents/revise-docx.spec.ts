@@ -55,11 +55,20 @@ async function changedPackage(bytes: Buffer, change: (name: string, bytes: Buffe
 }
 
 describe('Revision preservation corpus', () => {
-  it.each(['english', 'french'] as const)(
-    'preserves the complete %s structure corpus while making a faithful edit',
-    async (language) => {
+  it.each([
+    ['english', 10],
+    ['english', 50],
+    ['english', 90],
+    ['french', 10],
+    ['french', 50],
+    ['french', 90]
+  ] as const)(
+    'preserves the complete %s structure corpus at strength %s while making a faithful edit',
+    async (language, strength) => {
       const source = await readDocx(await revisionFixture(language));
-      const result = await createRewriteWorkflow(faithfulRevisionProvider(), 'pinned rules', 50).invoke({ source });
+      const result = await createRewriteWorkflow(faithfulRevisionProvider(), 'pinned rules', strength).invoke({
+        source
+      });
       const revised = await readDocx(result.revised);
       expect(revised.text).toContain(language === 'english' ? 'To compare the results' : 'Pour comparer les résultats');
       expect(revised.protectedParts).toEqual(source.protectedParts);

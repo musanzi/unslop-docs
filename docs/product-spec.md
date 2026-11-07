@@ -54,6 +54,8 @@ Show only the number inside the circle, colored green for 0 to 33, amber for 34 
 
 The system uses DeepSeek with a server-side `DEEPSEEK_API_KEY`. Editing instructions come from the [Cursor pstack unslop skill](https://github.com/cursor/plugins/blob/bc697d0a5a163cec979e362b601e36f5616083fd/pstack/skills/unslop/SKILL.md), as selected by the owner. The selected source revision is `bc697d0a5a163cec979e362b601e36f5616083fd`.
 
+Each rewrite also applies [additional editing techniques](editing-techniques.md) for sentence variety, specific transitions, direct verbs, and precise wording at the chosen strength. Instructions retain the author's voice and ask for a final fidelity and fluency check within the same response. Preservation rules take priority over all editing instructions.
+
 Document content is data to score or edit. It cannot override the editing instructions.
 
 ## Progress and history
