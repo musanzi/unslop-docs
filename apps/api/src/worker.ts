@@ -51,7 +51,8 @@ async function main(): Promise<void> {
       storage,
       {
         detect: (text, signal) => detector.detect(text, signal),
-        edit: (system, chunk, signal) => editor.edit(system, chunk, signal)
+        edit: (system, chunk, signal) => editor.edit(system, chunk, signal),
+        reviewMeaning: (system, request, signal) => editor.reviewMeaning(system, request, signal)
       },
       skill,
       { ...settings, detectorTimeoutMs: detectorSettings.timeoutMs }

@@ -8,6 +8,7 @@ import { readDocx } from '../documents/validate-docx';
 import { DocumentJobs, JobClaim } from './document-jobs';
 import { classifyProviderFailure, ProviderFailure } from '../documents/provider-failure';
 import { EditProvider, validateChunkResult } from '../documents/revise-docx';
+import { validateMeaningReview } from '../documents/meaning-review';
 import { documentPreview } from '../documents/document-preview';
 import {
   assessmentText,
@@ -22,7 +23,7 @@ class RetryScheduled extends Error {}
 
 export const detectionOperation = 'detection:initial:v1';
 
-export type DocumentProvider = DetectionProvider & EditProvider;
+export type DocumentProvider = DetectionProvider & Required<EditProvider>;
 
 export interface WorkerSettings {
   assessmentTimeoutMs?: number;
@@ -146,7 +147,7 @@ export class AssessmentWorker {
           error instanceof RevisionValidationError
             ? new ProviderFailure('output')
             : classifyProviderFailure(error, controller.signal);
-        const retryableOutput = operation.startsWith('edit:') && providerFailure.category === 'output';
+        const retryableOutput = /^(edit|meaning):/.test(operation) && providerFailure.category === 'output';
         const retry = (providerFailure.temporary || retryableOutput) && checkpoint.attempts < 3;
         const saved = await this.jobs.finishRequest(
           claim,
@@ -234,6 +235,13 @@ export class AssessmentWorker {
                 { system, chunk },
                 (signal) => this.provider.edit(system, chunk, signal),
                 (raw) => ({ edits: validateChunkResult(chunk, raw) })
+              ),
+            reviewMeaning: (system, request) =>
+              run.request(
+                `meaning:${request.id}`,
+                { system, request },
+                (signal) => this.provider.reviewMeaning(system, request, signal),
+                (raw) => validateMeaningReview(request, raw)
               )
           },
           this.skill,

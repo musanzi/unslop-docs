@@ -111,6 +111,44 @@ describe('Durable document jobs', () => {
     expect(await reservations(id)).toEqual(['charged']);
   });
 
+  it('retries an unreadable meaning review without paying for the edit again', async () => {
+    const id = await enqueueRewrite();
+    const storage = privateStorage(await readerFixture(textParagraph('In order to compare the results. '.repeat(20))));
+    const provider = faithfulRevisionProvider();
+    const review = provider.reviewMeaning;
+    const edit = vi.fn(provider.edit);
+    let reviews = 0;
+    provider.edit = edit;
+    provider.reviewMeaning = async (system, request, signal) => {
+      reviews++;
+      return reviews === 1 ? { reviews: [] } : review(system, request, signal);
+    };
+    const worker = workerWith(storage, provider);
+    await worker.runOnce();
+    expect(await sql.query('SELECT status FROM document')).toEqual([{ status: 'processing' }]);
+    await sql.query('UPDATE document SET "nextRequestAt" = now() - interval \'1 second\'');
+    await worker.runOnce();
+    expect(await sql.query('SELECT status FROM document')).toEqual([{ status: 'completed' }]);
+    expect(edit).toHaveBeenCalledTimes(1);
+    expect(reviews).toBe(2);
+    expect(await reservations(id)).toEqual(['charged']);
+  });
+
+  it('completes and charges a document whose rewrite changed a claim, keeping the original passage', async () => {
+    const id = await enqueueRewrite();
+    const text = 'In order to compare the results, the team may repeat the study next year.';
+    const storage = privateStorage(await readerFixture(textParagraph(text)));
+    const provider = faithfulRevisionProvider();
+    provider.reviewMeaning = async (_system, { pairs }) => ({
+      reviews: pairs.map(({ id: pair }) => ({ id: pair, preserved: false }))
+    });
+    await workerWith(storage, provider).runOnce();
+    expect(await sql.query('SELECT status, "revisionNotices" FROM document WHERE id = $1', [id])).toMatchObject([
+      { status: 'completed', revisionNotices: { keptPassages: [{ check: 'meaning', excerpt: text }] } }
+    ]);
+    expect(await reservations(id)).toEqual(['charged']);
+  });
+
   it('publishes the initial assessment and preview without a reservation, then waits for the user', async () => {
     const id = await enqueue();
     const storage = privateStorage(await assessmentDocxFixture());
@@ -155,7 +193,7 @@ describe('Durable document jobs', () => {
     const editor = faithfulRevisionProvider();
     const edit = vi.fn(editor.edit);
     const detect = vi.fn(editor.detect);
-    const worker = workerWith(storage, { edit, detect });
+    const worker = workerWith(storage, { ...editor, edit, detect });
     await worker.runOnce();
     expect(detect.mock.calls[0][0]).toBe(assessmentFixtureText);
     expect(edit).not.toHaveBeenCalled();
@@ -596,6 +634,7 @@ describe('Durable document jobs', () => {
     const completions: ((value: unknown) => void)[] = [];
     let started: () => void;
     const provider = {
+      reviewMeaning: faithfulRevisionProvider().reviewMeaning,
       detect: faithfulRevisionProvider().detect,
       edit: vi.fn(
         () =>

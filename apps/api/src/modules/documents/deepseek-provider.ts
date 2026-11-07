@@ -6,6 +6,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { EditProvider } from './revise-docx';
 import { EditChunk } from './revise-docx';
+import { MeaningReviewRequest } from './meaning-review';
 import { classifyProviderFailure, ProviderFailure } from './provider-failure';
 
 export function workerSettings(env: NodeJS.ProcessEnv) {
@@ -65,6 +66,10 @@ export class DeepSeekProvider implements EditProvider {
 
   async edit(system: string, chunk: EditChunk, signal?: AbortSignal): Promise<unknown> {
     return this.request(system, { document: chunk }, signal);
+  }
+
+  async reviewMeaning(system: string, request: MeaningReviewRequest, signal?: AbortSignal): Promise<unknown> {
+    return this.request(system, { review: request }, signal);
   }
 
   private async request(system: string, data: unknown, signal?: AbortSignal): Promise<unknown> {

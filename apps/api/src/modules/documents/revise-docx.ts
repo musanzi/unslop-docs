@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { ZipFile } from 'yazl';
 import { DocxDocument, DocxRun, DocxSource } from './docx-model';
+import { MeaningReviewRequest } from './meaning-review';
 import { isValidationCheck, KeptPassage, passageExcerpt, RevisionNotices, uneditedElements } from './revision-notices';
 import {
   paragraphs,
@@ -29,6 +30,7 @@ export interface EditChunk {
 }
 export interface EditProvider {
   edit(system: string, chunk: EditChunk, signal?: AbortSignal): Promise<unknown>;
+  reviewMeaning?(system: string, request: MeaningReviewRequest, signal?: AbortSignal): Promise<unknown>;
 }
 interface TextNode {
   readonly source: DocxSource;

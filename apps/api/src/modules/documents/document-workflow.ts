@@ -9,6 +9,12 @@ import {
   validateChunkResult,
   validateRevisedDocx
 } from './revise-docx';
+import {
+  keepShiftedPassages,
+  meaningReviewInstructions,
+  meaningReviewRequest,
+  validateMeaningReview
+} from './meaning-review';
 import { RevisionNotices } from './revision-notices';
 import { ProcessingStage } from './document-processing';
 import { editingTechniques } from './editing-techniques';
@@ -59,7 +65,13 @@ ${editingTechniques}`;
         config.signal?.throwIfAborted();
         const raw = await provider.edit(system, chunk, config.signal);
         config.signal?.throwIfAborted();
-        results.set(chunk.id, validateChunkResult(chunk, raw));
+        const spans = validateChunkResult(chunk, raw);
+        const request = meaningReviewRequest(chunk, spans);
+        if (provider.reviewMeaning && request.pairs.length) {
+          const review = await provider.reviewMeaning(meaningReviewInstructions, request, config.signal);
+          config.signal?.throwIfAborted();
+          results.set(chunk.id, keepShiftedPassages(chunk, spans, validateMeaningReview(request, review)));
+        } else results.set(chunk.id, spans);
         await progress(results.size, chunks.length);
       }
       return { results };

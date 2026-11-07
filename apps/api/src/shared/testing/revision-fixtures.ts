@@ -38,6 +38,7 @@ export function faithfulRevisionProvider(): DocumentProvider {
         id,
         text: text.replaceAll('In order to', 'To').replaceAll('Dans le but de', 'Pour')
       }))
-    })
+    }),
+    reviewMeaning: async (_system, { pairs }) => ({ reviews: pairs.map(({ id }) => ({ id, preserved: true })) })
   };
 }

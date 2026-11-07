@@ -2,7 +2,7 @@
 
 Unslopy edits English and French DOCX files for students. Users sign in with Google, upload a document, and review an AI detection rate from a private Oculus detector. They choose a rewrite strength and click **Unslopify** to edit with DeepSeek. The app checks the revised document and offers both versions for download.
 
-Editing reserves one monthly allowance slot and charges it when the revised download is ready. The rate is an uncalibrated model score. New uploads can have at most thirty pages, as rendered on the server, and at most 10 MB. See the [renderer reference](services/renderer/README.md) and the [detector reference](services/detector/README.md).
+Editing reserves one monthly allowance slot and charges it when the revised download is ready. The rate is an uncalibrated model score. New uploads can have at most thirty pages, as rendered on the server, and at most 10 MB.
 
 The product name is Unslopy. Code, database, and Compose identifiers use `unslop-docs`.
 
@@ -112,13 +112,3 @@ Configure the `VPS_HOST`, `VPS_USER`, and `VPS_SSH_KEY` repository secrets. Keep
 The script rebuilds the images in [compose.prod.yml](compose.prod.yml), stops the API and worker, and backs up PostgreSQL and private documents together under `~/unslop-backups`. It then applies migrations, starts the updated services, runs `tools/smoke-document-workflow.cjs`, and checks `/health`.
 
 To redeploy, select **Run workflow** in the Deploy workflow. Preserve the database and document backups together. Avoid `docker compose down -v`, which deletes named volumes.
-
-## Read the detailed docs
-
-Choose the reference for the behavior you need to change:
-
-- [Document support](docs/document-support.md) covers accepted DOCX content and validation limits.
-- [Document revisions](docs/document-revisions.md) covers editing, preserved content, and revision notices.
-- [Assessment worker](docs/assessment-worker.md) covers job states, deadlines, and retries.
-- [DOCX test fixtures](apps/api/src/shared/testing/fixtures/docx/README.md) describes the sample documents used in tests.
-- [Product specification](docs/product-spec.md), [workflow revision](docs/document-workflow-design.md), and [glossary](GLOSSARY.md) provide product context. Use the [worker reference](docs/assessment-worker.md) for current scoring behavior.

@@ -12,6 +12,7 @@ export const validationReasons = {
   quotation: 'The edit changed a quotation. Keep quotations as plain, complete text and upload again.',
   reference: 'The edit introduced a reference. Upload the original again to start a new attempt.',
   fact: 'The edit changed a number, date, or URL. Keep these details as plain, complete text and upload again.',
+  meaning: 'The edit changed what the passage claims, so the original wording was kept.',
   language:
     'The edit changed or could not preserve the language. Keep each passage in English or French and upload again.'
 } as const;
