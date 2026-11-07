@@ -22,4 +22,4 @@ An issue is unblocked when all blocking issues are closed.
 
 ## Pull requests
 
-PRs as a request surface: no.
+Don't treat pull requests as a source of work requests.

@@ -22,7 +22,7 @@ Usage resets on the first day of each month at 00:00 UTC. Clicking **Unslopify**
 
 A successful document uses the allowance for the month when its slot was reserved, even if processing finishes the next month. Existing jobs can finish after a status downgrade. New rewrites are blocked when completed documents and active reservations exhaust the current allowance. Deleting a completed document does not restore usage.
 
-Assessment runs automatically after upload and again after rewriting. Neither assessment consumes an additional document slot. There is no separate monthly assessment allowance, assessment purchase, or assessment action. Waiting at the assessment result holds no reservation. Normal request throttling and processing resource limits still apply.
+AI detection runs automatically after upload and consumes no document slot. There is no separate monthly detection allowance, detection purchase, or detection action. Waiting at the detection result holds no reservation. Normal request throttling and processing resource limits still apply.
 
 ## Documents
 
@@ -32,9 +32,9 @@ Count the entire uploaded document, including cover pages, references, and blank
 
 Editing aims to preserve meaning, language, citations, quotations, and factual claims, without inventing evidence or references. Match the uploaded document's formatting as closely as practical, including headings, paragraphs, lists, and tables. Formatting differences do not prevent download. Users review and adjust the DOCX outside the app. PDF input, scanned documents, and exact page-layout preservation are outside the first release.
 
-Convert ordinary Word content controls into their visible text or images. Use the final version of tracked changes, including insertions and excluding deletions. Preserve the original upload separately. Validation and document traversal must both support these conversions; removing the current rejection alone is insufficient.
+Convert ordinary Word content controls into their visible text or images. Use the final version of tracked changes, including insertions and excluding deletions. Preserve the original upload separately. Validation and document traversal must both support these conversions.
 
-Preserve images, equations, reference fields, notes, comments, headers, footers, and complex elements unchanged where safe and practical. Identify elements that could not be edited. Do not execute embedded objects or fetch linked resources. Reject unsafe content or unreadable files with a specific explanation; do not treat every unfamiliar formatting feature as unsafe.
+Preserve images, equations, reference fields, notes, comments, headers, footers, and complex elements unchanged where safe and practical. Identify elements that could not be edited. Do not execute embedded objects or fetch linked resources. Reject unsafe content or unreadable files with a specific explanation. Do not treat every unfamiliar formatting feature as unsafe.
 
 Retain the 10 MB limit, English/French support, archive and XML security limits, private access checks, and readable DOCX output checks. The thirty-page upload limit replaces the 10,000-word product limit. Apply the page restriction only to new uploads.
 
@@ -50,13 +50,11 @@ After rewriting, make the revised DOCX available and keep showing the rate of th
 
 The private detector service scores the assessed prose with the pinned Oculus 2.0 Multilingual model, using the method in ADR 0009. Quotation and code styles and reference lists do not contribute to the rate. Assess prose in tables as well as ordinary paragraphs. Texts under 50 words receive an unavailable rate.
 
-Show only the number inside each circle, colored green for 0–33, amber for 34–66, and red for 67–100. Accessible labels include the score out of 100 and Low, Moderate, or High severity. Unavailable results stay neutral. The rewrite-strength slider runs from 1 to 100, initially 50, with Light, Balanced, and Thorough labels. Strength does not promise a percentage reduction. Keep the assessment model, rubric version, method, and coverage metadata with each result.
-
-Remove the local detector service, model files, configuration, tests, and stored detector results. Preserve uploaded originals, revised downloads, accounts, and usage history. Do not retain legacy detector results or compare scores across the two methods.
+Show only the number inside the circle, colored green for 0 to 33, amber for 34 to 66, and red for 67 to 100. Accessible labels include the score out of 100 and Low, Moderate, or High severity. Unavailable results stay neutral. The rewrite-strength slider runs from 1 to 100, initially 50, with Light, Balanced, and Thorough labels. Strength does not promise a percentage reduction. Keep the pinned model version, method, and coverage metadata with each result.
 
 The system uses DeepSeek with a server-side `DEEPSEEK_API_KEY`. Editing instructions come from the [Cursor pstack unslop skill](https://github.com/cursor/plugins/blob/bc697d0a5a163cec979e362b601e36f5616083fd/pstack/skills/unslop/SKILL.md), as selected by the owner. The selected source revision is `bc697d0a5a163cec979e362b601e36f5616083fd`.
 
-Document content is input to assess or edit. It cannot override the assessment or editing instructions.
+Document content is data to score or edit. It cannot override the editing instructions.
 
 ## Progress and history
 
@@ -85,10 +83,10 @@ The first release runs on one server with Docker, PostgreSQL, and Redis. A backg
 1. Replace password authentication with Google-only sign-in and configure admin access.
 2. Add user statuses, status-change records, and monthly allowance reservations.
 3. Add private DOCX uploads, validation, document records, and owner-checked downloads.
-4. Add the background worker, local detector, editing instructions, and DOCX output validation.
+4. Add the background worker, private detector, editing instructions, and DOCX output validation.
 5. Add the document workspace, sidebar history, progress animations, downloads, and deletion.
 6. Adapt admin user management for status changes.
 7. Update project branding, setup instructions, environment examples, and Docker configuration.
 8. Verify document preservation, private access, allowance boundaries, retries, and deletion during processing.
 
-The [ticket index](ticket-drafts/README.md) records the original implementation slices and follow-up workflow work. The [workflow design](document-workflow-design.md) records the accepted changes. Deployment issue #14 is closed following the owner's confirmation that the app is live. Historical tickets remain records of their original scope; follow-up tickets implement superseding decisions.
+The [ticket index](ticket-drafts/README.md) records the original implementation slices and follow-up workflow work. The [workflow design](document-workflow-design.md) records the accepted changes. The owner confirmed that the app is live and closed deployment issue #14. Historical tickets remain records of their original scope. Follow-up tickets implement superseding decisions.

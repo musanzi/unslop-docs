@@ -12,14 +12,14 @@ Images, equations, simple and complex reference fields, footnote, endnote, and c
 
 ## Normalization details
 
-Normalization rewrites the decoded main-part XML by removing exact character ranges that the parser recorded, then parses the result again with the same security limits. `readXmlPart(mainPart)` and `readPart(mainPart)` return that normalized main part; every other part is returned as uploaded. Source offsets in the model refer to the normalized main part.
+Normalization rewrites the decoded main-part XML by removing exact character ranges that the parser recorded, then parses the result again with the same security limits. `readXmlPart(mainPart)` and `readPart(mainPart)` return that normalized main part. Every other part is returned as uploaded. Source offsets in the model refer to the normalized main part.
 
 Known limitations, accepted under [ADR 0004](adr/0004-allow-formatting-differences-in-revised-documents.md):
 
-- A tracked deletion of a paragraph mark does not merge the two paragraphs; both paragraphs remain.
-- A tracked cell deletion or merge keeps the cell; only its marker is removed.
+- A tracked deletion of a paragraph mark does not merge the two paragraphs. Both paragraphs remain.
+- A tracked cell deletion or merge keeps the cell. Only its marker is removed.
 - Headers, footers, notes, and comments keep any revision markup they contained, because those parts are preserved byte for byte. Word shows them with their tracked changes still pending.
-- Data-bound controls lose their binding in the revised document because the wrapper is removed; the visible text is kept.
+- Data-bound controls lose their binding in the revised document because the wrapper is removed. The visible text stays.
 - Paragraph layout, pagination, and section properties are copied, not verified. The app does not claim exact pagination.
 
 ## Rejections that remain
