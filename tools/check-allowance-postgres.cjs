@@ -166,21 +166,14 @@ async function main() {
     const [document] = await assessed(owner, 1);
     await unslopify(owner, document.id, 80);
     const provider = faithfulRevisionProvider();
-    let calls = 0;
-    const assess = provider.assess;
-    provider.assess = async (...args) => {
-      calls++;
-      return assess(...args);
-    };
     now = new Date('2027-01-01T00:00:00.000Z');
     await worker(provider).runOnce();
-    assert.equal(calls, 1);
     assert.equal((await allowance.read(database, owner)).used, 0);
     now = new Date('2026-12-31T23:59:59.999Z');
     assert.equal((await allowance.read(database, owner)).used, 1);
     assert.equal((await allowance.read(database, owner)).reserved, 0);
     const [completed] = await database.query(
-      'SELECT status, strength, "finalAssessment" IS NOT NULL AS scored FROM document WHERE id = $1',
+      'SELECT status, strength, assessment IS NOT NULL AS scored FROM document WHERE id = $1',
       [document.id]
     );
     assert.deepEqual(completed, { status: 'completed', strength: 80, scored: true });
@@ -192,7 +185,7 @@ async function main() {
     );
     assert.deepEqual(charge, { documentId: null, state: 'charged' });
     console.log(
-      'PASS fake provider produces a validated DOCX with a final score, charges the reservation month, and deletion retains the charge'
+      'PASS fake provider produces a validated DOCX, charges the reservation month, and deletion retains the charge'
     );
 
     const unreserved = randomUUID();
@@ -222,8 +215,8 @@ async function main() {
     await assert.rejects(unslopify(owner, fourth.id), (error) => error.getStatus() === 409);
     const claim = await jobs.claim(timeouts);
     assert.equal(await jobs.saveRevision(claim, { key: `${randomUUID()}.docx`, size: 42 }, noNotices), true);
-    assert.equal(await jobs.complete(claim, null), true);
-    assert.equal(await jobs.complete(claim, null), false);
+    assert.equal(await jobs.complete(claim), true);
+    assert.equal(await jobs.complete(claim), false);
     assert.equal((await allowance.read(database, owner)).used, 2);
     const failing = await jobs.claim(timeouts);
     assert.equal(await jobs.fail(failing, 'provider'), true);

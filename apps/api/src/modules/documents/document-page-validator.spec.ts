@@ -7,14 +7,14 @@ const sha256 = createHash('sha256').update(bytes).digest('hex');
 afterEach(() => vi.unstubAllGlobals());
 
 describe('Upload page validation', () => {
-  it('accepts five rendered pages and rejects six regardless of saved metadata', async () => {
+  it('accepts thirty rendered pages and rejects thirty-one regardless of saved metadata', async () => {
     const fetcher = vi
       .fn()
-      .mockResolvedValueOnce(Response.json({ pages: 5, sha256 }))
-      .mockResolvedValueOnce(Response.json({ pages: 6, sha256 }));
+      .mockResolvedValueOnce(Response.json({ pages: 30, sha256 }))
+      .mockResolvedValueOnce(Response.json({ pages: 31, sha256 }));
     vi.stubGlobal('fetch', fetcher);
-    expect(await new DocumentPageValidator().validate(bytes)).toBe(5);
-    await expect(new DocumentPageValidator().validate(bytes)).rejects.toThrow('6 pages');
+    expect(await new DocumentPageValidator().validate(bytes)).toBe(30);
+    await expect(new DocumentPageValidator().validate(bytes)).rejects.toThrow('31 pages');
     expect(fetcher.mock.calls[0][1].body).toEqual(new Uint8Array(bytes));
   });
   it.each([

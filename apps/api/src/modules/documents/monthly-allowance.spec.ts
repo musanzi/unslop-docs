@@ -4,7 +4,7 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Readable } from 'node:stream';
 import { DocumentStorage } from './document-storage';
-import { DocumentProvider } from './document-workflow';
+import type { DocumentProvider } from '../processing/assessment-worker';
 import { AssessmentWorker } from '../processing/assessment-worker';
 import { faithfulRevisionProvider } from '@api/shared/testing/revision-fixtures';
 import { PGlite } from '@electric-sql/pglite';
@@ -19,7 +19,6 @@ import { RetryDocumentHandler } from './commands/retry-document.handler';
 import { UnslopifyDocument, UnslopifyDocumentHandler } from './commands/unslopify-document.handler';
 import { DataSource } from 'typeorm';
 import { FindDocumentHandler } from './queries/find-document.handler';
-import { styleAssessmentFixture } from '@api/shared/testing/style-assessment-fixtures';
 
 async function allowanceHarness(database: PGlite, allowance: MonthlyAllowance) {
   const files = new Map<string, Buffer>();
@@ -129,8 +128,7 @@ describe('Monthly allowance at Unslopify and worker boundaries', () => {
     expect(await detail(document.id)).toMatchObject({
       status: 'assessed',
       phase: 'assessment',
-      assessment: { rubric: styleAssessmentFixture(20).rubric, style: styleAssessmentFixture(20).style },
-      finalAssessment: null
+      assessment: { status: 'complete', rate: 40 }
     });
     expect(await read()).toMatchObject({ used: 0, reserved: 0, remaining: 3 });
     expect(await harness.jobs.claim(timeouts)).toBeNull();
@@ -155,7 +153,7 @@ describe('Monthly allowance at Unslopify and worker boundaries', () => {
     expect(await detail(documents[3].id)).toMatchObject({
       status: 'assessed',
       strength: null,
-      assessment: { style: { score: 20 } }
+      assessment: { rate: 40 }
     });
     for (let index = 0; index < 3; index++) expect((await harness.jobs.claim(timeouts))?.phase).toBe('rewrite');
     expect(await harness.jobs.claim(timeouts)).toBeNull();
@@ -182,7 +180,7 @@ describe('Monthly allowance at Unslopify and worker boundaries', () => {
     const claim = await harness.jobs.claim(timeouts);
     await expect(unslopify(document.id)).rejects.toMatchObject({ status: 409 });
     await harness.jobs.saveRevision(claim, { key: 'completed.docx', size: 42 }, noNotices);
-    await harness.jobs.complete(claim, null);
+    await harness.jobs.complete(claim);
     await expect(unslopify(document.id)).rejects.toMatchObject({
       status: 409,
       message: 'This document already has a revised version.'
@@ -237,9 +235,7 @@ describe('Monthly allowance at Unslopify and worker boundaries', () => {
     expect(await workerFor().runOnce()).toBe(true);
     expect(await detail(document.id)).toMatchObject({
       status: 'completed',
-      assessment: { style: { score: 20 } },
-      finalAssessment: { style: { score: 20 } },
-      finalScoreUnavailable: false
+      assessment: { rate: 40 }
     });
     expect(await read()).toMatchObject({ month: '2027-02', used: 0, reserved: 0 });
     now = new Date('2027-01-31T23:59:59.999Z');
@@ -252,7 +248,7 @@ describe('Monthly allowance at Unslopify and worker boundaries', () => {
   it('retries a failed initial assessment without reserving a slot', async () => {
     const document = await upload();
     const provider = faithfulRevisionProvider();
-    provider.assess = async () => {
+    provider.detect = async () => {
       throw Object.assign(new Error('private'), { status: 400 });
     };
     await workerFor(provider).runOnce();
@@ -266,7 +262,7 @@ describe('Monthly allowance at Unslopify and worker boundaries', () => {
     expect(await workerFor().runOnce()).toBe(true);
     expect(await detail(document.id)).toMatchObject({
       status: 'assessed',
-      assessment: { style: { score: 20 } }
+      assessment: { rate: 40 }
     });
     expect(await read()).toMatchObject({ used: 0, reserved: 0, remaining: 3 });
   });
@@ -288,7 +284,7 @@ describe('Monthly allowance at Unslopify and worker boundaries', () => {
       status: 'failed',
       phase: 'rewrite',
       strength: 70,
-      assessment: { style: { score: 20 } },
+      assessment: { rate: 40 },
       failure: expect.stringContaining('original is still available')
     });
     expect(await read()).toMatchObject({ used: 0, reserved: 0, remaining: 3 });
@@ -319,7 +315,7 @@ describe('Monthly allowance at Unslopify and worker boundaries', () => {
     expect(await detail(document.id)).toMatchObject({
       status: 'failed',
       strength: 70,
-      assessment: { style: { score: 20 } }
+      assessment: { rate: 40 }
     });
     expect(await read()).toMatchObject({ used: 0, reserved: 3, remaining: 0 });
   });
@@ -419,7 +415,7 @@ describe('Monthly allowance at Unslopify and worker boundaries', () => {
     expect(await read()).toMatchObject({ used: 0, reserved: 0, remaining: 3, resetsAt: reset });
     await unslopify(waiting.id);
     await harness.jobs.saveRevision(claim, { key: 'next-month.docx', size: 42 }, noNotices);
-    expect(await harness.jobs.complete(claim, null)).toBe(true);
+    expect(await harness.jobs.complete(claim)).toBe(true);
     expect(await read()).toMatchObject({ used: 0, reserved: 1, remaining: 2 });
     now = new Date(last);
     expect(await read()).toMatchObject({ used: 1, reserved: 2, remaining: 0 });
@@ -443,7 +439,7 @@ describe('Monthly allowance at Unslopify and worker boundaries', () => {
       await expect(unslopify(documents[0].id)).rejects.toMatchObject({ status: 409 });
       const claim = await harness.jobs.claim(timeouts);
       await harness.jobs.saveRevision(claim, { key: 'downgraded.docx', size: 42 }, noNotices);
-      expect(await harness.jobs.complete(claim, null)).toBe(true);
+      expect(await harness.jobs.complete(claim)).toBe(true);
       expect(await read()).toMatchObject({ limit: 3, used: 1, reserved: Number(limit) - 1, remaining: 0 });
     }
   );
@@ -470,36 +466,12 @@ describe('Monthly allowance at Unslopify and worker boundaries', () => {
       if (++calls === 1) throw Object.assign(new Error('Temporary provider failure'), { status: 503 });
       return edit(...args);
     };
-    const assess = provider.assess;
-    provider.assess = async (...args) => {
-      expect(await read()).toMatchObject({ used: 0, reserved: 1 });
-      return assess(...args);
-    };
     const worker = workerFor(provider);
     await worker.runOnce();
     expect(await read()).toMatchObject({ used: 0, reserved: 1 });
     await query(`UPDATE document SET "nextRequestAt" = now() - interval '1 second' WHERE id = $1`, [document.id]);
     await worker.runOnce();
     expect(calls).toBe(2);
-    expect(await read()).toMatchObject({ used: 1, reserved: 0 });
-  });
-
-  it('charges once when the final assessment fails and the revision is published without a score', async () => {
-    const document = await assessed();
-    await unslopify(document.id);
-    const provider = faithfulRevisionProvider();
-    provider.assess = async () => {
-      throw Object.assign(new Error('private'), { status: 400 });
-    };
-    await workerFor(provider).runOnce();
-    expect(await detail(document.id)).toMatchObject({
-      status: 'completed',
-      assessment: { style: { score: 20 } },
-      finalAssessment: null,
-      finalScoreUnavailable: true
-    });
-    expect(await read()).toMatchObject({ used: 1, reserved: 0 });
-    await expect(harness.retry.execute({ ownerId: owner, id: document.id })).rejects.toMatchObject({ status: 409 });
     expect(await read()).toMatchObject({ used: 1, reserved: 0 });
   });
 
@@ -512,14 +484,14 @@ describe('Monthly allowance at Unslopify and worker boundaries', () => {
     await query(`CREATE TRIGGER reject_fixture_charge BEFORE UPDATE ON allowance_reservation
       FOR EACH ROW WHEN (NEW.state = 'charged') EXECUTE FUNCTION reject_fixture_charge()`);
     try {
-      await expect(harness.jobs.complete(claim, null)).rejects.toThrow('Fixture accounting write failed');
+      await expect(harness.jobs.complete(claim)).rejects.toThrow('Fixture accounting write failed');
       expect(await query('SELECT status FROM document WHERE id = $1', [claim.id])).toEqual([{ status: 'processing' }]);
       expect(await read()).toMatchObject({ used: 0, reserved: 1 });
     } finally {
       await query('DROP TRIGGER reject_fixture_charge ON allowance_reservation');
       await query('DROP FUNCTION reject_fixture_charge()');
     }
-    expect(await harness.jobs.complete(claim, null)).toBe(true);
+    expect(await harness.jobs.complete(claim)).toBe(true);
     expect(await read()).toMatchObject({ used: 1, reserved: 0 });
   });
 });

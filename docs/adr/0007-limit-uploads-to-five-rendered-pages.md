@@ -6,4 +6,6 @@ This replaces the 10,000-word product limit retained by ADR 0004. Keep the 10 MB
 
 The page limit applies to new uploads. Preserve existing documents and downloads. A rewrite that expands beyond five pages remains downloadable under ADR 0004's tolerance for formatting differences.
 
+[ADR 0008](0008-raise-the-upload-limit-to-thirty-rendered-pages.md) raises the accepted count to thirty pages. Everything else in this decision stands.
+
 The page restriction runs at the upload boundary. The shared reader no longer applies the former word limit, so reading existing documents and validating revised downloads do not apply the upload page restriction again.

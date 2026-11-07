@@ -37,7 +37,6 @@ export class FindDocumentHandler implements IQueryHandler<FindDocument, Document
           editingTotal: true,
           failureCode: true,
           assessment: true,
-          finalAssessment: true,
           revisionNotices: true
         }
       });

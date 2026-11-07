@@ -1,6 +1,6 @@
 import { DocumentPhase, ProcessingFailure, ProcessingStage } from '../documents/document-processing';
 import { randomUUID } from 'node:crypto';
-import { WritingAssessment } from '../documents/assessment-workflow';
+import { DocumentDetection } from '../documents/detection-rate';
 import { ProviderFailureCategory } from '../documents/provider-failure';
 import { RevisionNotices } from '../documents/revision-notices';
 import { DocumentPreview } from '../documents/document-preview';
@@ -44,7 +44,7 @@ export interface JobClaim {
   processingDeadline: Date;
   processingAttemptId: string;
   providerRequests: Record<string, ProviderRequestCheckpoint>;
-  assessment?: WritingAssessment | null;
+  assessment?: DocumentDetection | null;
 }
 
 export interface JobDatabase {
@@ -109,7 +109,7 @@ export class DocumentJobs {
     return (rows[0] as { checkpoint: ProviderRequestCheckpoint } | undefined)?.checkpoint ?? null;
   }
 
-  async saveInitialAssessment(claim: JobClaim, assessment: WritingAssessment): Promise<boolean> {
+  async saveInitialAssessment(claim: JobClaim, assessment: DocumentDetection): Promise<boolean> {
     const rows = await this.database.query(`UPDATE document SET assessment = $3::jsonb WHERE ${held} RETURNING id`, [
       claim.id,
       claim.claimToken,
@@ -148,7 +148,7 @@ export class DocumentJobs {
     return rows.length === 1;
   }
 
-  async publishAssessment(claim: JobClaim, assessment: WritingAssessment, preview: DocumentPreview): Promise<boolean> {
+  async publishAssessment(claim: JobClaim, assessment: DocumentDetection, preview: DocumentPreview): Promise<boolean> {
     const rows = await this.database.query(
       `WITH assessed AS (
       UPDATE document SET status = 'assessed', assessment = $3::jsonb, preview = $4::jsonb, "processingStage" = NULL,
@@ -168,7 +168,7 @@ export class DocumentJobs {
   ): Promise<boolean> {
     const rows = await this.database.query(
       `WITH revised AS (
-      UPDATE document SET "revisedKey" = $3, "revisedSize" = $4, "revisionNotices" = $5::jsonb, "processingStage" = 'final-assessment'
+      UPDATE document SET "revisedKey" = $3, "revisedSize" = $4, "revisionNotices" = $5::jsonb
       WHERE ${held} AND phase = 'rewrite' AND "revisedKey" IS NULL
       RETURNING id
     ) SELECT id FROM revised`,
@@ -177,10 +177,10 @@ export class DocumentJobs {
     return rows.length === 1;
   }
 
-  async complete(claim: JobClaim, finalAssessment: WritingAssessment | null): Promise<boolean> {
+  async complete(claim: JobClaim): Promise<boolean> {
     const rows = await this.database.query(
       `WITH completed AS (
-      UPDATE document SET ${publication}, "finalAssessment" = $3::jsonb
+      UPDATE document SET ${publication}
       WHERE id = $1 AND "claimToken" = $2 AND status = 'processing' AND phase = 'rewrite' AND ${reserved}
         AND "revisedKey" IS NOT NULL AND "leaseExpiresAt" > clock_timestamp()
       RETURNING id
@@ -189,7 +189,7 @@ export class DocumentJobs {
       WHERE "documentId" IN (SELECT id FROM completed) AND state = 'active'
       RETURNING id
     ) SELECT id FROM completed`,
-      [claim.id, claim.claimToken, finalAssessment === null ? null : JSON.stringify(finalAssessment)]
+      [claim.id, claim.claimToken]
     );
     return rows.length === 1;
   }
@@ -239,7 +239,7 @@ export class DocumentJobs {
         ("leaseExpiresAt" <= clock_timestamp() AND NOT (${resumable})))
       FOR UPDATE SKIP LOCKED
     ), published AS (
-      UPDATE document SET ${publication}, "finalAssessment" = NULL
+      UPDATE document SET ${publication}
       WHERE id IN (SELECT id FROM expired WHERE usable)
       RETURNING id
     ), charged AS (

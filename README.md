@@ -1,14 +1,14 @@
 # Unslopy
 
-Unslopy edits English and French DOCX files for students. Users sign in with Google, upload a document, and review an AI-style score from DeepSeek. They choose a rewrite strength and click **Unslopify** to edit with DeepSeek. The app checks the revised document and offers both versions for download.
+Unslopy edits English and French DOCX files for students. Users sign in with Google, upload a document, and review an AI detection rate from a private Oculus detector. They choose a rewrite strength and click **Unslopify** to edit with DeepSeek. The app checks the revised document and offers both versions for download.
 
-Editing reserves one monthly allowance slot and charges it when the revised download is ready. The score describes writing patterns and does not prove authorship. New uploads are limited to five server-rendered pages and 10 MB. See the [renderer reference](services/renderer/README.md).
+Editing reserves one monthly allowance slot and charges it when the revised download is ready. The rate is an uncalibrated model score. New uploads are limited to thirty server-rendered pages and 10 MB. See the [renderer reference](services/renderer/README.md) and the [detector reference](services/detector/README.md).
 
 The product name is Unslopy. Code, database, and Compose identifiers use `unslop-docs`.
 
 ## Run locally
 
-Use Docker with Compose, a Google OAuth web client, and a DeepSeek API key. The private DOCX renderer has a 768 MB memory limit and uses temporary storage for page counting. Run these commands from the repository root.
+Use Docker with Compose, a Google OAuth web client, and a DeepSeek API key. The private DOCX renderer has a 768 MB memory limit and uses temporary storage for page counting. The private detector image contains its model, is about 4.5 GB, and has a 4 GB memory limit. Run these commands from the repository root.
 
 1. Create the environment file. Keep `.env` out of version control.
 
@@ -64,7 +64,7 @@ Use these entry points in the pnpm and Nx monorepo:
 - [apps/web/src/app](apps/web/src/app) contains the Angular app with server-side rendering. Start in `domains/user/modules/documents` for the workspace or `domains/admin` for user management. Keep state and data access separate from UI components.
 - [apps/api/src/modules](apps/api/src/modules) contains NestJS modules, CQRS handlers, and TypeORM entities. Start in `documents` for uploads, assessments, rewrites, downloads, and deletion.
 - [apps/api/src/worker.ts](apps/api/src/worker.ts) starts the background worker. PostgreSQL stores document jobs and application data. Redis stores sessions and cache.
-- [services/renderer](services/renderer) renders DOCX files privately to enforce the upload page limit. Assessment and rewriting send text to DeepSeek using the pinned rules in [vendor/cursor-pstack-unslop](vendor/cursor-pstack-unslop).
+- [services/renderer](services/renderer) renders DOCX files privately to enforce the upload page limit. [services/detector](services/detector) scores assessed prose privately. Rewriting sends text to DeepSeek using the pinned rules in [vendor/cursor-pstack-unslop](vendor/cursor-pstack-unslop).
 - [libs/api-contracts](libs/api-contracts) contains the generated OpenAPI schema and TypeScript types shared with the web app.
 - [apps/api/src/modules/database/migrations](apps/api/src/modules/database/migrations) contains database migrations.
 

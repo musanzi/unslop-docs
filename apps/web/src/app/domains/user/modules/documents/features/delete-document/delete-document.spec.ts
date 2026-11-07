@@ -21,7 +21,7 @@ const idle: IDocumentResponse = {
   strength: null,
   failure: null
 };
-const sentToDeepSeek = 'Text already sent to DeepSeek may still be processed there';
+const sentToDeepSeek = 'Any text already sent to DeepSeek for editing may still be processed there';
 
 describe('Delete document confirmation', () => {
   function render(document: IDocumentResponse): string {
@@ -50,7 +50,7 @@ describe('Delete document confirmation', () => {
     ['processing', 'assessment', 'assessing'],
     ['queued', 'rewrite', null],
     ['processing', 'rewrite', 'editing'],
-    ['processing', 'rewrite', 'final-assessment']
+    ['processing', 'rewrite', 'validating']
   ] as const)('explains that a %s %s document stops and its DeepSeek result is discarded', (status, phase, stage) => {
     const text = render({ ...idle, status, phase, processingStage: stage });
     expect(text).toContain('Delete river.docx?');

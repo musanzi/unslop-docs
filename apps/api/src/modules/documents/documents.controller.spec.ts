@@ -36,7 +36,7 @@ import { DownloadDocumentHandler } from './queries/download-document.handler';
 import { DeleteDocumentHandler } from './commands/delete-document.handler';
 import { UnslopifyDocumentHandler } from './commands/unslopify-document.handler';
 import { FindDocumentPreviewHandler } from './queries/find-document-preview.handler';
-import { styleAssessmentFixture } from '@api/shared/testing/style-assessment-fixtures';
+import { detectionFixture } from '@api/shared/testing/detection-fixtures';
 import { DocumentPageValidator } from './document-page-validator';
 import { DocumentStorage } from './document-storage';
 import { readerFixture, textParagraph } from '@api/shared/testing/docx-reader-fixture';
@@ -223,7 +223,14 @@ describe('Private documents HTTP', () => {
   async function download(id: string, identity = 'owner') {
     return fetch(`${base}/documents/${id}/original`, { headers: identity ? { 'test-identity': identity } : {} });
   }
-  const assessment = styleAssessmentFixture(40);
+  const assessment = detectionFixture(40);
+  const publicAssessment = {
+    status: assessment.status,
+    rate: assessment.rate,
+    reason: assessment.reason,
+    method: assessment.method,
+    checkedAt: assessment.checkedAt
+  };
   const preview = {
     blocks: [{ kind: 'paragraph', level: null, text: 'Private student text.', inlines: [], rows: null, reason: null }]
   };
@@ -405,7 +412,7 @@ describe('Private documents HTTP', () => {
         status: 'assessed',
         phase: 'assessment',
         strength: null,
-        assessment: { rubric: assessment.rubric, style: assessment.style }
+        assessment: publicAssessment
       }
     });
     expect((await previewOf(documents[35].id)).status).toBe(200);
@@ -432,7 +439,7 @@ describe('Private documents HTTP', () => {
       assessment,
       preview,
       strength: 50,
-      processingStage: 'final-assessment',
+      processingStage: 'validating',
       revisedKey,
       revisedSize: 13
     });
@@ -505,22 +512,19 @@ describe('Private documents HTTP', () => {
     );
     expect(await readdir(join(root, 'public'))).toEqual([]);
   });
-  it('does not report a failed final assessment for a legacy completed document', async () => {
+  it('returns no rate for a legacy completed document', async () => {
     const { data: document } = await (await upload(await docxFixture())).json();
     Object.assign(records[0], {
       status: 'completed',
       phase: 'rewrite',
       strength: null,
-      assessment: { obsolete: true },
-      finalAssessment: null
+      assessment: { obsolete: true }
     });
     const response = await fetch(`${base}/documents/${document.id}`, { headers: { 'test-identity': 'owner' } });
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
       data: {
-        assessment: null,
-        finalAssessment: null,
-        finalScoreUnavailable: false
+        assessment: null
       }
     });
   });
@@ -539,9 +543,7 @@ describe('Private documents HTTP', () => {
     expect(await response.json()).toMatchObject({
       data: {
         status: 'assessed',
-        assessment: { rubric: assessment.rubric, style: assessment.style },
-        finalAssessment: null,
-        finalScoreUnavailable: false,
+        assessment: publicAssessment,
         revisionNotices: null
       }
     });
@@ -561,16 +563,13 @@ describe('Private documents HTTP', () => {
       processingStage: null,
       editingCompleted: null,
       editingTotal: null,
-      finalAssessment: null,
       revisionNotices: { keptPassages: [], uneditedElements: [{ reason: 'image', count: 1 }] }
     });
     expect(await (await get(document.id, 'owner')).json()).toMatchObject({
       data: {
         status: 'completed',
         progress: null,
-        assessment: { rubric: assessment.rubric, style: assessment.style },
-        finalAssessment: null,
-        finalScoreUnavailable: true,
+        assessment: publicAssessment,
         revisionNotices: { keptPassages: [], uneditedElements: [{ reason: 'image', count: 1 }] }
       }
     });
@@ -859,8 +858,7 @@ describe('Private documents HTTP', () => {
       strength: 50,
       revisedKey: key,
       revisedSize: revised.length,
-      assessment,
-      finalAssessment: styleAssessmentFixture(10)
+      assessment
     });
     const response = await get(data.id);
     expect(response.status).toBe(200);
@@ -887,9 +885,7 @@ describe('Private documents HTTP', () => {
         status: 'failed',
         phase: 'rewrite',
         strength: 50,
-        assessment: { rubric: assessment.rubric, style: assessment.style },
-        finalAssessment: null,
-        finalScoreUnavailable: false,
+        assessment: publicAssessment,
         failure: expect.stringContaining('citation')
       }
     });

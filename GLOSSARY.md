@@ -14,21 +14,15 @@ Unslop-docs helps students edit documents and download the revised documents.
 
 **Admin**: The person who manually changes users' statuses.
 
-**Writing assessment**: A report of writing patterns with examples from a document. It does not establish whether AI wrote the document.
-_Avoid_: AI detection rate, AI authorship percentage.
+**AI detection**: The automatic check that scores an original document with the pinned Oculus model and reports its AI detection rate.
 
-**Writing-pattern finding**: A passage quoted from a document, linked to an unslop rule, with an explanation of the writing problem in context. A word or punctuation mark alone does not establish a problem.
+**AI detection rate**: The Oculus score for a document, out of 100. It is the token-weighted mean of the model's scores for the document's assessed prose. It is a model score, not a calibrated probability.
 
-**AI-style score**: An estimate of how strongly a document exhibits AI-like writing patterns, based on the severity and coverage of validated writing-pattern findings. It does not establish whether AI wrote the document.
-_Avoid_: AI authorship percentage, probability of AI authorship.
-
-**Assessed prose**: The document's own prose, including prose in tables, that contributes to its AI-style score. Quotations, citations, reference lists, and code are excluded from scoring but may provide context.
-
-**Final assessment**: The automatic writing assessment of a revised document, shown alongside its initial assessment. It requires no separate user action or allowance.
+**Assessed prose**: The document's own prose, including prose in tables, that contributes to its AI detection rate. Quotation and code styles and reference lists are excluded.
 
 **Unslop**: Editing that removes the specified writing patterns while preserving the document's meaning, language, citations, quotations, and factual claims.
 
-**Rewrite strength**: The user's chosen extent of editing, from light edits to thorough rewriting. It does not promise a particular reduction in the AI-style score.
+**Rewrite strength**: The user's chosen extent of editing, from light edits to thorough rewriting. It does not promise a particular reduction in the AI detection rate.
 
 **Monthly allowance**: The maximum number of successful documents charged to a calendar month, measured in UTC. A document belongs to the month when its reservation was created.
 
@@ -36,17 +30,17 @@ _Avoid_: AI authorship percentage, probability of AI authorship.
 
 **Status change**: An admin's change to a user's FREE, PREMIUM, or GOLD status. The change applies immediately without resetting usage.
 
-**Queued document**: A document waiting for its writing assessment or a user-requested rewrite to start.
+**Queued document**: A document waiting for its AI detection or a user-requested rewrite to start.
 
-**Processing document**: A document whose initial assessment, editing, final assessment, or validation is in progress.
+**Processing document**: A document whose AI detection, editing, or validation is in progress.
 
-**Assessed document**: A document with a complete writing assessment that the user can review before choosing to start Unslopify. Assessment alone does not mean editing has succeeded.
+**Assessed document**: A document with a complete AI detection rate that the user can review before choosing to start Unslopify. Assessment alone does not mean editing has succeeded.
 
 **Revised document**: The edited DOCX whose formatting matches the original as closely as practical. Its owner can download it separately from the original and reviews and adjusts it before use.
 
 **Revision notice**: A record stored with a completed revision that names each passage kept unchanged after a failed citation, quotation, number, reference, or language check, and counts the protected elements left unedited. It does not claim that the rest of the document is semantically equivalent.
 
-**Completed document**: A document whose revised DOCX is ready to download, with its initial assessment and either its final assessment or a notice that the final score is unavailable.
+**Completed document**: A document whose revised DOCX is ready to download, with the AI detection rate of its original.
 
 **Failed document**: A document whose processing ended without a usable result. Its original remains available.
 
@@ -54,4 +48,4 @@ _Avoid_: AI authorship percentage, probability of AI authorship.
 
 **Processing attempt**: One run of assessment or a user-requested rewrite for a document, bounded by one processing deadline. Automatic provider retries belong to that same attempt.
 
-**Automatic provider retry**: Another call for the same initial assessment, final assessment, or editing chunk after a temporary provider failure. Each request permits two retries after its initial call.
+**Automatic provider retry**: Another call for the same AI detection or editing chunk after a temporary provider failure. Each request permits two retries after its initial call.

@@ -60,16 +60,50 @@ services:
       DB_NAME: ${DB_NAME}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-}
-      ASSESSMENT_TIMEOUT_MS: ${ASSESSMENT_TIMEOUT_MS:-300000}
+      ASSESSMENT_TIMEOUT_MS: ${ASSESSMENT_TIMEOUT_MS:-600000}
       PROCESSING_TIMEOUT_MS: ${PROCESSING_TIMEOUT_MS:-900000}
       DEEPSEEK_TIMEOUT_MS: ${DEEPSEEK_TIMEOUT_MS:-60000}
+      LOCAL_DETECTOR_URL: http://detector:8090
+      LOCAL_DETECTOR_TIMEOUT_MS: ${LOCAL_DETECTOR_TIMEOUT_MS:-600000}
       UPLOADS_DIR: /app/apps/api/uploads
       DOCUMENTS_DIR: /app/private-documents
     volumes:
       - documents_data:/app/private-documents
+    networks: [default, detection]
     depends_on:
       db:
         condition: service_healthy
+      detector:
+        condition: service_healthy
+  detector:
+    build:
+      context: ./services/detector
+      network: host
+      entitlements: [network.host]
+    restart: unless-stopped
+    environment:
+      DETECTOR_THREADS: ${DETECTOR_THREADS:-4}
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    mem_limit: 4g
+    cpus: 4
+    pids_limit: 256
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    networks: [detection]
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'python',
+          '-c',
+          'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8090/health", timeout=3)'
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 5m
   renderer:
     build:
       context: ./services/renderer
@@ -141,4 +175,6 @@ volumes:
 
 networks:
   rendering:
+    internal: true
+  detection:
     internal: true

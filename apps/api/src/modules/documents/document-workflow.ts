@@ -1,6 +1,5 @@
 import { Annotation, END, START, StateGraph } from '@langchain/langgraph';
 import { RunnableConfig } from '@langchain/core/runnables';
-import { AssessmentProvider } from './assessment-workflow';
 import { DocxDocument } from './docx-model';
 import {
   constructRevisedDocx,
@@ -12,8 +11,6 @@ import {
 } from './revise-docx';
 import { RevisionNotices } from './revision-notices';
 import { ProcessingStage } from './document-processing';
-
-export type DocumentProvider = AssessmentProvider & EditProvider;
 
 export interface RewriteHooks {
   stage?: (stage: ProcessingStage) => Promise<void>;

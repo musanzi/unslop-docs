@@ -34,7 +34,7 @@ export class DocumentResponse {
   @ApiProperty({
     enum: documentPhases,
     description:
-      'Processing attempt the status refers to: the automatic initial assessment, or the user-requested rewrite with its final assessment'
+      'Processing attempt the status refers to: the automatic AI detection, or the user-requested rewrite'
   })
   phase: DocumentPhase;
 
@@ -42,7 +42,7 @@ export class DocumentResponse {
     enum: processingStages,
     nullable: true,
     description:
-      'Active stage while processing; assessing and final-assessment have no measurable total, editing exposes progress'
+      'Active stage while processing; assessing has no measurable total, editing exposes progress'
   })
   processingStage: ProcessingStage | null;
 

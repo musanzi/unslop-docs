@@ -1,6 +1,6 @@
 # DOCX page rendering
 
-The private renderer uses LibreOffice to convert a validated DOCX to PDF and `pdfinfo` to count its pages. New uploads may contain at most five rendered pages, including covers, references, and blank pages. The server's count is authoritative and may differ from Word because of fonts and layout. Saved DOCX page metadata does not determine acceptance. Revised downloads and existing documents do not pass through this upload check.
+The private renderer uses LibreOffice to convert a validated DOCX to PDF and `pdfinfo` to count its pages. New uploads may contain at most thirty rendered pages, including covers, references, and blank pages. The server's count is authoritative and may differ from Word because of fonts and layout. Saved DOCX page metadata does not determine acceptance. Revised downloads and existing documents do not pass through this upload check.
 
 The API sends the original validated DOCX to `http://renderer:8091/pages`. The response contains the page count and SHA-256 of that exact input. API validation rejects mismatched hashes, invalid counts, and unavailable rendering before storing a document. A busy renderer returns a retryable upload error. It never substitutes a guessed count.
 
@@ -21,4 +21,4 @@ docker build -t unslop-docx-renderer:test services/renderer
 docker run --rm --network none --read-only --memory 768m --cpus 1 --pids-limit 128 --cap-drop ALL --security-opt no-new-privileges --tmpfs /tmp:size=256m,mode=1777 -v "$PWD/services/renderer:/tests:ro" unslop-docx-renderer:test python /tests/smoke.py
 ```
 
-The smoke check renders one-, five-, and six-page synthetic documents whose saved metadata falsely claims one page. CI runs this check. Deployment also verifies that the API page validator accepts five pages and rejects six, then checks assessment, editing, and final assessment with a synthetic document and the configured DeepSeek account.
+The smoke check renders one-, thirty-, and thirty-one-page synthetic documents whose saved metadata falsely claims one page. CI runs this check. Deployment also verifies that the API page validator accepts thirty pages and rejects thirty-one, then checks assessment, editing, and final assessment with a synthetic document and the configured DeepSeek account.

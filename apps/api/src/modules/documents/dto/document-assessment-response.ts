@@ -1,14 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { DocumentResponse } from './document-response';
-import { validateAssessment, WritingAssessment } from '../assessment-workflow';
 import { RevisionNotices } from '../revision-notices';
 import { Document } from '../entities/document.entity';
-import { assessmentMethod } from '../style-assessment';
+import { detectionMethod, DetectionUnavailableReason, DocumentDetection, validateDetection } from '../detection-rate';
 
-export class StyleAssessmentResponse {
-  @ApiProperty({ enum: ['deepseek'] })
-  provider: 'deepseek';
-
+export class DetectionRateResponse {
   @ApiProperty({ enum: ['complete', 'unavailable'] })
   status: 'complete' | 'unavailable';
 
@@ -17,44 +13,18 @@ export class StyleAssessmentResponse {
     minimum: 0,
     maximum: 100,
     nullable: true,
-    description: 'AI-style score calculated from word-weighted sentence severity. Does not establish authorship'
+    description: 'AI detection rate from the Oculus model: the token-weighted mean of its window scores, scaled to 100'
   })
-  score: number | null;
+  rate: number | null;
 
-  @ApiProperty({ type: String, enum: ['no_prose'], nullable: true })
-  reason: 'no_prose' | null;
+  @ApiProperty({ type: String, enum: ['no_prose', 'too_short', 'too_long'], nullable: true })
+  reason: DetectionUnavailableReason | null;
 
-  @ApiProperty()
-  modelVersion: string;
-
-  @ApiProperty({ enum: [assessmentMethod] })
-  method: typeof assessmentMethod;
+  @ApiProperty({ enum: [detectionMethod] })
+  method: typeof detectionMethod;
 
   @ApiProperty({ format: 'date-time' })
   checkedAt: string;
-
-  @ApiProperty({ description: 'SHA-256 of the text submitted for assessment' })
-  textHash: string;
-
-  @ApiProperty()
-  characterCount: number;
-
-  @ApiProperty()
-  wordCount: number;
-
-  @ApiProperty()
-  sentenceCount: number;
-
-  @ApiProperty()
-  weightedSeverity: number;
-}
-
-export class WritingAssessmentResponse {
-  @ApiProperty({ enum: ['unslop-style-v1'] })
-  rubric: 'unslop-style-v1';
-
-  @ApiProperty({ type: StyleAssessmentResponse })
-  style: StyleAssessmentResponse;
 }
 
 export class KeptPassageResponse {
@@ -86,33 +56,21 @@ export class RevisionNoticesResponse {
 
 export class DocumentAssessmentResponse extends DocumentResponse {
   @ApiProperty({
-    type: WritingAssessmentResponse,
+    type: DetectionRateResponse,
     nullable: true,
-    description: 'Initial assessment of the original, published when the document is assessed and retained afterwards'
+    description: 'AI detection result for the original, published when the document is assessed and retained afterwards'
   })
-  assessment: WritingAssessmentResponse | null;
-
-  @ApiProperty({
-    type: WritingAssessmentResponse,
-    nullable: true,
-    description: 'Automatic assessment of the revised document; null until completed or when its score is unavailable'
-  })
-  finalAssessment: WritingAssessmentResponse | null;
-
-  @ApiProperty({
-    description: 'True when the revised download is ready but its final assessment could not be completed'
-  })
-  finalScoreUnavailable: boolean;
+  assessment: DetectionRateResponse | null;
 
   @ApiProperty({ type: RevisionNoticesResponse, nullable: true, description: 'Notices recorded with the revision' })
   revisionNotices: RevisionNoticesResponse | null;
 }
 
-export function assessmentResponse(assessment: WritingAssessment | null): WritingAssessmentResponse | null {
+export function assessmentResponse(assessment: DocumentDetection | null): DetectionRateResponse | null {
   if (!assessment) return null;
   try {
-    const { rubric, style } = validateAssessment(assessment);
-    return { rubric, style };
+    const { status, rate, reason, method, checkedAt } = validateDetection(assessment);
+    return { status, rate, reason, method, checkedAt };
   } catch {
     return null;
   }
@@ -124,13 +82,9 @@ export function noticesResponse(notices: RevisionNotices | null): RevisionNotice
 }
 
 export function documentAssessmentResponse(document: Document, base: DocumentResponse): DocumentAssessmentResponse {
-  const completed = document.status === 'completed';
-  const finalAssessment = completed ? assessmentResponse(document.finalAssessment ?? null) : null;
   return {
     ...base,
     assessment: assessmentResponse(document.assessment ?? null),
-    finalAssessment,
-    finalScoreUnavailable: completed && document.strength != null && finalAssessment === null,
-    revisionNotices: completed ? noticesResponse(document.revisionNotices ?? null) : null
+    revisionNotices: document.status === 'completed' ? noticesResponse(document.revisionNotices ?? null) : null
   };
 }

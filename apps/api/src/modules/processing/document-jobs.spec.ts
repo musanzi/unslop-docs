@@ -1,28 +1,18 @@
-import { WritingAssessment1793881000000 } from '../database/migrations/1793881000000-WritingAssessment';
-import { MonthlyAllowance1793880600000 } from '../database/migrations/1793880600000-MonthlyAllowance';
-import { RevisionNotices1793880800000 } from '../database/migrations/1793880800000-RevisionNotices';
-import { AssessThenUnslopify1793880900000 } from '../database/migrations/1793880900000-AssessThenUnslopify';
 import { Logger } from '@nestjs/common';
+import { createDocumentTestSchema } from '@api/shared/testing/document-database';
 import { faithfulRevisionProvider } from '@api/shared/testing/revision-fixtures';
-import { DocumentRevision1793880400000 } from '../database/migrations/1793880400000-DocumentRevision';
-import {
-  assessmentDocxFixture,
-  assessmentFixtureText,
-  fakeAssessmentProvider
-} from '@api/shared/testing/assessment-fixtures';
+import { assessmentDocxFixture, assessmentFixtureText } from '@api/shared/testing/assessment-fixtures';
 import { AssessmentWorker, WorkerSettings } from './assessment-worker';
 import { readerFixture, textParagraph } from '@api/shared/testing/docx-reader-fixture';
 import { PGlite } from '@electric-sql/pglite';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { DocumentAssessment1793880300000 } from '../database/migrations/1793880300000-DocumentAssessment';
 import { DocumentJobs } from './document-jobs';
-import { ProviderRetries1793880500000 } from '../database/migrations/1793880500000-ProviderRetries';
-import { styleAssessmentFixture } from '@api/shared/testing/style-assessment-fixtures';
+import { detectionFixture } from '@api/shared/testing/detection-fixtures';
 import { ProviderFailure } from '../documents/provider-failure';
 
 const noNotices = { keptPassages: [], uneditedElements: [] };
-const initialAssessment = styleAssessmentFixture(40);
+const initialAssessment = detectionFixture(40);
 const preview = { blocks: [] };
 const timeouts = { processingTimeoutMs: 900000, providerTimeoutMs: 60000 };
 
@@ -40,7 +30,6 @@ describe('Durable document jobs', () => {
           processingDeadline: Date;
           claimToken: string;
           assessment: unknown;
-          finalAssessment: unknown;
           preview: unknown;
           revisedKey: string;
           revisedSize: number;
@@ -54,17 +43,10 @@ describe('Durable document jobs', () => {
   };
   const jobs = new DocumentJobs(sql);
   const owner = randomUUID();
+  let fixtureBytes: Buffer;
   beforeAll(async () => {
-    await database.exec(
-      `CREATE TABLE "user" (id uuid PRIMARY KEY); CREATE TABLE document (id uuid PRIMARY KEY, "originalKey" text, size integer, "createdAt" timestamptz DEFAULT now())`
-    );
-    await new DocumentAssessment1793880300000().up(sql);
-    await new DocumentRevision1793880400000().up(sql);
-    await new ProviderRetries1793880500000().up(sql);
-    await new MonthlyAllowance1793880600000().up(sql);
-    await new RevisionNotices1793880800000().up(sql);
-    await new AssessThenUnslopify1793880900000().up(sql);
-    await new WritingAssessment1793881000000().up(sql);
+    fixtureBytes = await assessmentDocxFixture();
+    await createDocumentTestSchema(database);
     await database.query('INSERT INTO "user" (id) VALUES ($1)', [owner]);
   });
   beforeEach(async () => {
@@ -131,7 +113,7 @@ describe('Durable document jobs', () => {
   it('publishes the initial assessment and preview without a reservation, then waits for the user', async () => {
     const id = await enqueue();
     const storage = privateStorage(await assessmentDocxFixture());
-    const provider = faithfulRevisionProvider(true);
+    const provider = faithfulRevisionProvider();
     provider.edit = vi.fn(provider.edit);
     const worker = workerWith(storage, provider, { ...timeouts, assessmentTimeoutMs: 300000 });
     expect(await worker.runOnce()).toBe(true);
@@ -166,39 +148,25 @@ describe('Durable document jobs', () => {
     expect(await worker.runOnce()).toBe(false);
   });
 
-  it('assesses the original, rewrites using unslop, and assesses the actual revised text', async () => {
+  it('sends the assessed prose to the detector, then rewrites only when the user asks', async () => {
     const id = await enqueue();
     const storage = privateStorage(await assessmentDocxFixture());
-    const texts: string[] = [];
-    const assess = vi.fn(async (text: string) => {
-      texts.push(text);
-      return styleAssessmentFixture(texts.length === 1 ? 80 : 60);
-    });
     const editor = faithfulRevisionProvider();
     const edit = vi.fn(editor.edit);
-    const provider = { assess, edit };
-    const worker = workerWith(storage, provider);
+    const detect = vi.fn(editor.detect);
+    const worker = workerWith(storage, { edit, detect });
     await worker.runOnce();
-    expect(texts).toEqual([assessmentFixtureText]);
+    expect(detect.mock.calls[0][0]).toBe(assessmentFixtureText);
     expect(edit).not.toHaveBeenCalled();
-    expect(await sql.query('SELECT status, assessment FROM document WHERE id = $1', [id])).toMatchObject([
-      { status: 'assessed', assessment: { style: { score: 80 } } }
-    ]);
+    const [assessed] = await sql.query('SELECT status, assessment FROM document WHERE id = $1', [id]);
+    expect(assessed).toMatchObject({ status: 'assessed', assessment: { status: 'complete', rate: 40 } });
     await database.query(`UPDATE document SET status = 'queued', phase = 'rewrite', strength = 50 WHERE id = $1`, [id]);
     await reserve(id);
     await worker.runOnce();
-    expect(texts).toHaveLength(2);
-    expect(texts[1]).toContain('To assess this work');
-    expect(texts[1]).not.toContain('In order to');
     expect(edit.mock.calls[0][0]).toContain('PINNED SKILL');
-    expect(
-      await sql.query('SELECT status, assessment, "finalAssessment" FROM document WHERE id = $1', [id])
-    ).toMatchObject([
-      {
-        status: 'completed',
-        assessment: { style: { score: 80 } },
-        finalAssessment: { style: { score: 60, modelVersion: 'test-model' } }
-      }
+    expect(detect).toHaveBeenCalledTimes(1);
+    expect(await sql.query('SELECT status, assessment FROM document WHERE id = $1', [id])).toEqual([
+      { status: 'completed', assessment: assessed.assessment }
     ]);
     expect(await reservations(id)).toEqual(['charged']);
   });
@@ -217,39 +185,31 @@ describe('Durable document jobs', () => {
     ]);
   });
 
-  it('reassesses an older original before rewriting after its detector result was removed', async () => {
+  it('rates an older original before rewriting after its previous result was removed', async () => {
     const id = await enqueueRewrite();
     await database.query('UPDATE document SET assessment = NULL WHERE id = $1', [id]);
-    const storage = privateStorage(await assessmentDocxFixture());
-    const provider = faithfulRevisionProvider();
-    const assess = vi.fn(provider.assess);
-    await workerWith(storage, { ...provider, assess }).runOnce();
-    expect(assess).toHaveBeenCalledTimes(2);
-    expect(
-      await sql.query('SELECT status, assessment, "finalAssessment" FROM document WHERE id = $1', [id])
-    ).toMatchObject([
-      { status: 'completed', assessment: { rubric: 'unslop-style-v1' }, finalAssessment: { rubric: 'unslop-style-v1' } }
+    await workerWith(privateStorage(await assessmentDocxFixture()), faithfulRevisionProvider()).runOnce();
+    expect(await sql.query('SELECT status, assessment FROM document WHERE id = $1', [id])).toMatchObject([
+      { status: 'completed', assessment: { status: 'complete', rate: 40 } }
     ]);
     expect(await reservations(id)).toEqual(['charged']);
   });
 
-  it('clears old assessments while preserving completed downloads and charged usage', async () => {
+  it('publishes a saved revision on resume without editing again', async () => {
     const id = await enqueueRewrite();
-    const storage = privateStorage(await assessmentDocxFixture());
-    await workerWith(storage, faithfulRevisionProvider()).runOnce();
-    const before = await sql.query(
-      'SELECT status, "originalKey", "revisedKey", "revisedSize" FROM document WHERE id = $1',
-      [id]
-    );
-    await new WritingAssessment1793881000000().up(sql);
-    expect(
-      await sql.query('SELECT status, "originalKey", "revisedKey", "revisedSize" FROM document WHERE id = $1', [id])
-    ).toEqual(before);
-    expect(await sql.query('SELECT assessment, "finalAssessment" FROM document WHERE id = $1', [id])).toEqual([
-      { assessment: null, finalAssessment: null }
+    const claim = await jobs.claim(timeouts);
+    const checkpoint = await jobs.startRequest(claim, 'edit:chunk', 'input');
+    await jobs.finishRequest(claim, 'edit:chunk', { ...checkpoint, state: 'succeeded', outcome: {} });
+    await jobs.saveRevision(claim, { key: 'saved-revision.docx', size: 42 }, noNotices);
+    await database.query(`UPDATE document SET "leaseExpiresAt" = now() - interval '1 second' WHERE id = $1`, [id]);
+    const provider = faithfulRevisionProvider();
+    provider.edit = vi.fn(provider.edit);
+    expect(await workerWith(privateStorage(await assessmentDocxFixture()), provider).runOnce()).toBe(true);
+    expect(provider.edit).not.toHaveBeenCalled();
+    expect(await sql.query('SELECT status, "revisedKey" FROM document WHERE id = $1', [id])).toEqual([
+      { status: 'completed', revisedKey: 'saved-revision.docx' }
     ]);
     expect(await reservations(id)).toEqual(['charged']);
-    expect(await jobs.claim(timeouts)).toBeNull();
   });
 
   it('claims a queued rewrite only while it holds an active reservation', async () => {
@@ -264,7 +224,7 @@ describe('Durable document jobs', () => {
     expect(await sql.query('SELECT status FROM document WHERE id = $1', [id])).toEqual([{ status: 'completed' }]);
   });
 
-  it('rewrites with the persisted strength, assesses the revised text and charges the slot once', async () => {
+  it('rewrites with the persisted strength, keeps the rate and charges the slot once', async () => {
     const id = await enqueueRewrite(80);
     const storage = privateStorage(await assessmentDocxFixture());
     const provider = faithfulRevisionProvider();
@@ -274,22 +234,12 @@ describe('Durable document jobs', () => {
       editSystems.push(system);
       return edit(system, chunk, signal);
     };
-    const assessCalls: { text: string; stage: string; revisedKey: string }[] = [];
-    provider.assess = async (text) => {
-      const [row] = await sql.query('SELECT "processingStage", "revisedKey" FROM document WHERE id = $1', [id]);
-      assessCalls.push({ text, stage: row.processingStage, revisedKey: row.revisedKey });
-      return styleAssessmentFixture(15);
-    };
     expect(await workerWith(storage, provider).runOnce()).toBe(true);
     expect(editSystems.length).toBeGreaterThan(0);
     for (const system of editSystems) expect(system).toContain('Rewrite strength: 80 of 100');
-    expect(assessCalls).toHaveLength(1);
-    expect(assessCalls[0].text).toContain('To assess this work');
-    expect(assessCalls[0].text).not.toContain('In order to');
-    expect(assessCalls[0].stage).toBe('final-assessment');
-    expect(storage.revisions.has(assessCalls[0].revisedKey)).toBe(true);
+    const [revisedKey] = storage.revisions.keys();
     const [row] = await sql.query(
-      'SELECT status, phase, strength, assessment, "finalAssessment", "revisedKey", "revisedSize", "revisionNotices", "processingStage", "claimToken", "editingCompleted", "editingTotal" FROM document WHERE id = $1',
+      'SELECT status, phase, strength, assessment, "revisedKey", "revisedSize", "revisionNotices", "processingStage", "claimToken", "editingCompleted", "editingTotal" FROM document WHERE id = $1',
       [id]
     );
     expect(row).toEqual({
@@ -297,9 +247,8 @@ describe('Durable document jobs', () => {
       phase: 'rewrite',
       strength: 80,
       assessment: initialAssessment,
-      finalAssessment: styleAssessmentFixture(15),
-      revisedKey: assessCalls[0].revisedKey,
-      revisedSize: storage.revisions.get(assessCalls[0].revisedKey).length,
+      revisedKey,
+      revisedSize: storage.revisions.get(revisedKey).length,
       revisionNotices: noNotices,
       processingStage: null,
       claimToken: null,
@@ -308,16 +257,6 @@ describe('Durable document jobs', () => {
     });
     expect(await reservations(id)).toEqual(['charged']);
     expect(await workerWith(storage, provider).runOnce()).toBe(false);
-  });
-
-  it('publishes a higher final score instead of rejecting the revision', async () => {
-    const id = await enqueueRewrite();
-    const provider = faithfulRevisionProvider();
-    provider.assess = async () => styleAssessmentFixture(95);
-    await workerWith(privateStorage(await assessmentDocxFixture()), provider).runOnce();
-    const [row] = await sql.query('SELECT status, "finalAssessment" FROM document WHERE id = $1', [id]);
-    expect(row).toMatchObject({ status: 'completed', finalAssessment: { style: { score: 95 } } });
-    expect(await reservations(id)).toEqual(['charged']);
   });
 
   it('reports completed and total editing work while chunks are edited and clears it afterwards', async () => {
@@ -344,87 +283,17 @@ describe('Durable document jobs', () => {
     ).toEqual([{ status: 'completed', editingCompleted: null, editingTotal: null }]);
   });
 
-  it('publishes the usable revision with an unavailable final score after the final assessment exhausts retries', async () => {
+  it('keeps one job processing through two delayed retries and fails on the third provider call', async () => {
     const id = await enqueueRewrite();
     const storage = privateStorage(await assessmentDocxFixture());
     const provider = faithfulRevisionProvider();
-    provider.edit = vi.fn(provider.edit);
-    provider.assess = vi.fn(async () => {
+    provider.edit = vi.fn(async () => {
       throw Object.assign(new Error('private provider detail'), { status: 503 });
     });
     const worker = () => workerWith(storage, provider);
     await worker().runOnce();
-    const edits = vi.mocked(provider.edit).mock.calls.length;
-    expect(await sql.query('SELECT status, "processingStage" FROM document WHERE id = $1', [id])).toEqual([
-      { status: 'processing', processingStage: 'final-assessment' }
-    ]);
-    expect(storage.revisions.size).toBe(1);
-    expect(await reservations(id)).toEqual(['active']);
-    for (let retry = 0; retry < 2; retry++) {
-      await database.query(`UPDATE document SET "nextRequestAt" = now() - interval '1 second' WHERE id = $1`, [id]);
-      await worker().runOnce();
-    }
-    expect(provider.assess).toHaveBeenCalledTimes(3);
-    expect(provider.edit).toHaveBeenCalledTimes(edits);
-    const [row] = await sql.query(
-      'SELECT status, assessment, "finalAssessment", "revisedKey", "failureCode" FROM document WHERE id = $1',
-      [id]
-    );
-    expect(row).toMatchObject({
-      status: 'completed',
-      assessment: initialAssessment,
-      finalAssessment: null,
-      failureCode: null
-    });
-    expect(storage.revisions.has(row.revisedKey)).toBe(true);
-    expect(await reservations(id)).toEqual(['charged']);
-    expect(await worker().runOnce()).toBe(false);
-  });
-
-  it.each(['deadline', 'lease', 'shutdown', 'malformed'] as const)(
-    'publishes the usable revision with an unavailable score when %s ends the final assessment',
-    async (ending) => {
-      const id = await enqueueRewrite();
-      const storage = privateStorage(await assessmentDocxFixture());
-      const shutdown = new AbortController();
-      const provider = faithfulRevisionProvider();
-      provider.assess = async () => {
-        if (ending === 'deadline')
-          await database.query(`UPDATE document SET "processingDeadline" = now() - interval '1 second' WHERE id = $1`, [
-            id
-          ]);
-        if (ending === 'lease')
-          await database.query(`UPDATE document SET "leaseExpiresAt" = now() - interval '1 second' WHERE id = $1`, [
-            id
-          ]);
-        if (ending === 'shutdown') shutdown.abort();
-        if (ending === 'malformed') return { private: 'unvalidated private output' };
-        return styleAssessmentFixture(10);
-      };
-      await workerWith(storage, provider).runOnce(shutdown.signal);
-      const rows = await sql.query(
-        'SELECT status, "finalAssessment", "revisedKey", "failureCode", "providerRequests" FROM document WHERE id = $1',
-        [id]
-      );
-      expect(rows[0]).toMatchObject({ status: 'completed', finalAssessment: null, failureCode: null });
-      expect(storage.revisions.has(rows[0].revisedKey)).toBe(true);
-      expect(JSON.stringify(rows)).not.toContain('unvalidated private output');
-      expect(await reservations(id)).toEqual(['charged']);
-      expect(await jobs.claim(timeouts)).toBeNull();
-    }
-  );
-
-  it('keeps one job processing through two delayed retries and fails on the third provider call', async () => {
-    const id = await enqueue();
-    const storage = privateStorage(await assessmentDocxFixture());
-    const provider = faithfulRevisionProvider();
-    provider.assess = vi.fn(async () => {
-      throw Object.assign(new Error('private provider detail'), { status: 503 });
-    });
-    const worker = () => workerWith(storage, provider);
-    await worker().runOnce();
-    expect(await sql.query('SELECT status, assessment, "failureCode" FROM document')).toEqual([
-      { status: 'processing', assessment: null, failureCode: null }
+    expect(await sql.query('SELECT status, "failureCode" FROM document')).toEqual([
+      { status: 'processing', failureCode: null }
     ]);
     const [first] = await sql.query('SELECT "processingAttemptId", "processingDeadline" FROM document');
     expect(await worker().runOnce()).toBe(false);
@@ -432,27 +301,22 @@ describe('Durable document jobs', () => {
       await database.query(`UPDATE document SET "nextRequestAt" = now() - interval '1 second' WHERE id = $1`, [id]);
       await worker().runOnce();
     }
-    expect(provider.assess).toHaveBeenCalledTimes(3);
+    expect(provider.edit).toHaveBeenCalledTimes(3);
     expect(await sql.query('SELECT status, phase, assessment, "failureCode" FROM document')).toEqual([
-      { status: 'failed', phase: 'assessment', assessment: null, failureCode: 'provider' }
+      { status: 'failed', phase: 'rewrite', assessment: initialAssessment, failureCode: 'provider' }
     ]);
     expect(await sql.query('SELECT "processingAttemptId", "processingDeadline" FROM document')).toEqual([first]);
     expect(storage.revisions.size).toBe(0);
+    expect(await reservations(id)).toEqual(['released']);
     expect(await worker().runOnce()).toBe(false);
   });
+
   it('resumes each chunk with its own retry budget and reuses successful requests across restarts', async () => {
     await enqueueRewrite();
     const storage = privateStorage(await readerFixture(textParagraph('word '.repeat(2000))));
     const provider = faithfulRevisionProvider();
-    const assess = provider.assess;
     const edit = provider.edit;
     const calls = new Map<string, number>();
-    provider.assess = vi.fn(async (text, signal) => {
-      const count = (calls.get('assess') ?? 0) + 1;
-      calls.set('assess', count);
-      if (count < 3) throw Object.assign(new Error('private'), { status: 429 });
-      return assess(text, signal);
-    });
     provider.edit = vi.fn(async (system, chunk, signal) => {
       const count = (calls.get(chunk.id) ?? 0) + 1;
       calls.set(chunk.id, count);
@@ -468,10 +332,8 @@ describe('Durable document jobs', () => {
       expect(await worker().runOnce()).toBe(false);
       await database.query(`UPDATE document SET "nextRequestAt" = now() - interval '1 second'`);
     }
-    expect(await sql.query('SELECT status, "finalAssessment" FROM document')).toEqual([
-      { status: 'completed', finalAssessment: styleAssessmentFixture(20) }
-    ]);
-    expect(calls.size).toBeGreaterThan(3);
+    expect(await sql.query('SELECT status FROM document')).toEqual([{ status: 'completed' }]);
+    expect(calls.size).toBeGreaterThan(1);
     expect([...calls.values()]).toEqual(Array(calls.size).fill(3));
     expect(storage.revisions.size).toBe(1);
     expect(await worker().runOnce()).toBe(false);
@@ -483,18 +345,17 @@ describe('Durable document jobs', () => {
     expect(Object.values(checkpoints).map(({ state, attempts }) => ({ state, attempts }))).toEqual(
       Array(calls.size).fill({ state: 'succeeded', attempts: 3 })
     );
-    expect(Object.keys(checkpoints)).toContain('style-assessment:final:v1');
   });
   it.each([400, 401, 403])('makes only one call for permanent HTTP %s failures', async (status) => {
-    await enqueue();
+    await enqueueRewrite();
     const provider = faithfulRevisionProvider();
-    provider.assess = vi.fn(async () => {
+    provider.edit = vi.fn(async () => {
       throw Object.assign(new Error('private'), { status });
     });
     const storage = privateStorage(await assessmentDocxFixture());
     const worker = workerWith(storage, provider);
     await worker.runOnce();
-    expect(provider.assess).toHaveBeenCalledTimes(1);
+    expect(provider.edit).toHaveBeenCalledTimes(1);
     expect(await sql.query('SELECT status, "failureCode" FROM document')).toEqual([
       { status: 'failed', failureCode: 'provider' }
     ]);
@@ -503,9 +364,9 @@ describe('Durable document jobs', () => {
   });
 
   it('expires a scheduled retry at the original deadline without another request', async () => {
-    const id = await enqueue();
+    const id = await enqueueRewrite();
     const provider = faithfulRevisionProvider();
-    provider.assess = vi.fn(async () => {
+    provider.edit = vi.fn(async () => {
       throw Object.assign(new Error('private'), { status: 503 });
     });
     const storage = privateStorage(await assessmentDocxFixture());
@@ -513,7 +374,7 @@ describe('Durable document jobs', () => {
     await worker.runOnce();
     await database.query(`UPDATE document SET "processingDeadline" = now() - interval '1 second' WHERE id = $1`, [id]);
     expect(await worker.runOnce()).toBe(false);
-    expect(provider.assess).toHaveBeenCalledTimes(1);
+    expect(provider.edit).toHaveBeenCalledTimes(1);
     expect(await sql.query('SELECT status, "failureCode" FROM document')).toEqual([
       { status: 'failed', failureCode: 'deadline' }
     ]);
@@ -523,7 +384,6 @@ describe('Durable document jobs', () => {
     const id = await enqueueRewrite();
     const storage = privateStorage(await readerFixture(textParagraph('word '.repeat(2000))));
     const provider = faithfulRevisionProvider();
-    provider.assess = vi.fn(provider.assess);
     provider.edit = vi.fn(provider.edit);
     let starts = 0;
     let unavailable = false;
@@ -544,17 +404,16 @@ describe('Durable document jobs', () => {
     await workerWith(storage, provider, { processingTimeoutMs: 1000, providerTimeoutMs: 60000 }).runOnce();
     expect(await sql.query('SELECT status FROM document')).toEqual([{ status: 'completed' }]);
     expect(await sql.query('SELECT "processingAttemptId", "processingDeadline" FROM document')).toEqual([before]);
-    expect(provider.assess).toHaveBeenCalledTimes(1);
     expect(vi.mocked(provider.edit).mock.calls.filter(([, chunk]) => chunk.id === firstChunk)).toHaveLength(1);
     expect(storage.revisions.size).toBe(1);
     expect(await reservations(id)).toEqual(['charged']);
   });
 
   it('fails a request with an unknown outcome after a hard stop instead of repeating it', async () => {
-    await enqueue();
+    const id = await enqueueRewrite();
     const storage = privateStorage(await assessmentDocxFixture());
     const provider = faithfulRevisionProvider();
-    provider.assess = vi.fn(provider.assess);
+    provider.edit = vi.fn(provider.edit);
     let unavailable = false;
     const interruptedJobs = new DocumentJobs({
       query: async (query, values) => {
@@ -568,26 +427,23 @@ describe('Durable document jobs', () => {
     );
     await database.query(`UPDATE document SET "leaseExpiresAt" = now() - interval '1 second'`);
     expect(await workerWith(storage, provider).runOnce()).toBe(false);
-    expect(provider.assess).toHaveBeenCalledTimes(1);
+    expect(provider.edit).toHaveBeenCalledTimes(1);
     expect(await sql.query('SELECT status, "failureCode" FROM document')).toEqual([
       { status: 'failed', failureCode: 'interrupted' }
     ]);
     expect(storage.revisions.size).toBe(0);
+    expect(await reservations(id)).toEqual(['released']);
   });
   it('rotates only the claim token on retry and rejects stale request writes and publication', async () => {
     const id = await enqueue();
     const first = await jobs.claim(timeouts);
-    const request = await jobs.startRequest(first, 'style-assessment:initial:v1', 'input');
+    const request = await jobs.startRequest(first, 'edit:chunk', 'input');
     expect(request.attempts).toBe(1);
-    expect(await jobs.finishRequest(first, 'style-assessment:initial:v1', { ...request, state: 'retry' }, 1000)).toBe(
-      true
-    );
+    expect(await jobs.finishRequest(first, 'edit:chunk', { ...request, state: 'retry' }, 1000)).toBe(true);
     expect(await jobs.claim(timeouts)).toBeNull();
     expect(await jobs.recover()).toBe(0);
-    expect(await jobs.startRequest(first, 'style-assessment:initial:v1', 'input')).toBeNull();
-    expect(
-      await jobs.finishRequest(first, 'style-assessment:initial:v1', { ...request, state: 'succeeded', outcome: {} })
-    ).toBe(false);
+    expect(await jobs.startRequest(first, 'edit:chunk', 'input')).toBeNull();
+    expect(await jobs.finishRequest(first, 'edit:chunk', { ...request, state: 'succeeded', outcome: {} })).toBe(false);
     expect(await jobs.publishAssessment(first, initialAssessment, preview)).toBe(false);
     await database.query(`UPDATE document SET "nextRequestAt" = now() - interval '1 second' WHERE id = $1`, [id]);
     const claims = await Promise.all([jobs.claim(timeouts), new DocumentJobs(sql).claim(timeouts)]);
@@ -598,37 +454,10 @@ describe('Durable document jobs', () => {
     expect(next.processingDeadline).toEqual(first.processingDeadline);
     expect(next.processingStartedAt).toEqual(first.processingStartedAt);
     expect(await jobs.fail(first, 'provider')).toBe(false);
-    expect(await jobs.startRequest(next, 'style-assessment:initial:v1', 'changed input')).toBeNull();
-    expect((await jobs.startRequest(next, 'style-assessment:initial:v1', 'input')).attempts).toBe(2);
+    expect(await jobs.startRequest(next, 'edit:chunk', 'changed input')).toBeNull();
+    expect((await jobs.startRequest(next, 'edit:chunk', 'input')).attempts).toBe(2);
   });
 
-  it('fails malformed assessments once and keeps their contents out of checkpoints', async () => {
-    await enqueue();
-    const storage = privateStorage(await assessmentDocxFixture());
-    const provider = faithfulRevisionProvider();
-    provider.assess = vi.fn(async () => ({ private: 'unvalidated private output' }));
-    const worker = workerWith(storage, provider);
-    await worker.runOnce();
-    expect(provider.assess).toHaveBeenCalledTimes(1);
-    const rows = await sql.query('SELECT status, "providerRequests" FROM document');
-    expect(rows[0].status).toBe('failed');
-    expect(JSON.stringify(rows)).not.toContain('unvalidated private output');
-    expect(storage.revisions.size).toBe(0);
-    expect(await worker.runOnce()).toBe(false);
-  });
-
-  it('rolls retry persistence back without making paused requests eligible for new calls', async () => {
-    const id = await enqueue();
-    const claim = await jobs.claim(timeouts);
-    const checkpoint = await jobs.startRequest(claim, 'style-assessment:initial:v1', 'input');
-    await jobs.finishRequest(claim, 'style-assessment:initial:v1', { ...checkpoint, state: 'retry' }, 1000);
-    await new ProviderRetries1793880500000().down(sql);
-    expect(await sql.query('SELECT status, "failureCode", "originalKey" FROM document')).toEqual([
-      { status: 'failed', failureCode: 'interrupted', originalKey: `${id}.docx` }
-    ]);
-    await new ProviderRetries1793880500000().up(sql);
-    expect(await jobs.claim(timeouts)).toBeNull();
-  });
   it('claims a durable queued rewrite once across worker instances and publishes once', async () => {
     const id = await enqueueRewrite();
     const restartedWorker = new DocumentJobs(sql);
@@ -638,8 +467,8 @@ describe('Durable document jobs', () => {
     expect([first, second].filter(Boolean)).toHaveLength(1);
     expect(await jobs.saveRevision(claim, { key: `${randomUUID()}.docx`, size: 123 }, noNotices)).toBe(true);
     expect(await jobs.saveRevision(claim, { key: `${randomUUID()}.docx`, size: 123 }, noNotices)).toBe(false);
-    expect(await jobs.complete(claim, null)).toBe(true);
-    expect(await restartedWorker.complete(claim, null)).toBe(false);
+    expect(await jobs.complete(claim)).toBe(true);
+    expect(await restartedWorker.complete(claim)).toBe(false);
     expect(await reservations(id)).toEqual(['charged']);
     expect(await jobs.claim(timeouts)).toBeNull();
   });
@@ -671,62 +500,81 @@ describe('Durable document jobs', () => {
     expect(await reservations(rewrite)).toEqual(['released']);
   });
 
-  it('runs the real assessment through the DOCX reader with a fake provider', async () => {
+  it('retries a busy detector twice, then fails without a partial result or provider details', async () => {
     const id = await enqueue();
-    const source = assessmentFixtureText;
-    const bytes = await assessmentDocxFixture();
-    const worker = new AssessmentWorker(
-      jobs,
-      { read: async () => bytes, write: async () => {}, remove: async () => {} },
-      {
-        edit: faithfulRevisionProvider().edit,
-        assess: async (text) => {
-          expect(text).toBe(source);
-          return styleAssessmentFixture(40);
-        }
-      },
-      'pinned rules',
-      timeouts
-    );
-    expect(await worker.runOnce()).toBe(true);
-    expect(await worker.runOnce()).toBe(false);
-    expect(await sql.query('SELECT status, assessment FROM document WHERE id = $1', [id])).toEqual([
-      { status: 'assessed', assessment: initialAssessment }
+    const provider = faithfulRevisionProvider();
+    provider.detect = vi.fn(async () => {
+      throw Object.assign(new Error('private document text'), { status: 429 });
+    });
+    const worker = () => workerWith(privateStorage(fixtureBytes), provider);
+    await worker().runOnce();
+    expect(await sql.query('SELECT status, assessment FROM document')).toEqual([
+      { status: 'processing', assessment: null }
+    ]);
+    for (let retry = 0; retry < 2; retry++) {
+      await database.query(`UPDATE document SET "nextRequestAt" = now() - interval '1 second' WHERE id = $1`, [id]);
+      await worker().runOnce();
+    }
+    expect(provider.detect).toHaveBeenCalledTimes(3);
+    const rows = await sql.query('SELECT status, assessment, "failureCode", "providerRequests" FROM document');
+    expect(rows[0]).toMatchObject({ status: 'failed', assessment: null, failureCode: 'provider' });
+    expect(JSON.stringify(rows)).not.toContain('private document text');
+  });
+
+  it('publishes an unavailable result so a short document can still be edited', async () => {
+    const id = await enqueue();
+    const provider = faithfulRevisionProvider();
+    provider.detect = async () => ({
+      ...detectionFixture(0),
+      status: 'unavailable',
+      rate: null,
+      aiScore: null,
+      reason: 'too_short',
+      tokenCount: 0,
+      segmentCount: 0
+    });
+    await workerWith(privateStorage(fixtureBytes), provider).runOnce();
+    expect(await sql.query('SELECT status, assessment FROM document WHERE id = $1', [id])).toMatchObject([
+      { status: 'assessed', assessment: { status: 'unavailable', rate: null, reason: 'too_short' } }
     ]);
   });
 
-  it('fails provider errors without partial assessments or provider details', async () => {
+  it('keeps document text out of the detection checkpoint', async () => {
+    await enqueue();
+    await workerWith(privateStorage(fixtureBytes), faithfulRevisionProvider()).runOnce();
+    const rows = await sql.query('SELECT "providerRequests" FROM document');
+    expect(JSON.stringify(rows)).not.toContain('In order to assess');
+  });
+
+  it('fails an unreadable original without a partial result or calling the provider', async () => {
     const id = await enqueue();
-    const bytes = await readerFixture(textParagraph('A short document.'));
+    const provider = faithfulRevisionProvider();
+    provider.edit = vi.fn(provider.edit);
     const worker = new AssessmentWorker(
       jobs,
-      { read: async () => bytes, write: async () => {}, remove: async () => {} },
-      {
-        edit: faithfulRevisionProvider().edit,
-        assess: async () => {
-          throw new Error('private-key and private document text');
-        }
-      },
+      { read: async () => Buffer.from('not a docx'), write: async () => {}, remove: async () => {} },
+      provider,
       'rules',
       timeouts
     );
     await worker.runOnce();
+    expect(provider.edit).not.toHaveBeenCalled();
     expect(await sql.query('SELECT status, assessment, "failureCode" FROM document WHERE id = $1', [id])).toEqual([
       { status: 'failed', assessment: null, failureCode: 'provider' }
     ]);
   });
 
   it.each([
-    { processingTimeoutMs: 900000, assessmentTimeoutMs: 900000, providerTimeoutMs: 100, failureCode: 'provider' },
-    { processingTimeoutMs: 900000, assessmentTimeoutMs: 100, providerTimeoutMs: 60000, failureCode: 'deadline' }
+    { processingTimeoutMs: 900000, providerTimeoutMs: 100, failureCode: 'provider' },
+    { processingTimeoutMs: 100, providerTimeoutMs: 60000, failureCode: 'deadline' }
   ])('bounds a stalled provider and ignores its late response: $failureCode', async (settings) => {
-    const id = await enqueue();
+    const id = await enqueueRewrite();
     const bytes = await readerFixture(textParagraph('A short document.'));
     const completions: ((value: unknown) => void)[] = [];
     let started: () => void;
     const provider = {
-      edit: faithfulRevisionProvider().edit,
-      assess: vi.fn(
+      detect: faithfulRevisionProvider().detect,
+      edit: vi.fn(
         () =>
           new Promise((resolve) => {
             completions.push(resolve);
@@ -753,79 +601,17 @@ describe('Durable document jobs', () => {
         await running;
         await database.query(`UPDATE document SET "nextRequestAt" = now() - interval '1 second'`);
       }
-      for (const finish of completions) finish(styleAssessmentFixture(0));
+      for (const finish of completions) finish({ edits: [] });
       await vi.advanceTimersByTimeAsync(0);
-      expect(provider.assess).toHaveBeenCalledTimes(settings.failureCode === 'provider' ? 3 : 1);
-      expect(await sql.query('SELECT status, assessment, "failureCode" FROM document WHERE id = $1', [id])).toEqual([
-        { status: 'failed', assessment: null, failureCode: settings.failureCode }
+      expect(provider.edit).toHaveBeenCalledTimes(settings.failureCode === 'provider' ? 3 : 1);
+      expect(await sql.query('SELECT status, "failureCode" FROM document WHERE id = $1', [id])).toEqual([
+        { status: 'failed', failureCode: settings.failureCode }
       ]);
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('does not recreate a deleted document when an in-flight assessment returns', async () => {
-    const id = await enqueue();
-    const bytes = await readerFixture(textParagraph('A short document.'));
-    const worker = new AssessmentWorker(
-      jobs,
-      { read: async () => bytes, write: async () => {}, remove: async () => {} },
-      {
-        edit: faithfulRevisionProvider().edit,
-        assess: async () => {
-          await database.query('DELETE FROM document WHERE id = $1', [id]);
-          return styleAssessmentFixture(0);
-        }
-      },
-      'rules',
-      timeouts
-    );
-    await worker.runOnce();
-    expect(await sql.query('SELECT id FROM document')).toEqual([]);
-  });
-  it('fails an active claim on shutdown without waiting for the provider', async () => {
-    await enqueue();
-    const shutdown = new AbortController();
-    const bytes = await readerFixture(textParagraph('A short document.'));
-    const worker = new AssessmentWorker(
-      jobs,
-      { read: async () => bytes, write: async () => {}, remove: async () => {} },
-      {
-        edit: faithfulRevisionProvider().edit,
-        assess: async () => {
-          shutdown.abort();
-          return new Promise(() => {});
-        }
-      },
-      'rules',
-      timeouts
-    );
-    await worker.runOnce(shutdown.signal);
-    expect(await sql.query('SELECT status, assessment, "failureCode" FROM document')).toEqual([
-      { status: 'failed', assessment: null, failureCode: 'interrupted' }
-    ]);
-  });
-
-  it.each(['signal', 'clear', 'failure'] as const)('supports the parent smoke fixture: %s', async (outcome) => {
-    const id = await enqueue();
-    const bytes = await assessmentDocxFixture();
-    await new AssessmentWorker(
-      jobs,
-      { read: async () => bytes, write: async () => {}, remove: async () => {} },
-      fakeAssessmentProvider(outcome),
-      'rules',
-      timeouts
-    ).runOnce();
-    const [row] = await sql.query('SELECT status, assessment FROM document WHERE id = $1', [id]);
-    expect(row).toEqual(
-      outcome === 'failure'
-        ? { status: 'failed', assessment: null }
-        : {
-            status: 'assessed',
-            assessment: outcome === 'clear' ? styleAssessmentFixture(0) : initialAssessment
-          }
-    );
-  });
   function privateStorage(original: Buffer) {
     const revisions = new Map<string, Buffer>();
     return {
@@ -895,7 +681,6 @@ describe('Durable document jobs', () => {
       requests++;
       return requests >= 2 ? { edits: [] } : edit(system, chunk, signal);
     };
-    provider.assess = vi.fn(provider.assess);
     await workerWith(storage, provider).runOnce();
     expect(requests).toBe(2);
     for (let retry = 0; retry < 2; retry++) {
@@ -904,14 +689,13 @@ describe('Durable document jobs', () => {
       await workerWith(storage, provider).runOnce();
     }
     expect(requests).toBe(4);
-    expect(provider.assess).not.toHaveBeenCalled();
     expect(vi.mocked(Logger.prototype.warn)).toHaveBeenCalledWith('Document processing failed: structure.');
     expect(JSON.stringify(vi.mocked(Logger.prototype.warn).mock.calls)).not.toContain('word word');
     expect(storage.revisions.size).toBe(0);
     expect(await storage.read()).toEqual(original);
     expect(
       await sql.query(
-        'SELECT status, phase, strength, assessment, preview, "finalAssessment", "failureCode", "revisedKey", "revisedSize", "revisionNotices", "editingCompleted", "editingTotal" FROM document WHERE id = $1',
+        'SELECT status, phase, strength, assessment, preview, "failureCode", "revisedKey", "revisedSize", "revisionNotices", "editingCompleted", "editingTotal" FROM document WHERE id = $1',
         [id]
       )
     ).toEqual([
@@ -921,7 +705,6 @@ describe('Durable document jobs', () => {
         strength: 30,
         assessment: initialAssessment,
         preview,
-        finalAssessment: null,
         failureCode: 'structure',
         revisedKey: null,
         revisedSize: null,
@@ -1000,12 +783,13 @@ describe('Durable document jobs', () => {
   it('removes the saved revision when publication finds the document deleted', async () => {
     const id = await enqueueRewrite();
     const storage = privateStorage(await assessmentDocxFixture());
-    const provider = faithfulRevisionProvider();
-    provider.assess = async () => {
-      await database.query('DELETE FROM document WHERE id = $1', [id]);
-      return styleAssessmentFixture(10);
-    };
-    await workerWith(storage, provider).runOnce();
+    const deletingJobs = new DocumentJobs({
+      query: async (query, values) => {
+        if (query.includes('WITH completed AS')) await database.query('DELETE FROM document WHERE id = $1', [id]);
+        return sql.query(query, values);
+      }
+    });
+    await new AssessmentWorker(deletingJobs, storage, faithfulRevisionProvider(), 'rules', timeouts).runOnce();
     expect(storage.revisions.size).toBe(0);
     expect(await sql.query('SELECT id FROM document')).toEqual([]);
     expect(await reservations(id)).toEqual([]);
@@ -1026,109 +810,5 @@ describe('Durable document jobs', () => {
     expect(row.status).toBe('completed');
     expect(storage.revisions.has(row.revisedKey)).toBe(true);
     expect(await reservations(id)).toEqual(['charged']);
-  });
-
-  it('migrates legacy documents without stranding reservations or reinterpreting old scores', async () => {
-    const migration = new AssessThenUnslopify1793880900000();
-    await migration.down(sql);
-    const legacy = { completed: randomUUID(), assessed: randomUUID(), queued: randomUUID(), active: randomUUID() };
-    await database.query(
-      `INSERT INTO document (id, "originalKey", size, status, assessment, "revisedKey", "revisedSize")
-      VALUES ($1, 'legacy-original.docx', 42, 'completed', '{"patterns":[]}', 'legacy-revised.docx', 42)`,
-      [legacy.completed]
-    );
-    await database.query(
-      `INSERT INTO document (id, "originalKey", size, status, assessment, "createdAt")
-      VALUES ($1, 'legacy-assessed.docx', 42, 'assessed', '{"patterns":[]}', now() + interval '1 second')`,
-      [legacy.assessed]
-    );
-    await database.query(
-      `INSERT INTO document (id, "originalKey", size, status, "createdAt")
-      VALUES ($1, 'legacy-queued.docx', 42, 'queued', now() + interval '2 seconds')`,
-      [legacy.queued]
-    );
-    await database.query(
-      `INSERT INTO document (id, "originalKey", size, status, "claimToken", "processingStage", "processingAttemptId", "providerRequests", "processingDeadline", "leaseExpiresAt", "createdAt")
-      VALUES ($1, 'legacy-active.docx', 42, 'processing', $2, 'editing', $3, '{"assess:v1":{"state":"succeeded"}}', now() + interval '10 minutes', now() + interval '30 seconds', now() + interval '3 seconds')`,
-      [legacy.active, randomUUID(), randomUUID()]
-    );
-    await reserve(legacy.queued);
-    await reserve(legacy.active);
-    await migration.up(sql);
-    expect(
-      await sql.query(
-        'SELECT status, phase, assessment, "claimToken", "processingStage", "processingAttemptId", "providerRequests", "revisedKey", strength, "finalAssessment", preview FROM document ORDER BY "createdAt"'
-      )
-    ).toEqual([
-      {
-        status: 'completed',
-        phase: 'rewrite',
-        assessment: { patterns: [] },
-        claimToken: null,
-        processingStage: null,
-        processingAttemptId: null,
-        providerRequests: {},
-        revisedKey: 'legacy-revised.docx',
-        strength: null,
-        finalAssessment: null,
-        preview: null
-      },
-      {
-        status: 'assessed',
-        phase: 'assessment',
-        assessment: { patterns: [] },
-        claimToken: null,
-        processingStage: null,
-        processingAttemptId: null,
-        providerRequests: {},
-        revisedKey: null,
-        strength: null,
-        finalAssessment: null,
-        preview: null
-      },
-      {
-        status: 'queued',
-        phase: 'assessment',
-        assessment: null,
-        claimToken: null,
-        processingStage: null,
-        processingAttemptId: null,
-        providerRequests: {},
-        revisedKey: null,
-        strength: null,
-        finalAssessment: null,
-        preview: null
-      },
-      {
-        status: 'queued',
-        phase: 'assessment',
-        assessment: null,
-        claimToken: null,
-        processingStage: null,
-        processingAttemptId: null,
-        providerRequests: {},
-        revisedKey: null,
-        strength: null,
-        finalAssessment: null,
-        preview: null
-      }
-    ]);
-    expect(await reservations(legacy.queued)).toEqual(['released']);
-    expect(await reservations(legacy.active)).toEqual(['released']);
-    expect(await jobs.ownsRevision(legacy.completed, 'legacy-revised.docx')).toBe(true);
-    expect((await jobs.claim(timeouts))?.id).toBe(legacy.queued);
-    expect((await jobs.claim(timeouts))?.id).toBe(legacy.active);
-    expect(await jobs.claim(timeouts)).toBeNull();
-    await migration.down(sql);
-    expect(
-      await sql.query(`SELECT status, "failureCode" FROM document WHERE status <> 'completed' ORDER BY "createdAt"`)
-    ).toEqual([
-      { status: 'assessed', failureCode: null },
-      { status: 'failed', failureCode: 'interrupted' },
-      { status: 'failed', failureCode: 'interrupted' }
-    ]);
-    await migration.up(sql);
-    expect(await jobs.ownsRevision(legacy.completed, 'legacy-revised.docx')).toBe(true);
-    expect(await jobs.claim(timeouts)).toBeNull();
   });
 });

@@ -6,20 +6,19 @@ import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import { DocumentStorage } from '../document-storage';
 import { MonthlyAllowance } from '../monthly-allowance';
-import { styleAssessmentFixture } from '@api/shared/testing/style-assessment-fixtures';
+import { detectionFixture } from '@api/shared/testing/detection-fixtures';
 import { DeleteDocument, DeleteDocumentHandler } from './delete-document.handler';
-import { AssessmentWorker } from '../../processing/assessment-worker';
+import { AssessmentWorker, DocumentProvider } from '../../processing/assessment-worker';
 import { DocumentJobs } from '../../processing/document-jobs';
 import { assessmentDocxFixture } from '@api/shared/testing/assessment-fixtures';
 import { faithfulRevisionProvider } from '@api/shared/testing/revision-fixtures';
-import { DocumentProvider } from '../document-workflow';
 import { readerFixture, textParagraph } from '@api/shared/testing/docx-reader-fixture';
 import { planDocxEdits } from '../revise-docx';
 import { readDocx } from '../validate-docx';
 import { UnslopifyDocument, UnslopifyDocumentHandler } from './unslopify-document.handler';
 import { RetryDocument, RetryDocumentHandler } from './retry-document.handler';
 
-const assessment = styleAssessmentFixture(40);
+const assessment = detectionFixture(40);
 const preview = { blocks: [] };
 const notices = { keptPassages: [], uneditedElements: [] };
 
@@ -83,8 +82,8 @@ describe('Delete a stored document', () => {
     if (revisedKey) files.set(revisedKey, Buffer.from('revised'));
     await query(
       `INSERT INTO document (id, "ownerId", "originalKey", size, status, phase, strength, assessment, preview,
-        "providerRequests", "failureCode", "revisedKey", "revisedSize", "finalAssessment", "revisionNotices")
-      VALUES ($1, $2, $3, 42, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10, $11, $12, $13::jsonb, $14::jsonb)`,
+        "providerRequests", "failureCode", "revisedKey", "revisedSize", "revisionNotices")
+      VALUES ($1, $2, $3, 42, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10, $11, $12, $13::jsonb)`,
       [
         id,
         ownerId,
@@ -98,7 +97,6 @@ describe('Delete a stored document', () => {
         status === 'failed' ? 'provider' : null,
         revisedKey,
         revisedKey ? 7 : null,
-        revisedKey ? JSON.stringify(assessment) : null,
         revisedKey ? JSON.stringify(notices) : null
       ]
     );
@@ -218,13 +216,13 @@ describe('Delete a stored document', () => {
     expect(await allowance.read({ query }, owner)).toMatchObject({ used: 0, reserved: 0, remaining: 3 });
   });
 
-  it('removes the intermediate revision saved before a final assessment and releases the slot', async () => {
+  it('removes the intermediate revision saved before publication and releases the slot', async () => {
     const document = await stored('queued', 'rewrite');
     const revisedKey = `${randomUUID()}.docx`;
     files.set(revisedKey, Buffer.from('revised'));
     await query(
       `UPDATE document SET status = 'processing', "claimToken" = $2, "processingDeadline" = now() + interval '1 hour',
-        "leaseExpiresAt" = now() + interval '30 seconds', "processingStage" = 'final-assessment',
+        "leaseExpiresAt" = now() + interval '30 seconds', "processingStage" = 'validating',
         "revisedKey" = $3, "revisedSize" = 7, "revisionNotices" = $4::jsonb WHERE id = $1`,
       [document.id, randomUUID(), revisedKey, JSON.stringify(notices)]
     );
@@ -329,46 +327,42 @@ describe('Delete an active document', () => {
     return { used, reserved };
   };
 
-  it('discards an initial assessment that returns after the document was deleted', async () => {
+  it('discards a rate that returns after the document was deleted', async () => {
     const id = await queuedAssessment();
     const provider = faithfulRevisionProvider();
-    provider.assess = vi.fn(async () => {
+    provider.detect = vi.fn(async () => {
       await remove(id);
-      return styleAssessmentFixture(20);
+      return detectionFixture(20);
     });
     expect(await worker(provider).runOnce()).toBe(true);
-    expect(provider.assess).toHaveBeenCalledTimes(1);
+    expect(provider.detect).toHaveBeenCalledTimes(1);
     expect(await rows()).toEqual([]);
     expect(files.size).toBe(0);
     expect(await reservations()).toEqual([]);
     expect(await usage()).toEqual({ used: 0, reserved: 0 });
     expect(await worker(provider).runOnce()).toBe(false);
-    expect(provider.assess).toHaveBeenCalledTimes(1);
+    expect(provider.detect).toHaveBeenCalledTimes(1);
   });
-  it.each(['assessment', 'rewrite'] as const)(
-    'sends no further request for a %s document deleted during an automatic-retry wait',
-    async (phase) => {
-      const id = phase === 'assessment' ? await queuedAssessment() : await queuedRewrite();
-      const provider = faithfulRevisionProvider();
-      const temporary = vi.fn(async () => {
-        throw Object.assign(new Error('Service unavailable'), { status: 503 });
-      });
-      if (phase === 'assessment') provider.assess = temporary;
-      else provider.edit = temporary;
-      expect(await worker(provider).runOnce()).toBe(true);
-      expect(await query('SELECT status, "nextRequestAt" IS NOT NULL AS waiting FROM document')).toEqual([
-        { status: 'processing', waiting: true }
-      ]);
-      await remove(id);
-      await query(`UPDATE document SET "nextRequestAt" = now() - interval '1 second'`);
-      expect(await worker(provider).runOnce()).toBe(false);
-      expect(temporary).toHaveBeenCalledTimes(1);
-      expect(await rows()).toEqual([]);
-      expect(files.size).toBe(0);
-      expect(await reservations()).toEqual(phase === 'rewrite' ? [{ state: 'released' }] : []);
-      expect(await usage()).toEqual({ used: 0, reserved: 0 });
-    }
-  );
+  it('sends no further request for a rewrite deleted during an automatic-retry wait', async () => {
+    const id = await queuedRewrite();
+    const provider = faithfulRevisionProvider();
+    const temporary = vi.fn(async () => {
+      throw Object.assign(new Error('Service unavailable'), { status: 503 });
+    });
+    provider.edit = temporary;
+    expect(await worker(provider).runOnce()).toBe(true);
+    expect(await query('SELECT status, "nextRequestAt" IS NOT NULL AS waiting FROM document')).toEqual([
+      { status: 'processing', waiting: true }
+    ]);
+    await remove(id);
+    await query(`UPDATE document SET "nextRequestAt" = now() - interval '1 second'`);
+    expect(await worker(provider).runOnce()).toBe(false);
+    expect(temporary).toHaveBeenCalledTimes(1);
+    expect(await rows()).toEqual([]);
+    expect(files.size).toBe(0);
+    expect(await reservations()).toEqual([{ state: 'released' }]);
+    expect(await usage()).toEqual({ used: 0, reserved: 0 });
+  });
 
   it('stops editing the remaining chunks once the document is deleted', async () => {
     const bytes = await readerFixture(textParagraph('In order to proceed, word '.repeat(600)));
@@ -388,25 +382,22 @@ describe('Delete an active document', () => {
     expect(await usage()).toEqual({ used: 0, reserved: 0 });
   });
 
-  it.each(['scored', 'unavailable'] as const)(
-    'leaves nothing behind and charges nothing when deletion commits before publication (%s final score)',
-    async (outcome) => {
-      const id = await queuedRewrite();
-      const provider = faithfulRevisionProvider();
-      provider.assess = vi.fn(async () => {
-        await remove(id);
-        if (outcome === 'unavailable') throw Object.assign(new Error('Bad request'), { status: 400 });
-        return styleAssessmentFixture(10);
-      });
-      expect(await worker(provider).runOnce()).toBe(true);
-      expect(provider.assess).toHaveBeenCalledTimes(1);
-      expect(await rows()).toEqual([]);
-      expect(files.size).toBe(0);
-      expect(await reservations()).toEqual([{ state: 'released' }]);
-      expect(await usage()).toEqual({ used: 0, reserved: 0 });
-      expect(await worker(provider).runOnce()).toBe(false);
-    }
-  );
+  it('leaves nothing behind and charges nothing when deletion commits before publication', async () => {
+    const id = await queuedRewrite();
+    const racingJobs = new DocumentJobs({
+      query: async (sql, values) => {
+        if (sql.includes('WITH completed AS')) await remove(id);
+        return query(sql, values) as Promise<unknown[]>;
+      }
+    });
+    const provider = faithfulRevisionProvider();
+    expect(await new AssessmentWorker(racingJobs, storage, provider, 'rules', timeouts).runOnce()).toBe(true);
+    expect(await rows()).toEqual([]);
+    expect(files.size).toBe(0);
+    expect(await reservations()).toEqual([{ state: 'released' }]);
+    expect(await usage()).toEqual({ used: 0, reserved: 0 });
+    expect(await worker(provider).runOnce()).toBe(false);
+  });
 
   it('keeps the charge and removes the files when completion commits before deletion', async () => {
     const id = await queuedRewrite();
@@ -430,10 +421,8 @@ describe('Delete an active document', () => {
       await query(`UPDATE document SET "leaseExpiresAt" = now() - interval '1 second'`);
       await remove(id);
       const provider = faithfulRevisionProvider();
-      provider.assess = vi.fn(provider.assess);
       provider.edit = vi.fn(provider.edit);
       expect(await worker(provider).runOnce()).toBe(false);
-      expect(provider.assess).not.toHaveBeenCalled();
       expect(provider.edit).not.toHaveBeenCalled();
       expect(await rows()).toEqual([]);
       expect(files.size).toBe(0);

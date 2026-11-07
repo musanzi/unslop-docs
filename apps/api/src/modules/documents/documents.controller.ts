@@ -57,7 +57,7 @@ export class DocumentsController extends AbstractController {
   @ApiOperation({
     summary: 'Start rewriting your assessed document with the chosen strength',
     description:
-      'Reserves one monthly allowance slot in the same transaction that queues rewriting. The final assessment runs automatically after rewriting, and the slot is charged only when the revised download is ready.'
+      'Reserves one monthly allowance slot in the same transaction that queues rewriting. The slot is charged only when the revised download is ready.'
   })
   @ApiOkResponse({ type: DocumentResponse })
   @ApiBadRequestResponse({ description: 'Rewrite strength is not an integer from 1 to 100' })

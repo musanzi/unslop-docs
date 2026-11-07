@@ -28,7 +28,7 @@ The API still rejects these files before creating a record or writing private st
 
 - Embedded OLE objects, imported content (`altChunk`), subdocuments, and relationships to such parts. Embedded objects are never executed.
 - Password-protected files, legacy Word containers, damaged ZIP or XML content, DTDs, damaged fields or hyperlinks, cyclic styles, unmodeled body structures such as `w:customXml`, and archives that exceed the safety limits (10 MB upload, 2,048 entries, 50 MB expanded, 20 MB per entry, 10 MB per XML part, 200:1 ratio above 1 MB, 100,000 elements, 128 nesting levels).
-- New uploads that render as more than five pages. This check runs after DOCX validation at the upload boundary, not in the shared reader. Covers, references, and blank pages count. Existing documents and longer revised downloads remain readable. See the [renderer reference](../services/renderer/README.md).
+- New uploads that render as more than thirty pages. This check runs after DOCX validation at the upload boundary, not in the shared reader. Covers, references, and blank pages count. Existing documents and longer revised downloads remain readable. See the [renderer reference](../services/renderer/README.md).
 - Clearly unsupported-language prose. English, French, and documents mixing both are supported.
 
 External entities are never resolved and linked resources are never fetched. Preserving an element does not bypass these checks: every XML part, including headers and notes, passes the same parser limits.

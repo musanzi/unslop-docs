@@ -1,27 +1,34 @@
 import { Logger } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
-import { createRewriteWorkflow, DocumentProvider } from '../documents/document-workflow';
+import { createRewriteWorkflow } from '../documents/document-workflow';
 import { DocumentStorage } from '../documents/document-storage';
 import { ProcessingFailure } from '../documents/document-processing';
 import { RevisionValidationError } from '../documents/revision-validation';
 import { readDocx } from '../documents/validate-docx';
 import { DocumentJobs, JobClaim } from './document-jobs';
 import { classifyProviderFailure, ProviderFailure } from '../documents/provider-failure';
-import { createAssessmentWorkflow, validateAssessment, WritingAssessment } from '../documents/assessment-workflow';
-import { validateChunkResult } from '../documents/revise-docx';
+import { EditProvider, validateChunkResult } from '../documents/revise-docx';
 import { documentPreview } from '../documents/document-preview';
-import { assessmentRubric, assessmentText } from '../documents/style-assessment';
+import {
+  assessmentText,
+  detectionMethod,
+  detectorModelVersion,
+  DocumentDetection,
+  validateDetection
+} from '../documents/detection-rate';
+import { DetectionProvider } from '../documents/local-detector-provider';
 
 class RetryScheduled extends Error {}
 
-export const initialAssessmentOperation = 'style-assessment:initial:v1';
-export const finalAssessmentOperation = 'style-assessment:final:v1';
+export const detectionOperation = 'detection:initial:v1';
+
+export type DocumentProvider = DetectionProvider & EditProvider;
 
 export interface WorkerSettings {
   assessmentTimeoutMs?: number;
   processingTimeoutMs: number;
   providerTimeoutMs: number;
-  assessmentProviderTimeoutMs?: number;
+  detectorTimeoutMs?: number;
 }
 
 interface ClaimRun {
@@ -123,8 +130,8 @@ export class AssessmentWorker {
       try {
         const raw = await invoke(
           call,
-          operation.startsWith('style-assessment:')
-            ? (this.settings.assessmentProviderTimeoutMs ?? this.settings.providerTimeoutMs)
+          operation === detectionOperation
+            ? (this.settings.detectorTimeoutMs ?? this.settings.providerTimeoutMs)
             : this.settings.providerTimeoutMs
         );
         try {
@@ -181,17 +188,13 @@ export class AssessmentWorker {
     return true;
   }
 
-  private assessText(run: ClaimRun, operation: string, text: string): Promise<WritingAssessment> {
-    const workflow = createAssessmentWorkflow({
-      assess: (assessed) =>
-        run.request(
-          operation,
-          { rubric: assessmentRubric, skill: this.skill, text: assessed },
-          (signal) => this.provider.assess(assessed, signal),
-          (raw) => validateAssessment(raw)
-        )
-    });
-    return workflow.invoke({ text }, { signal: run.signal }).then((result) => result.assessment);
+  private async detect(run: ClaimRun, text: string): Promise<DocumentDetection> {
+    return (await run.request(
+      detectionOperation,
+      { method: detectionMethod, model: detectorModelVersion, text },
+      (signal) => this.provider.detect(text, signal),
+      validateDetection
+    )) as DocumentDetection;
   }
 
   private async assess(run: ClaimRun): Promise<void> {
@@ -199,9 +202,9 @@ export class AssessmentWorker {
     try {
       const source = await readDocx(await this.storage.read(claim.originalKey, claim.size));
       await active();
-      const assessment = await this.assessText(run, initialAssessmentOperation, assessmentText(source));
+      const detection = await this.detect(run, assessmentText(source));
       await active();
-      if (!(await this.jobs.publishAssessment(claim, assessment, documentPreview(source)))) await this.jobs.recover();
+      if (!(await this.jobs.publishAssessment(claim, detection, documentPreview(source)))) await this.jobs.recover();
     } catch (error) {
       await run.fail(error);
     }
@@ -216,14 +219,11 @@ export class AssessmentWorker {
     try {
       if (claim.assessment === null) {
         const original = await readDocx(await this.storage.read(claim.originalKey, claim.size));
-        const assessment = await this.assessText(run, initialAssessmentOperation, assessmentText(original));
+        const detection = await this.detect(run, assessmentText(original));
         await active();
-        if (!(await this.jobs.saveInitialAssessment(claim, assessment))) throw new Error('Inactive claim');
+        if (!(await this.jobs.saveInitialAssessment(claim, detection))) throw new Error('Inactive claim');
       }
-      let revised: Buffer;
-      if (claim.revisedKey !== null) {
-        revised = await this.storage.read(claim.revisedKey, claim.revisedSize);
-      } else {
+      if (claim.revisedKey === null) {
         const source = await readDocx(await this.storage.read(claim.originalKey, claim.size));
         await active();
         const workflow = createRewriteWorkflow(
@@ -259,22 +259,13 @@ export class AssessmentWorker {
           await this.jobs.recover();
           return;
         }
-        revised = result.revised;
       }
-      let finalAssessment: WritingAssessment | null = null;
-      try {
-        const revisedSource = await readDocx(revised);
-        finalAssessment = await this.assessText(run, finalAssessmentOperation, assessmentText(revisedSource));
-      } catch (error) {
-        if (error instanceof RetryScheduled) throw error;
-        this.logger.warn('Final assessment unavailable; publishing the validated revision without a final score.');
-      }
-      published = await this.jobs.complete(claim, finalAssessment);
+      published = await this.jobs.complete(claim);
       if (!published) await this.jobs.recover();
     } catch (error) {
       if (error instanceof RetryScheduled) return;
       if (saved) {
-        published = await this.jobs.complete(claim, null).catch(() => false);
+        published = await this.jobs.complete(claim).catch(() => false);
         if (!published) await this.jobs.recover();
         return;
       }

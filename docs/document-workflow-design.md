@@ -2,7 +2,7 @@
 
 This document records the accepted workflow from the November 5, 2026 design interview. The interview is complete. Issue #15 implemented the document-support changes; see the [DOCX support reference](document-support.md). Issue #16 implemented the API lifecycle: automatic initial and final assessments with a scored rubric, the Unslopify request with rewrite strength, reservation at Unslopify, phase-aware retries, and progress data; see the [worker reference](assessment-worker.md). Issues #11 and #12 implemented deletion, and issue #13 implemented the workspace flow.
 
-The November 6 follow-up interview settled DeepSeek writing assessment, removal of the local detector and its stored results, and a five-page upload limit. [ADR 0006](adr/0006-assess-writing-patterns-with-deepseek.md) and [ADR 0007](adr/0007-limit-uploads-to-five-rendered-pages.md) record those decisions. Both decisions are implemented in the repository.
+The November 6 follow-up interview settled a rendered-page upload limit, recorded in [ADR 0007](adr/0007-limit-uploads-to-five-rendered-pages.md) and raised to thirty pages by [ADR 0008](adr/0008-raise-the-upload-limit-to-thirty-rendered-pages.md). [ADR 0009](adr/0009-score-the-ai-detection-rate-with-oculus.md) replaces its DeepSeek writing assessment with the Oculus detector.
 
 ## Requested behavior
 
@@ -14,13 +14,13 @@ The owner confirms that the app is live. [Deployment issue #14](https://github.c
 
 ## Confirmed decisions
 
-The displayed rate is an estimated **AI-style score**. It measures writing patterns rather than proving who wrote the document. The owner removed the explanatory sentence from the interface on November 6. It does not use an external AI-authorship detector. The owner decided on November 6, 2026 that the score is the only assessment result shown: the workspace lists no writing-pattern examples, and after rewriting it shows the before and after scores only. The API may keep returning pattern examples; the interface ignores them.
+The displayed rate is the **AI detection rate**, the Oculus model score for the original. The owner removed the explanatory sentence from the interface on November 6. The rate is the only result shown, in one circle, before and after rewriting.
 
 On November 6, the owner removed the document preview from the workspace. The frontend neither displays nor requests a preview. Users download the revised DOCX and adjust it outside the app. The AI Rate appears inside a circle colored by severity: green for 0–33, amber for 34–66, and red for 67–100. Completed documents show before and after circles. Retry appears only in the selected document panel, not the sidebar.
 
-The accepted limits are 10 MB, five pages rendered on the server for new uploads, and English/French. Count cover pages, references, and blank pages. The five-page limit replaces the earlier 10,000-word product limit. Existing documents remain available, and revised downloads can exceed five pages. Formatting differences alone do not prevent download. These decisions describe the intended revision, not the current implementation.
+The accepted limits are 10 MB, thirty pages rendered on the server for new uploads, and English/French. Count cover pages, references, and blank pages. The page limit replaces the earlier 10,000-word product limit. Existing documents remain available, and revised downloads can exceed thirty pages. Formatting differences alone do not prevent download. These decisions describe the intended revision, not the current implementation.
 
-The slider controls rewrite strength, from light edits to thorough rewriting. It does not promise a specific score reduction. The resulting assessment reports the observed AI-style score after editing.
+The slider controls rewrite strength, from light edits to thorough rewriting. It does not promise a specific reduction, and the revised document is not rated.
 
 If a rewritten passage fails checks for quotations, citations, numbers, or references, retain the original passage and finish the rest of the document. Identify passages left unchanged in a short notice. Formatting differences never block download. These checks do not prove that all factual meaning has been preserved, so the user still reviews the output.
 
@@ -30,17 +30,15 @@ Convert ordinary Word content controls into their visible text or images automat
 
 ## Conflicts with the existing design
 
-The existing assessment produces writing-pattern examples without a numerical score. The glossary now defines the accepted AI-style score separately from an AI-authorship percentage. Assessment and its presentation need to support that score.
-
 The original product specification starts assessment and editing automatically after upload. ADR 0003 originally published the assessment and revised file together. [ADR 0005](adr/0005-separate-assessment-from-user-requested-editing.md) supersedes that lifecycle and allowance policy. PostgreSQL remains the lifecycle store, but these transitions must change.
 
 Before issue #15, the upload validator rejected all Word content controls, the document reader rejected unsupported wrappers, and output checks required strict preservation of document structures and formatting. Issue #15 resolved these conflicts by normalizing controls and tracked changes before modeling and by keeping passages that fail a content check instead of failing the document.
 
 ## Implementation defaults
 
-The [product specification](product-spec.md) defines a 0–100 estimated AI-style score and a 1–100 rewrite-strength slider initially set to 50. Strength labels are Light, Balanced, and Thorough. These are implementation defaults, not a claim that the user selected exact numerical settings.
+The [product specification](product-spec.md) defines a 0–100 AI detection rate and a 1–100 rewrite-strength slider initially set to 50. Strength labels are Light, Balanced, and Thorough. These are implementation defaults, not a claim that the user selected exact numerical settings.
 
-Use the same versioned, document-wide scoring rubric before and after editing. A capped list of examples is not a denominator for a percentage. Do not force a lower score, loop until the score improves, or block download because it did not improve. If the final assessment exhausts its bounded retries, offer the usable document with an unavailable-score notice.
+Do not loop until a rate improves, and do not block download because of a rate.
 
 Keep one revision per document entry. An editing retry retains the initial assessment and strength. Duplicate clicks and reloads must not create extra attempts or charges. Assessment-only processing needs no rewrite reservation. The normal document allowance remains FREE 3, PREMIUM 15, and GOLD 35 completed rewrites per UTC month.
 

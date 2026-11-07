@@ -52,7 +52,7 @@ export class UnslopifyDocumentHandler implements ICommandHandler<UnslopifyDocume
           `UPDATE document SET status = 'queued', phase = 'rewrite', strength = $2, "failureCode" = NULL,
             "processingStage" = NULL, "processingAttemptId" = NULL, "providerRequests" = '{}'::jsonb,
             "nextRequestAt" = NULL, "processingStartedAt" = NULL, "processingDeadline" = NULL,
-            "leaseExpiresAt" = NULL, "claimToken" = NULL, "finalAssessment" = NULL
+            "leaseExpiresAt" = NULL, "claimToken" = NULL
           WHERE id = $1 RETURNING *`,
           [id, strength]
         );

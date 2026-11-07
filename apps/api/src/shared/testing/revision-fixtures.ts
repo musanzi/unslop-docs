@@ -1,5 +1,5 @@
-import { styleAssessmentFixture } from './style-assessment-fixtures';
-import { DocumentProvider } from '../../modules/documents/document-workflow';
+import type { DocumentProvider } from '../../modules/processing/assessment-worker';
+import { detectionFixture } from './detection-fixtures';
 import { docxFixtureCases } from './docx-fixture-catalog';
 import { readerFixture, textParagraph } from './docx-reader-fixture';
 import { readDocx } from '../../modules/documents/validate-docx';
@@ -30,9 +30,9 @@ export async function revisionFixture(language: 'english' | 'french'): Promise<B
   });
 }
 
-export function faithfulRevisionProvider(highSignal = false): DocumentProvider {
+export function faithfulRevisionProvider(): DocumentProvider {
   return {
-    assess: async () => styleAssessmentFixture(highSignal ? 40 : 20),
+    detect: async () => detectionFixture(40),
     edit: async (_system, chunk) => ({
       edits: chunk.spans.map(({ id, text }) => ({
         id,

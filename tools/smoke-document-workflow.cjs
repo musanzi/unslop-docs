@@ -43,31 +43,28 @@ async function main() {
   if (process.argv[2] === 'pages') {
     const { DocumentPageValidator } = require(base + 'document-page-validator');
     const validator = new DocumentPageValidator();
-    assert.equal(await validator.validate(await fixture(5)), 5);
-    await assert.rejects(() => fixture(6).then((bytes) => validator.validate(bytes)), /6 pages/);
-    console.log('Page validation passed: five pages accepted, six rejected.');
+    assert.equal(await validator.validate(await fixture(30)), 30);
+    await assert.rejects(() => fixture(31).then((bytes) => validator.validate(bytes)), /31 pages/);
+    console.log('Page validation passed: thirty pages accepted, thirty-one rejected.');
     return;
   }
   const { readDocx } = require(base + 'validate-docx');
-  const { assessmentText } = require(base + 'style-assessment');
-  const { validateAssessment } = require(base + 'assessment-workflow');
+  const { assessmentText } = require(base + 'detection-rate');
+  const { LocalDetectorProvider, localDetectorSettings } = require(base + 'local-detector-provider');
   const { DeepSeekProvider, workerSettings, loadEditingSkill } = require(base + 'deepseek-provider');
   const { createRewriteWorkflow } = require(base + 'document-workflow');
   const provider = new DeepSeekProvider(workerSettings(process.env));
   const source = await readDocx(await fixture());
-  const before = validateAssessment(await provider.assess(assessmentText(source), AbortSignal.timeout(120000)));
-  assert.equal(before.style.status, 'complete');
+  const detector = new LocalDetectorProvider(localDetectorSettings(process.env));
+  const detection = await detector.detect(assessmentText(source), AbortSignal.timeout(300000));
+  assert.ok(['complete', 'unavailable'].includes(detection.status));
   const revised = await createRewriteWorkflow(provider, await loadEditingSkill(), 50).invoke(
     { source },
     { signal: AbortSignal.timeout(180000) }
   );
   const output = await readDocx(revised.revised);
-  const after = validateAssessment(await provider.assess(assessmentText(output), AbortSignal.timeout(120000)));
-  assert.equal(after.style.status, 'complete');
   assert.ok(output.wordCount > 0);
-  console.log(
-    `Synthetic document workflow passed: assessment, rewrite, DOCX validation, final assessment (${before.style.score} -> ${after.style.score}).`
-  );
+  console.log(`Synthetic document workflow passed: detection (${detection.rate}), rewrite, DOCX validation.`);
 }
 
 main().catch(() => {

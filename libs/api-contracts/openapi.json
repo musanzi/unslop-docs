@@ -920,7 +920,7 @@
     },
     "/documents/{id}/unslopify": {
       "post": {
-        "description": "Reserves one monthly allowance slot in the same transaction that queues rewriting. The final assessment runs automatically after rewriting, and the slot is charged only when the revised download is ready.",
+        "description": "Reserves one monthly allowance slot in the same transaction that queues rewriting. The slot is charged only when the revised download is ready.",
         "operationId": "DocumentsController_unslopify",
         "parameters": [
           {
@@ -1610,7 +1610,7 @@
               "assessment",
               "rewrite"
             ],
-            "description": "Processing attempt the status refers to: the automatic initial assessment, or the user-requested rewrite with its final assessment"
+            "description": "Processing attempt the status refers to: the automatic AI detection, or the user-requested rewrite"
           },
           "processingStage": {
             "type": [
@@ -1621,10 +1621,9 @@
               "assessing",
               "editing",
               "validating",
-              "final-assessment",
               null
             ],
-            "description": "Active stage while processing; assessing and final-assessment have no measurable total, editing exposes progress"
+            "description": "Active stage while processing; assessing has no measurable total, editing exposes progress"
           },
           "progress": {
             "description": "Completed and total editing work units while a rewrite is processing",
@@ -1879,15 +1878,9 @@
           "blocks"
         ]
       },
-      "StyleAssessmentResponse": {
+      "DetectionRateResponse": {
         "type": "object",
         "properties": {
-          "provider": {
-            "type": "string",
-            "enum": [
-              "deepseek"
-            ]
-          },
           "status": {
             "type": "string",
             "enum": [
@@ -1895,14 +1888,14 @@
               "unavailable"
             ]
           },
-          "score": {
+          "rate": {
             "type": [
               "number",
               "null"
             ],
             "minimum": 0,
             "maximum": 100,
-            "description": "AI-style score calculated from word-weighted sentence severity. Does not establish authorship"
+            "description": "AI detection rate from the Oculus model: the token-weighted mean of its window scores, scaled to 100"
           },
           "reason": {
             "type": [
@@ -1911,70 +1904,28 @@
             ],
             "enum": [
               "no_prose",
+              "too_short",
+              "too_long",
               null
             ]
-          },
-          "modelVersion": {
-            "type": "string"
           },
           "method": {
             "type": "string",
             "enum": [
-              "sentence-severity-word-weighted-v1"
+              "token-weighted-mean-v1"
             ]
           },
           "checkedAt": {
             "type": "string",
             "format": "date-time"
-          },
-          "textHash": {
-            "type": "string",
-            "description": "SHA-256 of the text submitted for assessment"
-          },
-          "characterCount": {
-            "type": "number"
-          },
-          "wordCount": {
-            "type": "number"
-          },
-          "sentenceCount": {
-            "type": "number"
-          },
-          "weightedSeverity": {
-            "type": "number"
           }
         },
         "required": [
-          "provider",
           "status",
-          "score",
+          "rate",
           "reason",
-          "modelVersion",
           "method",
-          "checkedAt",
-          "textHash",
-          "characterCount",
-          "wordCount",
-          "sentenceCount",
-          "weightedSeverity"
-        ]
-      },
-      "WritingAssessmentResponse": {
-        "type": "object",
-        "properties": {
-          "rubric": {
-            "type": "string",
-            "enum": [
-              "unslop-style-v1"
-            ]
-          },
-          "style": {
-            "$ref": "#/components/schemas/StyleAssessmentResponse"
-          }
-        },
-        "required": [
-          "rubric",
-          "style"
+          "checkedAt"
         ]
       },
       "KeptPassageResponse": {
@@ -2068,7 +2019,7 @@
               "assessment",
               "rewrite"
             ],
-            "description": "Processing attempt the status refers to: the automatic initial assessment, or the user-requested rewrite with its final assessment"
+            "description": "Processing attempt the status refers to: the automatic AI detection, or the user-requested rewrite"
           },
           "processingStage": {
             "type": [
@@ -2079,10 +2030,9 @@
               "assessing",
               "editing",
               "validating",
-              "final-assessment",
               null
             ],
-            "description": "Active stage while processing; assessing and final-assessment have no measurable total, editing exposes progress"
+            "description": "Active stage while processing; assessing has no measurable total, editing exposes progress"
           },
           "progress": {
             "description": "Completed and total editing work units while a rewrite is processing",
@@ -2115,30 +2065,15 @@
             "format": "date-time"
           },
           "assessment": {
-            "description": "Initial assessment of the original, published when the document is assessed and retained afterwards",
+            "description": "AI detection result for the original, published when the document is assessed and retained afterwards",
             "anyOf": [
               {
-                "$ref": "#/components/schemas/WritingAssessmentResponse"
+                "$ref": "#/components/schemas/DetectionRateResponse"
               },
               {
                 "type": "null"
               }
             ]
-          },
-          "finalAssessment": {
-            "description": "Automatic assessment of the revised document; null until completed or when its score is unavailable",
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/WritingAssessmentResponse"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "finalScoreUnavailable": {
-            "type": "boolean",
-            "description": "True when the revised download is ready but its final assessment could not be completed"
           },
           "revisionNotices": {
             "description": "Notices recorded with the revision",
@@ -2164,8 +2099,6 @@
           "failure",
           "createdAt",
           "assessment",
-          "finalAssessment",
-          "finalScoreUnavailable",
           "revisionNotices"
         ]
       }

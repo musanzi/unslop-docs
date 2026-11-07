@@ -1,9 +1,7 @@
-<ng-template #styleScore let-style let-label="label" let-compact="compact" let-emptyLabel="emptyLabel">
-  @let value = style ? modelScore(style) : null;
+<ng-template #rateDial let-detection let-label="label" let-emptyLabel="emptyLabel">
+  @let value = detection ? detectionRate(detection) : null;
   <div
-    class="relative grid shrink-0 place-items-center"
-    [class.size-32]="!compact"
-    [class.size-24]="compact"
+    class="relative grid size-32 shrink-0 place-items-center"
     [class.text-success]="value !== null && value <= 33"
     [class.text-warning]="value !== null && value > 33 && value <= 66"
     [class.text-danger]="value !== null && value > 66"
@@ -13,7 +11,7 @@
       label +
       ': ' +
       (value === null
-        ? style
+        ? detection
           ? 'Unavailable'
           : (emptyLabel ?? 'Not scored')
         : value + ' out of 100, ' + (value <= 33 ? 'Low' : value <= 66 ? 'Moderate' : 'High'))
@@ -33,17 +31,13 @@
           [attr.stroke-dashoffset]="100 - value" />
       }
     </svg>
-    <span
-      class="leading-none font-semibold tracking-tight tabular-nums"
-      [class.text-4xl]="compact"
-      [class.text-5xl]="!compact"
-      aria-hidden="true">
+    <span class="text-5xl leading-none font-semibold tracking-tight tabular-nums" aria-hidden="true">
       {{ value ?? '–' }}
     </span>
   </div>
-  @if (style?.reason) {
+  @if (detection?.reason) {
     <p class="mt-2 text-center text-[0.75rem] text-muted">
-      @if (style.reason === 'no_prose') {
+      @if (detection.reason === 'no_prose') {
         No assessable prose found.
       }
     </p>
@@ -60,7 +54,7 @@
     Download original
   </button>
 </ng-template>
-<a href="#workspace-content" class="fixed top-2 left-2 z-10 -translate-y-[200%] bg-canvas p-3 focus:translate-y-0"
+<a href="#workspace-content" class="fixed top-2 left-2 z-10 translate-y-[-200%] bg-canvas p-3 focus:translate-y-0"
   >Skip to document</a
 >
 <ng-template #bar let-value let-max="max" let-label="label">
@@ -162,7 +156,7 @@
           </div>
           @if (store.deleteError(); as error) {
             @if (error.id === document.id) {
-              <p class="mb-3 px-3 text-xs text-danger [overflow-wrap:anywhere]" role="alert">{{ error.message }}</p>
+              <p class="mb-3 px-3 text-xs text-danger wrap-anywhere" role="alert">{{ error.message }}</p>
             }
           }
         }
@@ -172,7 +166,7 @@
           <p class="text-muted">Your uploads appear here.</p>
         }
         @if (store.listError()) {
-          <p class="mt-3 text-[0.875rem] text-danger [overflow-wrap:anywhere]" role="alert">{{ store.listError() }}</p>
+          <p class="mt-3 text-[0.875rem] text-danger wrap-anywhere" role="alert">{{ store.listError() }}</p>
           <button class="ui-sidebar-item" type="button" (click)="store.load()" [disabled]="store.loading()">
             Try again
           </button>
@@ -212,7 +206,6 @@
       class="flex min-h-16 shrink-0 items-center gap-3 border-b border-divider/60 px-4 text-[0.875rem] text-muted md:px-8">
       @if (isMobile()) {
         <button
-          class="ui-button ui-ghost ui-icon"
           type="button"
           (click)="history.open()"
           aria-controls="document-history"
@@ -234,7 +227,7 @@
       <div class="w-full max-w-3xl">
         @if (store.selected(); as document) {
           <h1
-            class="mb-2 text-[1.5rem] leading-[1.3] font-medium tracking-tight text-balance text-ink [overflow-wrap:anywhere] md:text-[1.875rem]">
+            class="mb-2 text-[1.5rem] leading-[1.3] font-medium tracking-tight text-balance text-ink wrap-anywhere md:text-[1.875rem]">
             {{ document.filename }}
           </h1>
           <p class="text-[0.875rem] text-muted">
@@ -264,7 +257,7 @@
                   <div class="min-w-0 flex-1 pt-1.5">
                     <h2 id="phase-heading" class="text-[1.0625rem] leading-6 font-medium">{{ row.label }}</h2>
                     @if (row.key === 'failed') {
-                      <p class="mt-1 text-[0.875rem] leading-6 text-danger [overflow-wrap:anywhere]" role="alert">
+                      <p class="mt-1 text-[0.875rem] leading-6 text-danger wrap-anywhere" role="alert">
                         {{ phaseDetail() }} {{ document.failure }}
                       </p>
                       <button
@@ -277,7 +270,7 @@
                       </button>
                       @if (store.retryError(); as error) {
                         @if (error.id === document.id) {
-                          <p class="mt-3 text-[0.875rem] text-danger [overflow-wrap:anywhere]" role="alert">
+                          <p class="mt-3 text-[0.875rem] text-danger wrap-anywhere" role="alert">
                             {{ error.message }}
                           </p>
                         }
@@ -308,7 +301,7 @@
           }
 
           @if (store.detailError()) {
-            <p class="mt-4 text-[0.875rem] text-danger [overflow-wrap:anywhere]" role="alert">
+            <p class="mt-4 text-[0.875rem] text-danger wrap-anywhere" role="alert">
               {{ store.detailError() }}
             </p>
             <button class="ui-button ui-ghost mt-2" type="button" (click)="store.loadSelected()">Try again</button>
@@ -318,74 +311,28 @@
             <div
               class="mt-8 grid gap-8 border-t border-divider/60 pt-8 md:grid-cols-[minmax(0,13rem)_minmax(0,1fr)] md:gap-12">
               <section aria-labelledby="score-heading" class="min-w-0">
-                @if (document.status === 'completed') {
-                  <div class="flex items-start gap-4">
-                    <div class="flex flex-col items-center gap-2">
-                      <span class="text-[0.75rem] leading-4 text-muted">Before</span>
-                      <ng-container
-                        *ngTemplateOutlet="
-                          styleScore;
-                          context: {
-                            $implicit: style(),
-                            label: 'Before AI-style score',
-                            compact: true
-                          }
-                        " />
-                    </div>
-                    <div class="celebrate-rise flex flex-col items-center gap-2">
-                      <span class="text-[0.75rem] leading-4 text-muted">After</span>
-                      <ng-container
-                        *ngTemplateOutlet="
-                          styleScore;
-                          context: {
-                            $implicit: finalStyle(),
-                            label: 'After AI-style score',
-                            compact: true,
-                            emptyLabel: store.detail()?.finalScoreUnavailable ? 'Unavailable' : 'Not scored'
-                          }
-                        " />
-                    </div>
-                  </div>
-                  @if (store.detail()?.finalScoreUnavailable) {
-                    <p id="final-score-unavailable" class="mt-3 text-[0.8125rem] leading-5 font-medium text-ink">
-                      Final score unavailable
-                    </p>
-                  }
-                } @else {
-                  <ng-container
-                    *ngTemplateOutlet="
-                      styleScore;
-                      context: {
-                        $implicit: style(),
-                        label: 'AI-style score',
-                        emptyLabel: store.detail()?.assessment ? 'Not scored' : 'Pending'
-                      }
-                    " />
-                }
-                <h2
-                  id="score-heading"
-                  class="mt-3 text-center text-[0.9375rem] leading-5 font-medium"
-                  [class.w-32]="document.status !== 'completed'"
-                  [class.w-52]="document.status === 'completed'">
-                  AI-style score
+                <ng-container
+                  *ngTemplateOutlet="
+                    rateDial;
+                    context: {
+                      $implicit: detection(),
+                      label: 'AI detection rate',
+                      emptyLabel: store.detail()?.assessment ? 'Not scored' : 'Pending'
+                    }
+                  " />
+                <h2 id="score-heading" class="mt-3 w-32 text-center text-[0.9375rem] leading-5 font-medium">
+                  AI detection rate
                 </h2>
-                @if (assessmentChanged()) {
-                  <p class="mt-2 text-[0.8125rem] leading-5 text-muted">
-                    The assessment model changed between checks; scores are not directly comparable.
-                  </p>
-                }
                 @if (
                   !store.detail()?.assessment &&
                   document.status !== 'completed' &&
-                  (store.detailLoading() || document.status === 'assessed' || phase()?.key === 'failed')
+                  (store.detailLoading() || document.status === 'assessed')
                 ) {
                   <p class="mt-2 text-[0.8125rem] leading-5 text-muted">
                     @if (store.detailLoading()) {
                       Loading the assessment…
                     } @else if (document.status === 'assessed') {
-                      No AI-style score is recorded for this document.
-                    } @else if (phase()?.key === 'failed') {
-                      No score until the assessment succeeds.
+                      No AI detection rate is recorded for this document.
                     }
                   </p>
                 }
@@ -434,7 +381,7 @@
                   @if (unslopifyNote() === 'unslopify-error') {
                     <p
                       id="unslopify-error"
-                      class="mt-3 text-[0.875rem] leading-6 text-danger [overflow-wrap:anywhere]"
+                      class="mt-3 text-[0.875rem] leading-6 text-danger wrap-anywhere"
                       role="alert">
                       {{ store.unslopifyError()?.message }}
                     </p>
@@ -450,8 +397,7 @@
                       class="ui-button min-h-12 w-full gap-2.5 border-0 bg-ink px-5 py-3 font-semibold text-canvas hover:bg-paper-hover active:bg-paper-pressed sm:w-auto"
                       type="button"
                       (click)="download(document, 'revised')"
-                      [disabled]="store.downloading()"
-                      [attr.aria-describedby]="finalScoreNote() ? 'final-score-note' : null">
+                      [disabled]="store.downloading()">
                       <mat-icon svgIcon="download" />
                       Download revised DOCX
                     </button>
@@ -460,11 +406,6 @@
                   <p class="celebrate-rise mt-4 text-[0.875rem] leading-6 text-muted">
                     Review the revised document before submitting it.
                   </p>
-                  @if (finalScoreNote(); as note) {
-                    <p id="final-score-note" class="celebrate-rise mt-3 text-[0.875rem] leading-6 text-muted">
-                      {{ note }}
-                    </p>
-                  }
                   @if (keptPassages().length || uneditedSummary()) {
                     <div
                       class="celebrate-rise mt-5 space-y-2 border-t border-divider/60 pt-4 text-[0.875rem] leading-6">
@@ -491,7 +432,7 @@
                           </summary>
                           <ul class="mt-2 ml-6 space-y-2">
                             @for (passage of keptPassages(); track passage.span) {
-                              <li class="border-l border-divider pl-3 [overflow-wrap:anywhere]">
+                              <li class="border-l border-divider pl-3 wrap-anywhere">
                                 <span class="block text-[0.75rem] text-muted">{{ passage.check }}</span>
                                 <span class="text-ink/90">{{ passage.excerpt }}</span>
                               </li>
@@ -509,10 +450,6 @@
                     <p class="mt-1 text-[0.8125rem] leading-5 text-muted">
                       <span class="font-medium text-ink">{{ strength.label }}</span> · {{ strength.value }} of 100
                     </p>
-                  } @else {
-                    <p class="mt-1 text-[0.8125rem] leading-5 text-muted">
-                      Your original stays available while Unslopy works.
-                    </p>
                   }
                   <ng-container *ngTemplateOutlet="originalDownload; context: { $implicit: document, spaced: true }" />
                 }
@@ -520,7 +457,7 @@
                   <p class="mt-3 text-[0.875rem] text-muted" role="status">Downloading…</p>
                 }
                 @if (store.downloadError()) {
-                  <p class="mt-3 text-[0.875rem] text-danger [overflow-wrap:anywhere]" role="alert">
+                  <p class="mt-3 text-[0.875rem] text-danger wrap-anywhere" role="alert">
                     {{ store.downloadError() }}
                   </p>
                 }
@@ -533,7 +470,7 @@
                 <p class="mt-3 text-[0.875rem] text-muted" role="status">Downloading…</p>
               }
               @if (store.downloadError()) {
-                <p class="mt-3 text-[0.875rem] text-danger [overflow-wrap:anywhere]" role="alert">
+                <p class="mt-3 text-[0.875rem] text-danger wrap-anywhere" role="alert">
                   {{ store.downloadError() }}
                 </p>
               }
@@ -546,7 +483,7 @@
           <button class="ui-button ui-ghost mt-2" type="button" (click)="store.loadSelected()">Try again</button>
         } @else {
           <h1
-            class="mb-5 text-[1.5rem] leading-[1.3] font-medium tracking-tight text-balance text-ink [overflow-wrap:anywhere] md:text-[1.875rem]">
+            class="mb-5 text-[1.5rem] leading-[1.3] font-medium tracking-tight text-balance text-ink wrap-anywhere md:text-[1.875rem]">
             {{ welcomeName() ? 'Welcome, ' + welcomeName() + '.' : 'Welcome back.' }}
           </h1>
           <div class="rounded-2xl border border-divider bg-canvas p-5 sm:p-7">
@@ -591,11 +528,7 @@
                 [disabled]="store.uploading()"
                 hidden
                 aria-label="Choose a DOCX file" />
-              <p id="upload-limit" class="text-[0.8125rem] text-muted">Up to 10 MB · 5 pages · English or French</p>
-              <p class="mt-2 text-xs text-muted">
-                Pages include covers, references, and blank pages, counted on our server. The count may differ from
-                Word. Text is sent to DeepSeek automatically for assessment, and again when you request editing.
-              </p>
+              <p id="upload-limit" class="text-[0.8125rem] text-muted">Up to 10 MB · 30 pages · English or French</p>
             </div>
             @if (store.uploadError()) {
               <p id="upload-error" class="mt-3 text-[0.875rem] text-danger wrap-anywhere" role="alert">

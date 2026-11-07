@@ -2,6 +2,7 @@
 import type { components } from './lib/schema';
 export type { components, operations, paths } from './lib/schema';
 export type IAllowanceResponse = components['schemas']['AllowanceResponse'];
+export type IDetectionRateResponse = components['schemas']['DetectionRateResponse'];
 export type IDocumentAssessmentResponse = components['schemas']['DocumentAssessmentResponse'];
 export type IDocumentPage = components['schemas']['DocumentPage'];
 export type IDocumentPreviewResponse = components['schemas']['DocumentPreviewResponse'];
@@ -17,10 +18,8 @@ export type IRevisionNoticesResponse = components['schemas']['RevisionNoticesRes
 export type IRoleResponse = components['schemas']['RoleResponse'];
 export type IStatItem = components['schemas']['StatItem'];
 export type IStatusChangeResponse = components['schemas']['StatusChangeResponse'];
-export type IStyleAssessmentResponse = components['schemas']['StyleAssessmentResponse'];
 export type IUneditedElementResponse = components['schemas']['UneditedElementResponse'];
 export type IUnslopifyDocumentDto = components['schemas']['UnslopifyDocumentDto'];
 export type IUpdateProfileDto = components['schemas']['UpdateProfileDto'];
 export type IUpdateStatusDto = components['schemas']['UpdateStatusDto'];
 export type IUserResponse = components['schemas']['UserResponse'];
-export type IWritingAssessmentResponse = components['schemas']['WritingAssessmentResponse'];

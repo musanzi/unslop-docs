@@ -15,7 +15,7 @@ def document(pages):
 
 
 if __name__ == '__main__':
-    for pages in (1, 5, 6):
+    for pages in (1, 30, 31):
         actual = count_pages(document(pages))
         assert actual == pages, (pages, actual)
         print(f'Rendered {actual} pages despite saved metadata reporting 1.')

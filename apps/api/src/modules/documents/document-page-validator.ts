@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 
+const maximumUploadPages = 30;
+
 @Injectable()
 export class DocumentPageValidator {
   async validate(bytes: Buffer): Promise<number> {
@@ -40,9 +42,9 @@ export class DocumentPageValidator {
       throw new ServiceUnavailableException('Page counting returned an invalid result. Retry your upload shortly.');
     }
     const pages = Number(result.pages);
-    if (pages > 5)
+    if (pages > maximumUploadPages)
       throw new BadRequestException(
-        `This document renders as ${pages} pages. The upload limit is 5 pages, including cover pages, references, and blank pages.`
+        `This document renders as ${pages} pages. The upload limit is ${maximumUploadPages} pages, including cover pages, references, and blank pages.`
       );
     return pages;
   }

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
 import { workerSettings, DeepSeekProvider, loadEditingSkill } from './modules/documents/deepseek-provider';
 import { DocumentStorage } from './modules/documents/document-storage';
+import { LocalDetectorProvider, localDetectorSettings } from './modules/documents/local-detector-provider';
 import { DocumentJobs } from './modules/processing/document-jobs';
 import { AssessmentWorker } from './modules/processing/assessment-worker';
 
@@ -13,8 +14,10 @@ async function main(): Promise<void> {
   process.env.LANGSMITH_TRACING = 'false';
   process.env.LANGCHAIN_VERBOSE = 'false';
   let settings: ReturnType<typeof workerSettings>;
+  let detectorSettings: ReturnType<typeof localDetectorSettings>;
   try {
     settings = workerSettings(process.env);
+    detectorSettings = localDetectorSettings(process.env);
   } catch (error) {
     process.stderr.write(`${error instanceof Error ? error.message : 'Invalid worker settings.'}\n`);
     process.exitCode = 1;
@@ -42,15 +45,16 @@ async function main(): Promise<void> {
     await storage.onModuleInit();
     await database.initialize();
     const editor = new DeepSeekProvider(settings);
+    const detector = new LocalDetectorProvider(detectorSettings);
     const worker = new AssessmentWorker(
       new DocumentJobs(database),
       storage,
       {
-        assess: (text, signal) => editor.assess(text, signal),
+        detect: (text, signal) => detector.detect(text, signal),
         edit: (system, chunk, signal) => editor.edit(system, chunk, signal)
       },
       skill,
-      { ...settings, assessmentProviderTimeoutMs: settings.assessmentTimeoutMs }
+      { ...settings, detectorTimeoutMs: detectorSettings.timeoutMs }
     );
     process.stdout.write('Assessment worker started.\n');
     while (!shutdown.signal.aborted) {

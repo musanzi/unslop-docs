@@ -12,7 +12,7 @@ import {
 import { MatIcon } from '@angular/material/icon';
 import { MatSidenav, MatSidenavContainer, MatSidenavContent } from '@angular/material/sidenav';
 import { RouterLink } from '@angular/router';
-import type { IStyleAssessmentResponse, IDocumentResponse } from '@unslop-docs/api-contracts';
+import type { IDetectionRateResponse, IDocumentResponse } from '@unslop-docs/api-contracts';
 import { Media } from '@web/core/media';
 import { AuthStore } from '@web/domains/auth/shared/data-access';
 import { User } from '@web/shared/ui/user/user';
@@ -105,9 +105,7 @@ export class Workspace {
         return progress ? `${progress.completed} of ${progress.total} edits complete.` : 'Rewriting your document.';
       }
       case 'checking-result':
-        return document.processingStage === 'validating'
-          ? 'Comparing the revision with the original.'
-          : 'Rechecking the revised document';
+        return 'Comparing the revision with the original.';
       case 'download-ready':
         return 'Your revised DOCX is ready.';
       case 'failed':
@@ -119,21 +117,7 @@ export class Workspace {
   protected readonly retryLabel = computed(() =>
     this.store.selected()?.phase === 'rewrite' ? 'Retry editing' : 'Retry assessment'
   );
-  protected readonly style = computed(() => this.store.detail()?.assessment?.style ?? null);
-  protected readonly finalStyle = computed(() => this.store.detail()?.finalAssessment?.style ?? null);
-  protected readonly assessmentChanged = computed(() => {
-    const before = this.style();
-    const after = this.finalStyle();
-    return !!before && !!after && before.modelVersion !== after.modelVersion;
-  });
-  protected readonly finalScoreNote = computed(() => {
-    const detail = this.store.detail();
-    if (detail?.finalScoreUnavailable)
-      return 'The revised document is ready, but its final score is unavailable: the final assessment did not finish.';
-    if (detail?.status === 'completed' && detail.strength === null && this.finalStyle() === null)
-      return 'Scores were not recorded for this document.';
-    return null;
-  });
+  protected readonly detection = computed(() => this.store.detail()?.assessment ?? null);
   protected readonly unslopifyNote = computed(() => {
     const document = this.store.selected();
     if (document && this.store.unslopifyError()?.id === document.id) return 'unslopify-error';
@@ -178,8 +162,8 @@ export class Workspace {
     if (file) this.store.upload(file);
   }
 
-  protected modelScore(style: IStyleAssessmentResponse): number | null {
-    return style.score === null ? null : Math.round(style.score);
+  protected detectionRate(detection: IDetectionRateResponse): number | null {
+    return detection.rate === null ? null : Math.round(detection.rate);
   }
 
   protected setStrength(event: Event): void {

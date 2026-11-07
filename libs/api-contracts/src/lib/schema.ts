@@ -286,7 +286,7 @@ export interface paths {
         put?: never;
         /**
          * Start rewriting your assessed document with the chosen strength
-         * @description Reserves one monthly allowance slot in the same transaction that queues rewriting. The final assessment runs automatically after rewriting, and the slot is charged only when the revised download is ready.
+         * @description Reserves one monthly allowance slot in the same transaction that queues rewriting. The slot is charged only when the revised download is ready.
          */
         post: operations["DocumentsController_unslopify"];
         delete?: never;
@@ -536,15 +536,15 @@ export interface components {
             /** @enum {string} */
             status: "stored" | "queued" | "processing" | "assessed" | "completed" | "failed";
             /**
-             * @description Processing attempt the status refers to: the automatic initial assessment, or the user-requested rewrite with its final assessment
+             * @description Processing attempt the status refers to: the automatic AI detection, or the user-requested rewrite
              * @enum {string}
              */
             phase: "assessment" | "rewrite";
             /**
-             * @description Active stage while processing; assessing and final-assessment have no measurable total, editing exposes progress
+             * @description Active stage while processing; assessing has no measurable total, editing exposes progress
              * @enum {string|null}
              */
-            processingStage: "assessing" | "editing" | "validating" | "final-assessment" | null;
+            processingStage: "assessing" | "editing" | "validating" | null;
             /** @description Completed and total editing work units while a rewrite is processing */
             progress: components["schemas"]["EditingProgressResponse"] | null;
             /** @description Rewrite strength saved with the Unslopify request; null before the first request */
@@ -608,31 +608,17 @@ export interface components {
             /** @description Read-only structure of the original in document order */
             blocks: components["schemas"]["PreviewBlockResponse"][];
         };
-        StyleAssessmentResponse: {
-            /** @enum {string} */
-            provider: "deepseek";
+        DetectionRateResponse: {
             /** @enum {string} */
             status: "complete" | "unavailable";
-            /** @description AI-style score calculated from word-weighted sentence severity. Does not establish authorship */
-            score: number | null;
+            /** @description AI detection rate from the Oculus model: the token-weighted mean of its window scores, scaled to 100 */
+            rate: number | null;
             /** @enum {string|null} */
-            reason: "no_prose" | null;
-            modelVersion: string;
+            reason: "no_prose" | "too_short" | "too_long" | null;
             /** @enum {string} */
-            method: "sentence-severity-word-weighted-v1";
+            method: "token-weighted-mean-v1";
             /** Format: date-time */
             checkedAt: string;
-            /** @description SHA-256 of the text submitted for assessment */
-            textHash: string;
-            characterCount: number;
-            wordCount: number;
-            sentenceCount: number;
-            weightedSeverity: number;
-        };
-        WritingAssessmentResponse: {
-            /** @enum {string} */
-            rubric: "unslop-style-v1";
-            style: components["schemas"]["StyleAssessmentResponse"];
         };
         KeptPassageResponse: {
             /** @description Preservation check that kept the original passage */
@@ -660,15 +646,15 @@ export interface components {
             /** @enum {string} */
             status: "stored" | "queued" | "processing" | "assessed" | "completed" | "failed";
             /**
-             * @description Processing attempt the status refers to: the automatic initial assessment, or the user-requested rewrite with its final assessment
+             * @description Processing attempt the status refers to: the automatic AI detection, or the user-requested rewrite
              * @enum {string}
              */
             phase: "assessment" | "rewrite";
             /**
-             * @description Active stage while processing; assessing and final-assessment have no measurable total, editing exposes progress
+             * @description Active stage while processing; assessing has no measurable total, editing exposes progress
              * @enum {string|null}
              */
-            processingStage: "assessing" | "editing" | "validating" | "final-assessment" | null;
+            processingStage: "assessing" | "editing" | "validating" | null;
             /** @description Completed and total editing work units while a rewrite is processing */
             progress: components["schemas"]["EditingProgressResponse"] | null;
             /** @description Rewrite strength saved with the Unslopify request; null before the first request */
@@ -676,12 +662,8 @@ export interface components {
             failure: string | null;
             /** Format: date-time */
             createdAt: string;
-            /** @description Initial assessment of the original, published when the document is assessed and retained afterwards */
-            assessment: components["schemas"]["WritingAssessmentResponse"] | null;
-            /** @description Automatic assessment of the revised document; null until completed or when its score is unavailable */
-            finalAssessment: components["schemas"]["WritingAssessmentResponse"] | null;
-            /** @description True when the revised download is ready but its final assessment could not be completed */
-            finalScoreUnavailable: boolean;
+            /** @description AI detection result for the original, published when the document is assessed and retained afterwards */
+            assessment: components["schemas"]["DetectionRateResponse"] | null;
             /** @description Notices recorded with the revision */
             revisionNotices: components["schemas"]["RevisionNoticesResponse"] | null;
         };

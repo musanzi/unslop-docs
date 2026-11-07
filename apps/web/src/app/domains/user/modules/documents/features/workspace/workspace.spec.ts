@@ -47,23 +47,13 @@ function overrideTemplates(workspaceProviders?: Provider[]) {
   );
 }
 
-function writingAssessment(percent: number): NonNullable<IDocumentAssessmentResponse['assessment']> {
+function detection(rate: number | null): NonNullable<IDocumentAssessmentResponse['assessment']> {
   return {
-    rubric: 'unslop-style-v1',
-    style: {
-      provider: 'deepseek',
-      status: 'complete',
-      score: percent,
-      reason: null,
-      modelVersion: 'test-model',
-      method: 'sentence-severity-word-weighted-v1',
-      checkedAt: '2026-11-06T00:00:00Z',
-      textHash: 'a'.repeat(64),
-      characterCount: 1000,
-      wordCount: 250,
-      sentenceCount: 1,
-      weightedSeverity: 0
-    }
+    status: rate === null ? 'unavailable' : 'complete',
+    rate,
+    reason: rate === null ? 'no_prose' : null,
+    method: 'token-weighted-mean-v1',
+    checkedAt: '2026-11-07T00:00:00Z'
   };
 }
 
@@ -79,8 +69,6 @@ const document: IDocumentAssessmentResponse = {
   strength: 50,
   failure: null,
   assessment: null,
-  finalAssessment: null,
-  finalScoreUnavailable: true,
   revisionNotices: null
 };
 
@@ -691,8 +679,7 @@ describe('Document workspace results', () => {
         status: 'assessed',
         phase: 'assessment',
         strength: null,
-        assessment: writingAssessment(62),
-        finalScoreUnavailable: false
+        assessment: detection(62)
       },
       exhausted
     );
@@ -708,14 +695,12 @@ describe('Document workspace results', () => {
     expect(page.querySelector('input[type="range"]')).not.toBeNull();
   });
 
-  it('shows both downloads and only the review sentence for a completed document without a final score', async () => {
+  it('shows both downloads and only the review sentence for a completed document', async () => {
     const page = await render(document);
     expect(page.textContent).toContain('Download ready');
     expect(page.textContent).toContain('Review the revised document before submitting it.');
     expect(page.textContent).not.toContain('do not prove unchanged meaning');
     expect(page.textContent).not.toMatch(/writing patterns found|AI vocabulary/);
-    expect(page.textContent).toContain('Final score unavailable');
-    expect(page.querySelector('#final-score-note')?.textContent).toContain('final score is unavailable');
     const buttons = [...page.querySelectorAll('button')].map((button) => button.textContent.trim());
     expect(buttons).toContain('Download original');
     expect(buttons).toContain('Download revised DOCX');
@@ -725,17 +710,13 @@ describe('Document workspace results', () => {
     expect(page.querySelector('textarea')).toBeNull();
   });
 
-  it('keeps legacy downloads available without claiming their final assessment failed', async () => {
+  it('keeps legacy downloads available when no rate was recorded', async () => {
     const page = await render({
       ...document,
       strength: null,
-      assessment: null,
-      finalAssessment: null,
-      finalScoreUnavailable: false
+      assessment: null
     });
-    expect(page.textContent).toContain('Scores were not recorded for this document.');
-    expect(page.textContent).not.toContain('final assessment did not finish');
-    expect(page.querySelector('#final-score-unavailable')).toBeNull();
+    expect(page.querySelector('[aria-label="AI detection rate: Pending"]')).not.toBeNull();
     const download = [...page.querySelectorAll('button')].find((button) =>
       button.textContent.includes('Download revised DOCX')
     );
@@ -896,11 +877,6 @@ describe('Document phases', () => {
       'checking-result',
       'Checking the revised document'
     ],
-    [
-      { status: 'processing', phase: 'rewrite', processingStage: 'final-assessment' },
-      'checking-result',
-      'Assessing the revised document'
-    ],
     [{ status: 'completed', phase: 'rewrite' }, 'download-ready', 'Download ready'],
     [{ status: 'failed', phase: 'assessment' }, 'failed', 'Failed'],
     [{ status: 'stored', phase: 'assessment' }, 'stored', 'Original saved']
@@ -1051,7 +1027,7 @@ describe('Rewrite strength and Unslopify', () => {
     status: 'assessed',
     phase: 'assessment',
     strength: null,
-    assessment: writingAssessment(62)
+    assessment: detection(62)
   };
 
   it('starts at 50, keeps the chosen strength across polls, and labels Light, Balanced and Thorough', () => {
@@ -1117,7 +1093,7 @@ describe('Rewrite strength and Unslopify', () => {
     expect(store.selected()?.status).toBe('assessed');
     http.expectOne('/documents/allowance').flush({});
     http.expectOne(`/documents/${document.id}`).flush(assessed);
-    expect(store.detail()?.assessment?.style.score).toBe(62);
+    expect(store.detail()?.assessment?.rate).toBe(62);
     http.verify();
   });
 });
@@ -1139,7 +1115,7 @@ describe('Assessment without document previews', () => {
     ...document,
     status: 'assessed',
     phase: 'assessment',
-    assessment: writingAssessment(62)
+    assessment: detection(62)
   };
   it('keeps the score without requesting a preview after assessment or polling', () => {
     const { store, http } = setup();
@@ -1150,11 +1126,11 @@ describe('Assessment without document previews', () => {
     store.loadSelected(true);
     http.expectOne(`/documents/${document.id}`).flush(assessed);
     expectNoPreview(http);
-    expect(store.detail()?.assessment?.style.score).toBe(62);
+    expect(store.detail()?.assessment?.rate).toBe(62);
     store.loadSelected(true);
     http.expectOne(`/documents/${document.id}`).flush(assessed);
     expectNoPreview(http);
-    expect(store.detail()?.assessment?.style.score).toBe(62);
+    expect(store.detail()?.assessment?.rate).toBe(62);
     http.verify();
   });
 });
@@ -1179,8 +1155,7 @@ describe('Workspace flow', () => {
     status: 'assessed',
     phase: 'assessment',
     strength: null,
-    assessment: writingAssessment(62),
-    finalScoreUnavailable: false
+    assessment: detection(62)
   };
   const editing: IDocumentAssessmentResponse = {
     ...assessed,
@@ -1195,7 +1170,6 @@ describe('Workspace flow', () => {
     status: 'completed',
     phase: 'rewrite',
     strength: 80,
-    finalAssessment: writingAssessment(31),
     revisionNotices: {
       keptPassages: [{ check: 'citation', span: 'p-4', excerpt: 'Smith (2020) argues that rivers remember.' }],
       uneditedElements: [
@@ -1253,41 +1227,16 @@ describe('Workspace flow', () => {
     await context.fixture.whenStable();
   }
 
-  it('shows AI-style scores before and after editing without calling them authorship percentages', async () => {
-    const style = {
-      provider: 'deepseek' as const,
-      status: 'complete' as const,
-      score: 82,
-      reason: null,
-      modelVersion: 'model@revision',
-      method: 'sentence-severity-word-weighted-v1' as const,
-      checkedAt: '2026-11-06T00:00:00Z',
-      textHash: 'a'.repeat(64),
-      characterCount: 1200,
-      wordCount: 300,
-      sentenceCount: 1,
-      weightedSeverity: 0
-    };
-    const detail: IDocumentAssessmentResponse = {
-      ...assessed,
-      assessment: { rubric: 'unslop-style-v1', style }
-    };
+  it('shows one AI detection rate and keeps it after editing', async () => {
+    const detail: IDocumentAssessmentResponse = { ...assessed, assessment: detection(82) };
     const context = await mount([detail]);
     await open(context, detail);
-    expect(context.main.textContent).toContain('AI-style score');
-    expect(element(context.main, '[aria-label="AI-style score: 82 out of 100, High"]')).toBeTruthy();
+    expect(context.main.textContent).toContain('AI detection rate');
+    expect(element(context.main, '[aria-label="AI detection rate: 82 out of 100, High"]')).toBeTruthy();
     expect(context.main.textContent).not.toContain('82%');
-    await poll(context, {
-      ...detail,
-      status: 'completed',
-      phase: 'rewrite',
-      strength: 50,
-      finalAssessment: {
-        rubric: 'unslop-style-v1',
-        style: { ...style, score: 91 }
-      }
-    });
-    expect(element(context.main, '[aria-label="After AI-style score: 91 out of 100, High"]')).toBeTruthy();
+    await poll(context, { ...detail, status: 'completed', phase: 'rewrite', strength: 50 });
+    expect(element(context.main, '[aria-label="AI detection rate: 82 out of 100, High"]')).toBeTruthy();
+    expect(context.main.textContent).not.toMatch(/Before|After/);
     const download = [...context.main.querySelectorAll('button')].find((button) =>
       button.textContent?.includes('Download revised DOCX')
     )!;
@@ -1298,28 +1247,12 @@ describe('Workspace flow', () => {
   it('keeps editing available when there is no assessable prose and never displays zero', async () => {
     const detail: IDocumentAssessmentResponse = {
       ...assessed,
-      assessment: {
-        rubric: 'unslop-style-v1',
-        style: {
-          provider: 'deepseek',
-          status: 'unavailable',
-          score: null,
-          reason: 'no_prose',
-          modelVersion: 'model@revision',
-          method: 'sentence-severity-word-weighted-v1',
-          checkedAt: '2026-11-06T00:00:00Z',
-          textHash: 'a'.repeat(64),
-          characterCount: 10,
-          wordCount: 0,
-          sentenceCount: 0,
-          weightedSeverity: 0
-        }
-      }
+      assessment: detection(null)
     };
     const context = await mount([detail]);
     await open(context, detail);
     expect(context.main.textContent).toContain('No assessable prose found');
-    expect(element(context.main, '[aria-label="AI-style score: Unavailable"]')).toBeTruthy();
+    expect(element(context.main, '[aria-label="AI detection rate: Unavailable"]')).toBeTruthy();
     const edit = [...context.main.querySelectorAll('button')].find(
       (button) => button.textContent?.trim() === 'Unslopify'
     )!;
@@ -1335,9 +1268,9 @@ describe('Workspace flow', () => {
     expect(history.textContent).toContain('Ready to unslopify');
     expect(main.querySelector('[role="progressbar"]')).toBeNull();
     expect(main.innerHTML).not.toContain('animate-pulse');
-    expect(element(main, '#score-heading').textContent?.trim()).toBe('AI-style score');
+    expect(element(main, '#score-heading').textContent?.trim()).toBe('AI detection rate');
     expect(
-      element(main, '[role="img"][aria-label="AI-style score: 62 out of 100, Moderate"]').classList.contains(
+      element(main, '[role="img"][aria-label="AI detection rate: 62 out of 100, Moderate"]').classList.contains(
         'text-warning'
       )
     ).toBe(true);
@@ -1448,16 +1381,12 @@ describe('Workspace flow', () => {
     expect(checking.getAttribute('aria-valuenow')).toBeNull();
     expect(checking.getAttribute('aria-valuetext')).toBe('Checking the revised document');
     expect(main.textContent).not.toContain('100%');
-    await poll(context, { ...editing, progress: null, processingStage: 'final-assessment' });
-    expect(element(main, '#phase-heading').textContent).toContain('Assessing the revised document');
-    expect(element(main, '[role="progressbar"]').getAttribute('aria-valuetext')).toBe('Assessing the revised document');
-    expect(history.textContent).toContain('Assessing the revised document');
     expect(context.live.textContent).toBe('river.docx: Checking the revised document.');
     expect(main.querySelector('.workspace-celebrate')).toBeNull();
     http.verify();
   });
 
-  it('celebrates a watched completion once with before and after scores, downloads and notices', async () => {
+  it('celebrates a watched completion once with the rate, downloads and notices', async () => {
     const context = await mount([editing]);
     await open(context, editing);
     const { main, history, http, fixture, store } = context;
@@ -1469,12 +1398,10 @@ describe('Workspace flow', () => {
     expect(context.live.textContent).toBe('river.docx: Download ready.');
     expect(main.querySelector('[role="progressbar"]')).toBeNull();
     const scores = element(main, 'section[aria-labelledby="score-heading"]');
-    expect(scores.textContent).toMatch(/Before\s*62/);
-    expect(scores.textContent).toMatch(/After\s*31/);
+    expect(scores.textContent).not.toMatch(/Before|After|Down|Up|points|Unchanged/);
     expect(
-      element(scores, '[aria-label="After AI-style score: 31 out of 100, Low"]').classList.contains('text-success')
+      element(scores, '[aria-label="AI detection rate: 62 out of 100, Moderate"]').classList.contains('text-warning')
     ).toBe(true);
-    expect(scores.textContent).not.toMatch(/Down|Up|points|Unchanged/);
     const buttons = [...main.querySelectorAll('button')].map((button) => button.textContent?.trim());
     expect(buttons).toContain('Download revised DOCX');
     expect(buttons).not.toContain('Upload DOCX');
@@ -1492,31 +1419,6 @@ describe('Workspace flow', () => {
     await fixture.whenStable();
     expect(main.querySelector('.workspace-celebrate')).toBeNull();
     expect(element(main, '#phase-heading').textContent).toContain('Download ready');
-    http.verify();
-  });
-
-  it('allows download when the score rose or the final score is unavailable, without a success claim', async () => {
-    const context = await mount([completed]);
-    await open(context, { ...completed, finalAssessment: writingAssessment(80) });
-    const { main, http } = context;
-    expect(main.querySelector('.workspace-celebrate')).toBeNull();
-    expect(main.textContent).toMatch(/After\s*80/);
-    expect(
-      element(main, '[aria-label="After AI-style score: 80 out of 100, High"]').classList.contains('text-danger')
-    ).toBe(true);
-    expect(main.textContent).not.toMatch(/Up \d+ points/);
-    expect(
-      element<HTMLButtonElement>(main, 'button[aria-describedby="final-score-note"], button:not([disabled])')
-    ).not.toBeNull();
-    await poll(context, { ...completed, finalAssessment: null, finalScoreUnavailable: true });
-    expect(main.textContent).toContain('Final score unavailable');
-    const revised = [...main.querySelectorAll('button')].find((button) =>
-      button.textContent?.includes('Download revised DOCX')
-    )!;
-    expect(revised.disabled).toBe(false);
-    expect(revised.getAttribute('aria-describedby')).toBe('final-score-note');
-    expect(element(main, '#final-score-note').textContent).toContain('final score is unavailable');
-    expect(main.textContent).not.toMatch(/Down \d+ points/);
     http.verify();
   });
 
@@ -1572,7 +1474,6 @@ describe('Workspace flow', () => {
     await open(context, failed);
     const { main, http } = context;
     expect(main.textContent).toContain('Assessment failed.');
-    expect(main.textContent).toContain('No score until the assessment succeeds.');
     expect(
       [...main.querySelectorAll('button')].some((button) => button.textContent?.trim() === 'Retry assessment')
     ).toBe(true);

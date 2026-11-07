@@ -65,8 +65,7 @@ export class DocumentsStore {
   readonly stageLabels = {
     assessing: 'Assessing writing',
     editing: 'Editing your document',
-    validating: 'Checking the revised document',
-    'final-assessment': 'Assessing the revised document'
+    validating: 'Checking the revised document'
   };
 
   phase(document: IDocumentResponse): DocumentPhase {
@@ -78,7 +77,7 @@ export class DocumentsStore {
         const stage = document.processingStage;
         const label = stage ? this.stageLabels[stage] : this.statusLabels.processing;
         if (stage === 'editing') return { key: 'editing', label };
-        if (stage === 'validating' || stage === 'final-assessment') return { key: 'checking-result', label };
+        if (stage === 'validating') return { key: 'checking-result', label };
         return { key: 'assessing', label };
       }
       case 'assessed':
